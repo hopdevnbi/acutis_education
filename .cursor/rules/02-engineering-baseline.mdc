@@ -1,0 +1,35 @@
+---
+description: NestJS, TypeScript, API, testing, and repository hygiene baseline.
+alwaysApply: true
+---
+
+# Engineering baseline
+
+## TypeScript and NestJS
+
+- Strict TypeScript. Explicit return types on public methods/services/helpers.
+- Keep DTOs, persistence models, and domain representations separate.
+- Thin controllers; business logic in services; validate via DTOs/pipes.
+- Prefer domain/feature modules. Do not create dumping-ground `utils/` / `helpers/` / `common/` folders for unrelated logic.
+- Do not create future domain modules in advance.
+
+## API
+
+- Version prefix: `/api/v1`.
+- Nouns + HTTP semantics. Consistent error schema. Never leak stack traces, SQL, or secrets.
+
+## Quality
+
+- Prettier is canonical (singleQuote, trailingComma all, semi, tabWidth 2, printWidth 100, lf).
+- ESLint must catch unused vars, floating promises, accidental `any`.
+- Meaningful tests for business features. Deterministic. Happy path and failure cases.
+- English naming: files `kebab-case`, classes/types `PascalCase`, functions `camelCase`.
+
+## Infra
+
+- Config from environment; fail fast if required config is missing.
+- `.env.example` only; never commit `.env`.
+- MSSQL changes are migration-driven once migrations exist. No ORM auto-sync in production.
+- `docs/` is gitignored. Do not commit Cursor handoff reports.
+
+Details: `PROJECT_RULES.md`.

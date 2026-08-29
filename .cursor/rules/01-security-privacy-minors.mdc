@@ -1,0 +1,32 @@
+---
+description: Security and child-privacy rules for the parish catechism platform.
+alwaysApply: true
+---
+
+# Security and privacy (minors)
+
+The platform includes children (approx. ages 3–15). Security and privacy are mandatory.
+
+## Never
+
+- Store plaintext passwords.
+- Commit credentials, `.env` secrets, or API keys.
+- Trust client-provided authorization decisions.
+- Return entity fields merely because they exist.
+- Expose another student's records without explicit authorization.
+- Log secrets, access tokens, refresh tokens, or passwords.
+- Disable validation to simplify implementation.
+- Accept unrestricted file uploads.
+- Store pastoral/confessional information in ordinary platform records.
+
+## Always
+
+- Least privilege and server-side authorization.
+- Input validation and output filtering.
+- Secure password hashing when auth exists.
+- Minimize personally identifying information.
+- No public child profile by default.
+- Parent-child access only via explicit persisted relationships.
+- Do not frame educational analytics as spiritual worth or faith quality.
+
+Details: `PROJECT_RULES.md` §22–§23.

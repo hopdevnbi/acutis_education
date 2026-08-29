@@ -1,0 +1,32 @@
+---
+description: Mandatory Catechism API rules. Always read PROJECT_RULES.md before any change.
+alwaysApply: true
+---
+
+# Mandatory backend project rules
+
+This is the **catechism-api** backend. Stack: Node.js `v22.23.1`, NestJS, TypeScript strict, MSSQL, Docker, Bitbucket Pipelines.
+
+## Always do this first
+
+1. Read `PROJECT_RULES.md` at the repository root before making changes.
+2. Treat it as non-negotiable. Never silently override, weaken, or skip it.
+3. If a task conflicts with `PROJECT_RULES.md`, stop implementation and report the conflict in `docs/`.
+
+## Workflow
+
+- Implement only the active prompt scope. No speculative modules, unrelated refactors, or silent scope expansion.
+- Produce a local report at `docs/<TASK_NAME>_REPORT.md` (gitignored).
+- Do not commit unless the active prompt explicitly requests it.
+- Do not put permanent architecture docs under ignored `docs/`. Keep them in `PROJECT_RULES.md` or `architecture/`.
+
+## Non-negotiables
+
+- TypeScript strict: no implicit/`any` shortcuts, no `@ts-ignore` / `@ts-nocheck` unless justified in code and the report.
+- Validate all external input via DTOs. Never trust the frontend.
+- No secrets in Git. No plaintext passwords. No logging tokens/passwords.
+- This platform serves minors: least privilege, server-side authorization, privacy by default.
+- English for source, APIs, DB names, comments, and committed technical docs.
+- Definition of Done in `PROJECT_RULES.md` §30 applies when implementation exists.
+
+Full rules: `PROJECT_RULES.md`.
