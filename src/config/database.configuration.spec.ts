@@ -54,6 +54,20 @@ describe('database configuration parsing', () => {
     expect(() => buildDatabaseConfiguration(process.env)).toThrow('Invalid DB_PORT value');
   });
 
+  it('uses MSSQL_PUBLISH_PORT for localhost when DB_PORT is the default container port', () => {
+    process.env['DB_PORT'] = '1433';
+    process.env['MSSQL_PUBLISH_PORT'] = '14330';
+
+    expect(buildDatabaseConfiguration(process.env).port).toBe(14330);
+  });
+
+  it('keeps an explicit non-default DB_PORT over MSSQL_PUBLISH_PORT', () => {
+    process.env['DB_PORT'] = '14331';
+    process.env['MSSQL_PUBLISH_PORT'] = '14330';
+
+    expect(buildDatabaseConfiguration(process.env).port).toBe(14331);
+  });
+
   it('rejects invalid boolean DB_ENCRYPT values', () => {
     expect(() => resolveDatabaseEncrypt('maybe', 'production')).toThrow('Invalid DB_ENCRYPT value');
   });

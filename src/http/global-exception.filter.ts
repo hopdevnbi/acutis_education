@@ -31,7 +31,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.error(
         {
           requestId,
-          path: request.url,
+          path: readRequestPath(request),
           method: request.method,
           statusCode: errorResponse.statusCode,
           err: exception instanceof Error ? exception : undefined,
@@ -49,16 +49,20 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     requestId: string,
   ): ApiErrorResponse {
     const timestamp = new Date().toISOString();
-    const path = request.url;
+    const path = readRequestPath(request);
 
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
       const exceptionResponse = exception.getResponse();
+      const message =
+        statusCode >= 500
+          ? 'An unexpected error occurred.'
+          : this.extractMessage(exceptionResponse);
 
       return {
         statusCode,
         error: this.resolveErrorName(statusCode),
-        message: this.extractMessage(exceptionResponse),
+        message,
         path,
         timestamp,
         requestId,
@@ -122,4 +126,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     return 'Error';
   }
+}
+
+function readRequestPath(request: Request): string {
+  const requestUrl = request.url ?? '/';
+  const queryIndex = requestUrl.indexOf('?');
+
+  if (queryIndex === -1) {
+    return requestUrl;
+  }
+
+  return requestUrl.slice(0, queryIndex);
 }

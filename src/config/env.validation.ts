@@ -11,7 +11,8 @@ export const envValidationSchema = Joi.object({
   DB_PORT: Joi.number().port().default(1433),
   DB_NAME: Joi.string().min(1).required(),
   DB_USER: Joi.string().min(1).required(),
-  DB_PASSWORD: Joi.string().required(),
+  DB_PASSWORD: Joi.string().min(1).required(),
   DB_ENCRYPT: Joi.boolean().truthy('true', '1').falsy('false', '0').optional(),
   DB_TRUST_SERVER_CERTIFICATE: Joi.boolean().truthy('true', '1').falsy('false', '0').optional(),
+  MSSQL_PUBLISH_PORT: Joi.number().port().optional(),
 });

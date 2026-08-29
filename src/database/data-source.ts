@@ -7,13 +7,14 @@ import { buildDatabaseConfiguration } from '../config/database.configuration';
 import { buildTypeOrmDataSourceOptions } from './typeorm-options.factory';
 
 const environmentFilePath = resolve(process.cwd(), '.env');
-const environmentExamplePath = resolve(process.cwd(), '.env.example');
 
-if (existsSync(environmentFilePath)) {
-  loadEnvironmentFile({ path: environmentFilePath });
-} else if (existsSync(environmentExamplePath)) {
-  loadEnvironmentFile({ path: environmentExamplePath });
+if (!existsSync(environmentFilePath)) {
+  throw new Error(
+    'A local .env file is required for TypeORM CLI commands. Copy .env.example to .env and configure it.',
+  );
 }
+
+loadEnvironmentFile({ path: environmentFilePath });
 
 const nodeEnv = parseNodeEnvironment(process.env['NODE_ENV']);
 const databaseConfiguration = buildDatabaseConfiguration(process.env);

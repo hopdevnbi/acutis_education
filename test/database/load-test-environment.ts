@@ -12,21 +12,6 @@ function loadEnvironmentFileIfPresent(relativePath: string): void {
   }
 }
 
-function applyHostDockerPortDefaults(): void {
-  const databaseHost = process.env['DB_HOST']?.trim();
-  const publishedPort = process.env['MSSQL_PUBLISH_PORT']?.trim();
-  const configuredPort = process.env['DB_PORT']?.trim();
-
-  if (
-    databaseHost === 'localhost' &&
-    publishedPort !== undefined &&
-    publishedPort.length > 0 &&
-    (configuredPort === undefined || configuredPort === '1433')
-  ) {
-    process.env['DB_PORT'] = publishedPort;
-  }
-}
-
 export function loadTestEnvironment(): void {
   loadEnvironmentFileIfPresent('.env');
   loadEnvironmentFileIfPresent('.env.test');
@@ -41,6 +26,5 @@ export function loadTestEnvironment(): void {
     process.env['DB_NAME'] = DEFAULT_TEST_DATABASE_NAME;
   }
 
-  applyHostDockerPortDefaults();
   assertSafeTestDatabaseName(process.env['DB_NAME']);
 }

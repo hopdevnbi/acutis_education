@@ -4,6 +4,7 @@ coverage
 .git
 docs
 .env
+.env.test
 .env.local
 .env.*.local
 logs

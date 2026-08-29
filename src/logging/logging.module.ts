@@ -9,10 +9,15 @@ const SENSITIVE_LOG_REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers.set-cookie',
+  'req.headers["x-api-key"]',
   'req.body.password',
+  'req.body.currentPassword',
+  'req.body.newPassword',
   'req.body.token',
   'req.body.accessToken',
   'req.body.refreshToken',
+  'req.body.secret',
+  'req.body.apiKey',
   'res.headers.authorization',
   'res.headers.cookie',
   'res.headers.set-cookie',
@@ -34,8 +39,25 @@ type RequestWithContext = IncomingMessage & {
           pinoHttp: {
             level: isDevelopment ? 'debug' : 'info',
             redact: [...SENSITIVE_LOG_REDACT_PATHS],
+            serializers: {
+              req(request: IncomingMessage) {
+                const requestUrl = request.url ?? '/';
+                const queryIndex = requestUrl.indexOf('?');
+                const path = queryIndex === -1 ? requestUrl : requestUrl.slice(0, queryIndex);
+
+                return {
+                  method: request.method,
+                  url: path,
+                  remoteAddress: request.socket?.remoteAddress,
+                  remotePort: request.socket?.remotePort,
+                };
+              },
+            },
             autoLogging: {
-              ignore: (request: IncomingMessage) => request.url === '/api/v1/health',
+              ignore: (request: IncomingMessage) => {
+                const requestUrl = request.url ?? '';
+                return requestUrl === '/api/v1/health' || requestUrl.startsWith('/api/v1/health?');
+              },
             },
             genReqId: (request: IncomingMessage, response: ServerResponse) => {
               const requestWithContext = request as RequestWithContext;

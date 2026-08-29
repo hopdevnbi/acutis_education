@@ -33,6 +33,23 @@ function parseDatabasePort(rawValue: string | undefined): number {
   return parsedPort;
 }
 
+function resolveDatabasePort(environment: NodeJS.ProcessEnv): number {
+  const databaseHost = environment['DB_HOST']?.trim();
+  const publishedPort = environment['MSSQL_PUBLISH_PORT']?.trim();
+  const configuredPort = environment['DB_PORT']?.trim();
+
+  if (
+    databaseHost === 'localhost' &&
+    publishedPort !== undefined &&
+    publishedPort.length > 0 &&
+    (configuredPort === undefined || configuredPort === String(DEFAULT_DB_PORT))
+  ) {
+    return parseDatabasePort(publishedPort);
+  }
+
+  return parseDatabasePort(configuredPort);
+}
+
 function parseBooleanEnvironmentVariable(
   rawValue: string | undefined,
   environmentVariableName: string,
@@ -83,7 +100,7 @@ export function buildDatabaseConfiguration(
 
   return {
     host: parseRequiredString(environment['DB_HOST'], 'DB_HOST'),
-    port: parseDatabasePort(environment['DB_PORT']),
+    port: resolveDatabasePort(environment),
     database: parseRequiredString(environment['DB_NAME'], 'DB_NAME'),
     username: parseRequiredString(environment['DB_USER'], 'DB_USER'),
     password: parseRequiredString(environment['DB_PASSWORD'], 'DB_PASSWORD'),

@@ -67,6 +67,15 @@ describe('envValidationSchema', () => {
     expect(validationResult.error).toBeDefined();
   });
 
+  it('rejects empty DB_PASSWORD values', () => {
+    const validationResult = envValidationSchema.validate({
+      ...validDatabaseEnvironment,
+      DB_PASSWORD: '',
+    });
+
+    expect(validationResult.error).toBeDefined();
+  });
+
   it('rejects missing DB_HOST values', () => {
     const validationResult = envValidationSchema.validate({
       DB_PORT: '1433',

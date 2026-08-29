@@ -104,6 +104,43 @@ describe('GlobalExceptionFilter', () => {
     expect(responseBody).not.toHaveProperty('stack');
   });
 
+  it('masks server-side HttpException messages for 5xx responses', () => {
+    const json = jest.fn<void, [ApiErrorResponse]>();
+    const status = jest.fn().mockReturnValue({ json });
+    const setHeader = jest.fn();
+
+    filter.catch(
+      new HttpException('DB timeout to mssql:1433', HttpStatus.INTERNAL_SERVER_ERROR),
+      createArgumentsHost(
+        {
+          url: '/api/v1/example?token=secret',
+          method: 'GET',
+          headers: {},
+          requestId: '880e8400-e29b-41d4-a716-446655440003',
+        },
+        {
+          status,
+          setHeader,
+        },
+      ),
+    );
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/v1/example',
+      }),
+      'Unhandled exception',
+    );
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: 'An unexpected error occurred.',
+        path: '/api/v1/example',
+      }),
+    );
+  });
+
   it('preserves validation-style messages from HttpException payloads', () => {
     const json = jest.fn<void, [ApiErrorResponse]>();
     const status = jest.fn().mockReturnValue({ json });
