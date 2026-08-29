@@ -1,0 +1,74 @@
+name: catechism-api
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+    container_name: catechism-mssql
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '${MSSQL_PUBLISH_PORT:-14330}:1433'
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - ./docker/mssql/healthcheck.sh:/healthcheck.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', '/bin/bash /healthcheck.sh']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+    container_name: catechism-mssql-init
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      MSSQL_HOST: mssql
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    volumes:
+      - ./docker/mssql/init/create-database.sh:/create-database.sh:ro
+    entrypoint: ['/bin/bash', '/create-database.sh']
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: catechism-api
+    depends_on:
+      mssql-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mssql
+      DB_PORT: 1433
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      - .:/app
+      - api-node-modules:/app/node_modules
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
+  api-node-modules:
