@@ -125,7 +125,13 @@ Optional local class/enrollment demo data (memberships, classes, students, guard
 npm run seed:class-enrollment
 ```
 
-Prerequisites (run in order): `npm run seed:auth-rbac`, then `npm run seed:parish-academic`, then `npm run seed:class-enrollment`.
+Optional local curriculum demo data (published curriculum, topics, lessons, content, assignment for demo level):
+
+```powershell
+npm run seed:curriculum-demo
+```
+
+Prerequisites (run in order): `npm run seed:auth-rbac`, then `npm run seed:parish-academic`, then `npm run seed:class-enrollment`, then `npm run seed:curriculum-demo`.
 
 This command is manual, development-only, idempotent, and uses public module services only. Sample users (`admin@`, `catechist@`, `parent@local.catechism.test`) gain scoped links after this seed runs.
 

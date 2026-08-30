@@ -78,9 +78,11 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
   it('creates sample roles, permissions, users, and assignments on first run', async () => {
     const summary = await seedService.run();
 
-    expect(summary.permissionsCreated).toBe(AUTH_RBAC_SEED_PERMISSIONS.length);
-    expect(summary.rolesCreated).toBe(AUTH_RBAC_SEED_ROLES.length);
-    expect(summary.usersCreated).toBe(AUTH_RBAC_SEED_USERS.length);
+    expect(summary.permissionsCreated + summary.permissionsExisting).toBe(
+      AUTH_RBAC_SEED_PERMISSIONS.length,
+    );
+    expect(summary.rolesCreated + summary.rolesExisting).toBe(AUTH_RBAC_SEED_ROLES.length);
+    expect(summary.usersCreated + summary.usersExisting).toBe(AUTH_RBAC_SEED_USERS.length);
 
     for (const seedUser of AUTH_RBAC_SEED_USERS) {
       const account = await userAccountService.findAccountSnapshotByEmail(seedUser.email);

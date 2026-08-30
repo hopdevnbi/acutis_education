@@ -26,8 +26,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:db:prepare": "ts-node --project tsconfig.json test/database/prepare-test-database.ts",
     "test:db:migrations": "ts-node --project tsconfig.json test/database/validate-test-database-migrations.ts",
-    "test:integration": "npm run test:db:prepare && jest --config ./test/jest-integration.json",
-    "test:e2e:db": "npm run test:db:prepare && jest --config ./test/jest-db-e2e.json",
+    "test:integration": "npm run test:db:prepare && jest --config ./test/jest-integration.json --runInBand",
+    "test:e2e:db": "npm run test:db:prepare && jest --config ./test/jest-db-e2e.json --runInBand",
     "quality": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:e2e && npm run build",
     "quality:full": "npm run quality && npm run test:db:migrations && npm run test:integration && npm run test:e2e:db",
     "ci:wait-for-mssql": "ts-node --project tsconfig.json scripts/wait-for-mssql.ts",
@@ -39,7 +39,8 @@
     "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
     "seed:auth-rbac": "ts-node --project tsconfig.json scripts/seed-auth-rbac.ts",
     "seed:parish-academic": "ts-node --project tsconfig.json scripts/seed-parish-academic.ts",
-    "seed:class-enrollment": "ts-node --project tsconfig.json scripts/seed-class-enrollment.ts"
+    "seed:class-enrollment": "ts-node --project tsconfig.json scripts/seed-class-enrollment.ts",
+    "seed:curriculum-demo": "ts-node --project tsconfig.json scripts/seed-curriculum-demo.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.3",
