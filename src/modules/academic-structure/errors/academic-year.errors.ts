@@ -53,3 +53,10 @@ export class AcademicYearClosedImmutableError extends Error {
     this.name = 'AcademicYearClosedImmutableError';
   }
 }
+
+export class AcademicYearDoesNotBelongToParishError extends Error {
+  constructor() {
+    super('Academic year does not belong to this parish.');
+    this.name = 'AcademicYearDoesNotBelongToParishError';
+  }
+}

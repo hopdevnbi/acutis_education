@@ -7,6 +7,7 @@ import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
 import { ClassModule } from './class/class.module';
+import { ClassService } from './class/services/class.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
@@ -82,10 +83,11 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from ClassModule at persistence foundation stage', () => {
+  it('exports ClassService only from ClassModule', () => {
     const exports = resolveModuleExports(ClassModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(ClassService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

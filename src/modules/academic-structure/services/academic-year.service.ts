@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import { InvalidParishIdError } from '../../parish/errors/parish.errors';
 import { ParishService } from '../../parish/services/parish.service';
 import { AcademicYearEntity } from '../entities/academic-year.entity';
 import { AcademicYearStatus } from '../enums/academic-year-status.enum';
 import {
   AcademicYearAlreadyExistsError,
   AcademicYearClosedImmutableError,
+  AcademicYearDoesNotBelongToParishError,
   AcademicYearNotFoundError,
   ActiveAcademicYearAlreadyExistsError,
   InvalidAcademicYearIdError,
@@ -68,6 +70,20 @@ export class AcademicYearService {
 
   async getAcademicYearById(rawAcademicYearId: string): Promise<AcademicYearSnapshot> {
     const academicYear = await this.findAcademicYearEntity(rawAcademicYearId);
+
+    return toAcademicYearSnapshot(academicYear);
+  }
+
+  async assertAcademicYearBelongsToParish(
+    rawAcademicYearId: string,
+    rawParishId: string,
+  ): Promise<AcademicYearSnapshot> {
+    const parishId = this.parseParishIdForCrossReference(rawParishId);
+    const academicYear = await this.findAcademicYearEntity(rawAcademicYearId);
+
+    if (normalizeUuid(academicYear.parishId) !== parishId) {
+      throw new AcademicYearDoesNotBelongToParishError();
+    }
 
     return toAcademicYearSnapshot(academicYear);
   }
@@ -243,6 +259,14 @@ export class AcademicYearService {
     }
 
     return normalizeUuid(rawAcademicYearId);
+  }
+
+  private parseParishIdForCrossReference(rawParishId: string): string {
+    if (!isUuidV4(rawParishId)) {
+      throw new InvalidParishIdError();
+    }
+
+    return normalizeUuid(rawParishId);
   }
 
   private applyListFilters(

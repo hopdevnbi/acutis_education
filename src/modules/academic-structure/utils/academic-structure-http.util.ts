@@ -7,6 +7,7 @@ import {
 import {
   AcademicYearAlreadyExistsError,
   AcademicYearClosedImmutableError,
+  AcademicYearDoesNotBelongToParishError,
   AcademicYearNotFoundError,
   ActiveAcademicYearAlreadyExistsError,
   InvalidAcademicYearDateRangeError,
@@ -16,6 +17,7 @@ import {
 } from '../errors/academic-year.errors';
 import {
   CatechismLevelCodeAlreadyExistsError,
+  CatechismLevelDoesNotBelongToParishError,
   CatechismLevelNotFoundError,
   InvalidCatechismLevelCodeError,
   InvalidCatechismLevelIdError,
@@ -68,6 +70,10 @@ export function rethrowAcademicStructureServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof AcademicYearDoesNotBelongToParishError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (error instanceof InvalidCatechismLevelIdError) {
     throw new BadRequestException(error.message);
   }
@@ -90,6 +96,10 @@ export function rethrowAcademicStructureServiceError(error: unknown): never {
 
   if (error instanceof CatechismLevelCodeAlreadyExistsError) {
     throw new ConflictException(error.message);
+  }
+
+  if (error instanceof CatechismLevelDoesNotBelongToParishError) {
+    throw new BadRequestException(error.message);
   }
 
   throw error;

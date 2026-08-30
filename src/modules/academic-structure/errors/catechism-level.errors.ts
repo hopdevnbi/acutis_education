@@ -39,3 +39,10 @@ export class CatechismLevelCodeAlreadyExistsError extends Error {
     this.name = 'CatechismLevelCodeAlreadyExistsError';
   }
 }
+
+export class CatechismLevelDoesNotBelongToParishError extends Error {
+  constructor() {
+    super('Catechism level does not belong to this parish.');
+    this.name = 'CatechismLevelDoesNotBelongToParishError';
+  }
+}

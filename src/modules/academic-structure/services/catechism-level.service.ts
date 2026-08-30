@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import { InvalidParishIdError } from '../../parish/errors/parish.errors';
 import { ParishService } from '../../parish/services/parish.service';
 import { CatechismLevelEntity } from '../entities/catechism-level.entity';
 import { CatechismLevelStatus } from '../enums/catechism-level-status.enum';
 import {
   CatechismLevelCodeAlreadyExistsError,
+  CatechismLevelDoesNotBelongToParishError,
   CatechismLevelNotFoundError,
   InvalidCatechismLevelIdError,
 } from '../errors/catechism-level.errors';
@@ -64,6 +66,20 @@ export class CatechismLevelService {
 
   async getCatechismLevelById(rawCatechismLevelId: string): Promise<CatechismLevelSnapshot> {
     const catechismLevel = await this.findCatechismLevelEntity(rawCatechismLevelId);
+
+    return toCatechismLevelSnapshot(catechismLevel);
+  }
+
+  async assertCatechismLevelBelongsToParish(
+    rawCatechismLevelId: string,
+    rawParishId: string,
+  ): Promise<CatechismLevelSnapshot> {
+    const parishId = this.parseParishIdForCrossReference(rawParishId);
+    const catechismLevel = await this.findCatechismLevelEntity(rawCatechismLevelId);
+
+    if (normalizeUuid(catechismLevel.parishId) !== parishId) {
+      throw new CatechismLevelDoesNotBelongToParishError();
+    }
 
     return toCatechismLevelSnapshot(catechismLevel);
   }
@@ -174,6 +190,14 @@ export class CatechismLevelService {
     }
 
     return normalizeUuid(rawCatechismLevelId);
+  }
+
+  private parseParishIdForCrossReference(rawParishId: string): string {
+    if (!isUuidV4(rawParishId)) {
+      throw new InvalidParishIdError();
+    }
+
+    return normalizeUuid(rawParishId);
   }
 
   private applyListFilters(

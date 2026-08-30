@@ -152,6 +152,22 @@ Authenticated academic year and catechism level endpoints (require JWT + RBAC):
 
 List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
 
+## Class API
+
+Authenticated class endpoints (require JWT + RBAC):
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/parishes/:parishId/classes` | `classes.manage` |
+| `GET` | `/api/v1/parishes/:parishId/classes` | `classes.read` |
+| `GET` | `/api/v1/classes/:id` | `classes.read` |
+| `PATCH` | `/api/v1/classes/:id` | `classes.manage` |
+| `PATCH` | `/api/v1/classes/:id/status` | `classes.manage` |
+
+List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `academicYearId`, optional `catechismLevelId`, optional `status`, optional `search`.
+
+Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activation requires an ACTIVE parish, ACTIVE academic year, and ACTIVE catechism level.
+
 See Swagger at `/api/docs` when enabled.
 
 ## Database safety
