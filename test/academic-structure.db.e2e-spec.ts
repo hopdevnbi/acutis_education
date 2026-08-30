@@ -212,6 +212,8 @@ describe('Academic structure API (db e2e)', () => {
 
     const created = createResponse.body as AcademicYearResponseBody;
     expect(created.status).toBe(AcademicYearStatus.Planned);
+    expect(created.startDate).toBe('2026-09-01');
+    expect(created.endDate).toBe('2027-06-30');
 
     const activateResponse = await request(getTestHttpServer(application))
       .patch(`/api/v1/academic-years/${created.id}/status`)

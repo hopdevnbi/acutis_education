@@ -111,6 +111,14 @@ The seed command is manual, development-only, and refuses `NODE_ENV=production` 
 
 After schema changes that add parish or academic structure permissions, re-run `npm run seed:auth-rbac` on a development database to refresh sample permission assignments.
 
+Optional local domain demo data (parish + academic year + catechism levels):
+
+```powershell
+npm run seed:parish-academic
+```
+
+This command is manual, development-only, idempotent, and uses public module services only.
+
 ## Parish API
 
 Authenticated parish endpoints (require JWT + RBAC):

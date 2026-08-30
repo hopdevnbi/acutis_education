@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 import { generateUuidV4 } from '../../../database/uuid-v4.util';
+import { isoDateOnlyColumnTransformer } from '../../../database/iso-date-only-column.transformer';
 import { AcademicYearStatus } from '../enums/academic-year-status.enum';
 
 @Entity('academic_years')
@@ -16,10 +17,10 @@ export class AcademicYearEntity {
   @Column({ type: 'nvarchar', length: 128 })
   name!: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'date', transformer: isoDateOnlyColumnTransformer })
   startDate!: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'date', transformer: isoDateOnlyColumnTransformer })
   endDate!: string;
 
   @Column({ type: 'varchar', length: 32 })

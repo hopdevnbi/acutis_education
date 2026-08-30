@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, DataSource, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { ParishService } from '../../parish/services/parish.service';
 import { AcademicYearEntity } from '../entities/academic-year.entity';
@@ -160,12 +160,17 @@ export class AcademicYearService {
         throw new InvalidAcademicYearStatusTransitionError();
       }
 
+      await repository
+        .createQueryBuilder('academicYear')
+        .setLock('pessimistic_write')
+        .where('academicYear.parishId = :parishId', { parishId: academicYear.parishId })
+        .getMany();
+
       const existingActiveYear = await repository.findOne({
         where: {
           parishId: academicYear.parishId,
           status: AcademicYearStatus.Active,
         },
-        lock: { mode: 'pessimistic_write' },
       });
 
       if (existingActiveYear !== null && existingActiveYear.id !== academicYear.id) {
@@ -173,9 +178,22 @@ export class AcademicYearService {
       }
 
       academicYear.status = AcademicYearStatus.Active;
-      const savedAcademicYear = await repository.save(academicYear);
 
-      return toAcademicYearSnapshot(savedAcademicYear);
+      try {
+        const savedAcademicYear = await repository.save(academicYear);
+
+        return toAcademicYearSnapshot(savedAcademicYear);
+      } catch (error: unknown) {
+        if (isUniqueConstraintViolation(error)) {
+          throw new ActiveAcademicYearAlreadyExistsError();
+        }
+
+        if (error instanceof QueryFailedError && error.message.includes('deadlock')) {
+          throw new ActiveAcademicYearAlreadyExistsError();
+        }
+
+        throw error;
+      }
     });
   }
 
