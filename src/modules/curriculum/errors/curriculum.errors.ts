@@ -116,3 +116,73 @@ export class CurriculumCatechismLevelInactiveError extends Error {
     this.name = 'CurriculumCatechismLevelInactiveError';
   }
 }
+
+export class InvalidLessonIdError extends Error {
+  constructor() {
+    super('Invalid lesson id.');
+    this.name = 'InvalidLessonIdError';
+  }
+}
+
+export class LessonNotFoundError extends Error {
+  constructor() {
+    super('Lesson not found.');
+    this.name = 'LessonNotFoundError';
+  }
+}
+
+export class CurriculumVersionNotPublishedError extends Error {
+  constructor() {
+    super('Curriculum version is not published.');
+    this.name = 'CurriculumVersionNotPublishedError';
+  }
+}
+
+export class CurriculumAssignmentNotFoundError extends Error {
+  constructor() {
+    super('Curriculum assignment not found.');
+    this.name = 'CurriculumAssignmentNotFoundError';
+  }
+}
+
+export interface CurriculumPublishValidationIssue {
+  readonly code: string;
+  readonly message: string;
+  readonly resourceId?: string;
+  readonly path?: string;
+}
+
+export class CurriculumPublishValidationError extends Error {
+  constructor(public readonly issues: readonly CurriculumPublishValidationIssue[]) {
+    super('Curriculum version cannot be published due to validation issues.');
+    this.name = 'CurriculumPublishValidationError';
+  }
+}
+
+export class CurriculumVersionNotCloneableError extends Error {
+  constructor() {
+    super('Curriculum version cannot be cloned to draft.');
+    this.name = 'CurriculumVersionNotCloneableError';
+  }
+}
+
+export class CurriculumAssignmentVersionMismatchError extends Error {
+  constructor() {
+    super('Curriculum version does not match parish and catechism level.');
+    this.name = 'CurriculumAssignmentVersionMismatchError';
+  }
+}
+
+export class CurriculumAssignmentAcademicYearNotDeliverableError extends Error {
+  constructor() {
+    super('Academic year is not deliverable for curriculum assignment.');
+    this.name = 'CurriculumAssignmentAcademicYearNotDeliverableError';
+  }
+}
+
+export class InvalidCurriculumAssignmentInputError extends Error {
+  constructor() {
+    super('Invalid curriculum assignment input.');
+    this.name = 'InvalidCurriculumAssignmentInputError';
+  }
+}

@@ -13,7 +13,10 @@ import { ClassScopeService } from './class/services/class-scope.service';
 import { ClassCatechistAssignmentService } from './class/services/class-catechist-assignment.service';
 import { ClassService } from './class/services/class.service';
 import { CurriculumModule } from './curriculum/curriculum.module';
+import { CurriculumOrchestrationModule } from './curriculum-orchestration/curriculum-orchestration.module';
 import { CurriculumService } from './curriculum/services/curriculum.service';
+import { LessonService } from './curriculum/services/lesson.service';
+import { TopicService } from './curriculum/services/topic.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { EnrollmentAccessService } from './enrollment/services/enrollment-access.service';
 import { EnrollmentGuardianScopeService } from './enrollment/services/enrollment-guardian-scope.service';
@@ -29,6 +32,7 @@ import { ParishScopeService } from './parish/services/parish-scope.service';
 import { ParishService } from './parish/services/parish.service';
 import { StudentModule } from './student/student.module';
 import { LearningContentModule } from './learning-content/learning-content.module';
+import { LearningContentService } from './learning-content/services/learning-content.service';
 import { StudentAccessService } from './student/services/student-access.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
@@ -125,18 +129,27 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports CurriculumService only from CurriculumModule', () => {
+  it('exports CurriculumService, TopicService, and LessonService from CurriculumModule', () => {
     const exports = resolveModuleExports(CurriculumModule);
 
-    expect(exports).toHaveLength(1);
+    expect(exports).toHaveLength(3);
     expect(exports).toContain(CurriculumService);
+    expect(exports).toContain(TopicService);
+    expect(exports).toContain(LessonService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from LearningContentModule at schema foundation stage', () => {
-    const exports = resolveModuleExports(LearningContentModule);
+  it('exports nothing from CurriculumOrchestrationModule', () => {
+    const exports = resolveModuleExports(CurriculumOrchestrationModule);
 
     expect(exports).toHaveLength(0);
+  });
+
+  it('exports LearningContentService only from LearningContentModule', () => {
+    const exports = resolveModuleExports(LearningContentModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(LearningContentService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
@@ -153,6 +166,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'class/class.module.ts'),
       join(__dirname, 'enrollment/enrollment.module.ts'),
       join(__dirname, 'parish/parish.module.ts'),
+      join(__dirname, 'curriculum-orchestration/curriculum-orchestration.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {

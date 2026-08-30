@@ -12,6 +12,7 @@ import { CurriculumEntity } from './entities/curriculum.entity';
 import { LessonEntity } from './entities/lesson.entity';
 import { TopicEntity } from './entities/topic.entity';
 import { CurriculumService } from './services/curriculum.service';
+import { LessonService } from './services/lesson.service';
 import { TopicService } from './services/topic.service';
 
 @Module({
@@ -29,7 +30,7 @@ import { TopicService } from './services/topic.service';
     AccessControlModule,
   ],
   controllers: [CurriculumController, TopicController],
-  providers: [CurriculumService, TopicService],
-  exports: [CurriculumService],
+  providers: [CurriculumService, TopicService, LessonService],
+  exports: [CurriculumService, TopicService, LessonService],
 })
 export class CurriculumModule {}

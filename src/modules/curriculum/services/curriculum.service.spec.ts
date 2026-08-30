@@ -8,10 +8,14 @@ import {
   type SelectQueryBuilder,
 } from 'typeorm';
 import { CatechismLevelStatus } from '../../academic-structure/enums/catechism-level-status.enum';
+import { AcademicYearService } from '../../academic-structure/services/academic-year.service';
 import { CatechismLevelService } from '../../academic-structure/services/catechism-level.service';
 import { ParishService } from '../../parish/services/parish.service';
+import { CurriculumAssignmentEntity } from '../entities/curriculum-assignment.entity';
 import { CurriculumVersionEntity } from '../entities/curriculum-version.entity';
 import { CurriculumEntity } from '../entities/curriculum.entity';
+import { LessonEntity } from '../entities/lesson.entity';
+import { TopicEntity } from '../entities/topic.entity';
 import { CurriculumStatus } from '../enums/curriculum-status.enum';
 import { CurriculumVersionStatus } from '../enums/curriculum-version-status.enum';
 import {
@@ -55,6 +59,9 @@ describe('CurriculumService', () => {
   let parishService: jest.Mocked<Pick<ParishService, 'assertParishActive' | 'getParishById'>>;
   let catechismLevelService: jest.Mocked<
     Pick<CatechismLevelService, 'assertCatechismLevelBelongsToParish'>
+  >;
+  let academicYearService: jest.Mocked<
+    Pick<AcademicYearService, 'assertAcademicYearBelongsToParish'>
   >;
   let dataSource: jest.Mocked<Pick<DataSource, 'transaction'>>;
   let queryBuilder: jest.Mocked<
@@ -135,6 +142,10 @@ describe('CurriculumService', () => {
       }),
     };
 
+    academicYearService = {
+      assertAcademicYearBelongsToParish: jest.fn(),
+    };
+
     dataSource = {
       transaction: jest.fn(),
     };
@@ -147,7 +158,20 @@ describe('CurriculumService', () => {
           provide: getRepositoryToken(CurriculumVersionEntity),
           useValue: curriculumVersionRepository,
         },
+        {
+          provide: getRepositoryToken(LessonEntity),
+          useValue: { find: jest.fn(), findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(TopicEntity),
+          useValue: { find: jest.fn(), findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(CurriculumAssignmentEntity),
+          useValue: { findOne: jest.fn(), create: jest.fn(), save: jest.fn() },
+        },
         { provide: ParishService, useValue: parishService },
+        { provide: AcademicYearService, useValue: academicYearService },
         { provide: CatechismLevelService, useValue: catechismLevelService },
         { provide: DataSource, useValue: dataSource },
       ],

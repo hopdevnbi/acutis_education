@@ -41,11 +41,13 @@ import { CurriculumVersionResponseDto } from '../dto/curriculum-version-response
 import { UpdateCurriculumRequestDto } from '../dto/update-curriculum-request.dto';
 import { UpdateCurriculumStatusRequestDto } from '../dto/update-curriculum-status-request.dto';
 import { UpdateCurriculumVersionRequestDto } from '../dto/update-curriculum-version-request.dto';
+import { VersionTreeResponseDto } from '../dto/version-tree-response.dto';
 import {
   toCurriculumListResponseDto,
   toCurriculumResponseDto,
   toCurriculumVersionListResponseDto,
   toCurriculumVersionResponseDto,
+  toVersionTreeResponseDto,
 } from '../mappers/curriculum-response.mapper';
 import { CurriculumService } from '../services/curriculum.service';
 import { rethrowCurriculumServiceError } from '../utils/curriculum-http.util';
@@ -283,6 +285,26 @@ export class CurriculumController {
       });
 
       return toCurriculumVersionResponseDto(snapshot);
+    } catch (error: unknown) {
+      rethrowCurriculumServiceError(error);
+    }
+  }
+
+  @Get('curriculum-versions/:id/tree')
+  @RequirePermissions(CURRICULUM_READ_PERMISSION)
+  @ApiOperation({ summary: 'Get curriculum version topic and lesson tree' })
+  @ApiOkResponse({ type: VersionTreeResponseDto })
+  async getVersionTree(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('id') versionId: string,
+  ): Promise<VersionTreeResponseDto> {
+    try {
+      const parishId = await this.curriculumService.getVersionCurriculumParishId(versionId);
+      await this.parishScopeService.assertCanReadParishAsAdmin(authenticatedUser.userId, parishId);
+
+      const snapshot = await this.curriculumService.getVersionTree(versionId);
+
+      return toVersionTreeResponseDto(snapshot);
     } catch (error: unknown) {
       rethrowCurriculumServiceError(error);
     }

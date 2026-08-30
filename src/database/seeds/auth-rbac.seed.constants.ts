@@ -158,6 +158,16 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Publish curricula',
     description: 'Local sample permission to publish curriculum versions.',
   },
+  {
+    code: 'lesson-content.read',
+    name: 'Read lesson content',
+    description: 'Local sample permission to read draft lesson content.',
+  },
+  {
+    code: 'lesson-content.manage',
+    name: 'Manage lesson content',
+    description: 'Local sample permission to manage draft lesson content.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -186,6 +196,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'curricula.read',
     'curricula.manage',
     'curricula.publish',
+    'lesson-content.read',
+    'lesson-content.manage',
   ],
   CATECHIST: [
     'classes.read',

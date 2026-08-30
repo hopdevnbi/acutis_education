@@ -78,3 +78,44 @@ export interface ListCurriculumVersionsInput {
 export interface UpdateCurriculumVersionInput {
   readonly label?: string | null;
 }
+
+export interface VersionTreeLessonSnapshot {
+  readonly id: string;
+  readonly canonicalLessonKey: string;
+  readonly code: string | null;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly sortOrder: number;
+  readonly estimatedDurationMinutes: number | null;
+}
+
+export interface VersionTreeTopicSnapshot {
+  readonly id: string;
+  readonly code: string | null;
+  readonly title: string;
+  readonly description: string | null;
+  readonly sortOrder: number;
+  readonly lessons: VersionTreeLessonSnapshot[];
+}
+
+export interface VersionTreeSnapshot {
+  readonly version: CurriculumVersionSnapshot;
+  readonly topics: VersionTreeTopicSnapshot[];
+}
+
+export interface CurriculumAssignmentSnapshot {
+  readonly id: string;
+  readonly parishId: string;
+  readonly academicYearId: string;
+  readonly catechismLevelId: string;
+  readonly curriculumVersionId: string;
+  readonly assignedByUserId: string | null;
+  readonly assignedAt: Date;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface UpsertCurriculumAssignmentInput {
+  readonly curriculumVersionId: string;
+  readonly assignedByUserId: string;
+}

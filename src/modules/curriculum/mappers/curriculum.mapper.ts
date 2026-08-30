@@ -1,11 +1,32 @@
+import type { CurriculumAssignmentEntity } from '../entities/curriculum-assignment.entity';
 import type { CurriculumEntity } from '../entities/curriculum.entity';
 import type { CurriculumVersionEntity } from '../entities/curriculum-version.entity';
+import type { LessonEntity } from '../entities/lesson.entity';
 import type { TopicEntity } from '../entities/topic.entity';
 import type {
+  CurriculumAssignmentSnapshot,
   CurriculumSnapshot,
   CurriculumVersionSnapshot,
+  VersionTreeLessonSnapshot,
 } from '../interfaces/curriculum.interface';
+import type { LessonSnapshot } from '../interfaces/lesson.interface';
 import type { TopicSnapshot } from '../interfaces/topic.interface';
+
+export function toCurriculumAssignmentSnapshot(
+  entity: CurriculumAssignmentEntity,
+): CurriculumAssignmentSnapshot {
+  return {
+    id: entity.id,
+    parishId: entity.parishId,
+    academicYearId: entity.academicYearId,
+    catechismLevelId: entity.catechismLevelId,
+    curriculumVersionId: entity.curriculumVersionId,
+    assignedByUserId: entity.assignedByUserId,
+    assignedAt: entity.assignedAt,
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
+  };
+}
 
 export function toCurriculumSnapshot(entity: CurriculumEntity): CurriculumSnapshot {
   return {
@@ -50,5 +71,33 @@ export function toTopicSnapshot(entity: TopicEntity): TopicSnapshot {
     sortOrder: entity.sortOrder,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
+  };
+}
+
+export function toLessonSnapshot(entity: LessonEntity): LessonSnapshot {
+  return {
+    id: entity.id,
+    curriculumVersionId: entity.curriculumVersionId,
+    topicId: entity.topicId,
+    canonicalLessonKey: entity.canonicalLessonKey,
+    code: entity.code,
+    title: entity.title,
+    summary: entity.summary,
+    sortOrder: entity.sortOrder,
+    estimatedDurationMinutes: entity.estimatedDurationMinutes,
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
+  };
+}
+
+export function toVersionTreeLessonSnapshot(entity: LessonEntity): VersionTreeLessonSnapshot {
+  return {
+    id: entity.id,
+    canonicalLessonKey: entity.canonicalLessonKey,
+    code: entity.code,
+    title: entity.title,
+    summary: entity.summary,
+    sortOrder: entity.sortOrder,
+    estimatedDurationMinutes: entity.estimatedDurationMinutes,
   };
 }

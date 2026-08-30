@@ -3,7 +3,12 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import {
+  AcademicYearDoesNotBelongToParishError,
+  AcademicYearNotFoundError,
+} from '../../academic-structure/errors/academic-year.errors';
 import {
   CatechismLevelDoesNotBelongToParishError,
   CatechismLevelNotFoundError,
@@ -15,17 +20,24 @@ import {
 } from '../../parish/errors/parish.errors';
 import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
+  CurriculumAssignmentAcademicYearNotDeliverableError,
+  CurriculumAssignmentNotFoundError,
+  CurriculumAssignmentVersionMismatchError,
   CurriculumCatechismLevelInactiveError,
   CurriculumCodeAlreadyExistsError,
   CurriculumDraftAlreadyExistsError,
   CurriculumInactiveError,
   CurriculumNotFoundError,
+  CurriculumPublishValidationError,
   CurriculumSourceLocaleImmutableError,
   CurriculumStructuralFieldImmutableError,
   CurriculumUpdateRequiresFieldsError,
+  CurriculumVersionNotCloneableError,
   CurriculumVersionNotDraftError,
   CurriculumVersionNotFoundError,
+  CurriculumVersionNotPublishedError,
   CurriculumVersionNumberConflictError,
+  InvalidCurriculumAssignmentInputError,
   InvalidCurriculumCodeError,
   InvalidCurriculumDescriptionError,
   InvalidCurriculumIdError,
@@ -33,6 +45,18 @@ import {
   InvalidCurriculumSourceLocaleError,
   InvalidCurriculumVersionIdError,
 } from '../errors/curriculum.errors';
+import {
+  InvalidCanonicalLessonKeyMutationError,
+  InvalidLessonCodeError,
+  InvalidLessonDurationError,
+  InvalidLessonIdError,
+  InvalidLessonReorderError,
+  InvalidLessonSummaryError,
+  InvalidLessonTitleError,
+  LessonCodeAlreadyExistsError,
+  LessonNotFoundError,
+  LessonVersionMismatchError,
+} from '../errors/lesson.errors';
 import {
   InvalidTopicCodeError,
   InvalidTopicDescriptionError,
@@ -57,6 +81,10 @@ export function rethrowCurriculumServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof InvalidCurriculumAssignmentInputError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (error instanceof InvalidCurriculumIdError) {
     throw new BadRequestException(error.message);
   }
@@ -66,6 +94,10 @@ export function rethrowCurriculumServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidTopicIdError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidLessonIdError) {
     throw new BadRequestException(error.message);
   }
 
@@ -89,7 +121,15 @@ export function rethrowCurriculumServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof InvalidLessonCodeError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (error instanceof InvalidTopicTitleError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidLessonTitleError) {
     throw new BadRequestException(error.message);
   }
 
@@ -97,7 +137,27 @@ export function rethrowCurriculumServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof InvalidLessonSummaryError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidLessonDurationError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (error instanceof InvalidTopicReorderError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidLessonReorderError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidCanonicalLessonKeyMutationError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof LessonVersionMismatchError) {
     throw new BadRequestException(error.message);
   }
 
@@ -121,6 +181,29 @@ export function rethrowCurriculumServiceError(error: unknown): never {
     throw new ConflictException(error.message);
   }
 
+  if (error instanceof CurriculumVersionNotPublishedError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof CurriculumPublishValidationError) {
+    throw new UnprocessableEntityException({
+      message: error.message,
+      issues: error.issues,
+    });
+  }
+
+  if (error instanceof CurriculumVersionNotCloneableError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof CurriculumAssignmentAcademicYearNotDeliverableError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof CurriculumAssignmentVersionMismatchError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (error instanceof CurriculumNotFoundError) {
     throw new NotFoundException(error.message);
   }
@@ -133,11 +216,23 @@ export function rethrowCurriculumServiceError(error: unknown): never {
     throw new NotFoundException(error.message);
   }
 
+  if (error instanceof LessonNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof CurriculumAssignmentNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
   if (error instanceof CurriculumCodeAlreadyExistsError) {
     throw new ConflictException(error.message);
   }
 
   if (error instanceof TopicCodeAlreadyExistsError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof LessonCodeAlreadyExistsError) {
     throw new ConflictException(error.message);
   }
 
@@ -162,6 +257,14 @@ export function rethrowCurriculumServiceError(error: unknown): never {
   }
 
   if (error instanceof CatechismLevelDoesNotBelongToParishError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof AcademicYearNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof AcademicYearDoesNotBelongToParishError) {
     throw new BadRequestException(error.message);
   }
 
