@@ -91,6 +91,19 @@ export class StudentService {
       .filter((snapshot): snapshot is StudentSnapshot => snapshot !== undefined);
   }
 
+  async listStudentIdsByLinkedUserId(rawUserId: string): Promise<string[]> {
+    if (!isUuidV4(rawUserId)) {
+      return [];
+    }
+
+    const userId = normalizeUuid(rawUserId);
+    const students = await this.studentRepository.find({
+      where: { userId },
+    });
+
+    return students.map((student) => normalizeUuid(student.id));
+  }
+
   async listStudents(input: ListStudentsInput): Promise<ListStudentsResult> {
     const countQueryBuilder = this.studentRepository.createQueryBuilder('student');
     this.applyListFilters(countQueryBuilder, input);
@@ -205,6 +218,18 @@ export class StudentService {
     queryBuilder: SelectQueryBuilder<StudentEntity>,
     input: ListStudentsInput,
   ): void {
+    if (input.studentIds !== undefined) {
+      if (input.studentIds.length === 0) {
+        queryBuilder.andWhere('1 = 0');
+
+        return;
+      }
+
+      queryBuilder.andWhere('student.id IN (:...studentIds)', {
+        studentIds: input.studentIds.map((studentId) => normalizeUuid(studentId)),
+      });
+    }
+
     if (input.status !== undefined) {
       queryBuilder.andWhere('student.status = :status', { status: input.status });
     }

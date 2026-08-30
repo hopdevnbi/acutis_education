@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AcademicYearDoesNotBelongToParishError,
   AcademicYearNotFoundError,
@@ -12,6 +17,7 @@ import {
   ParishInactiveError,
   ParishNotFoundError,
 } from '../../parish/errors/parish.errors';
+import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
   ClassAcademicYearNotOperationalError,
   ClassCatechismLevelInactiveError,
@@ -24,6 +30,7 @@ import {
   InvalidClassStatusTransitionError,
   ClassUpdateRequiresFieldsError,
 } from '../errors/class.errors';
+import { ClassScopeAccessDeniedError } from '../errors/class-scope.errors';
 
 export function rethrowClassServiceError(error: unknown): never {
   if (error instanceof InvalidParishIdError) {
@@ -92,6 +99,14 @@ export function rethrowClassServiceError(error: unknown): never {
 
   if (error instanceof CatechismLevelDoesNotBelongToParishError) {
     throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ClassScopeAccessDeniedError) {
+    throw new ForbiddenException(error.message);
+  }
+
+  if (error instanceof ParishScopeAccessDeniedError) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

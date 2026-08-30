@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
-import { normalizeUuid } from '../../../database/uuid-v4.util';
+import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { EnrollmentEntity } from '../entities/enrollment.entity';
 import { EnrollmentStatus } from '../enums/enrollment-status.enum';
 import type {
@@ -71,6 +71,152 @@ export class EnrollmentQueryService {
       total,
       totalPages: total === 0 ? 0 : Math.ceil(total / input.limit),
     };
+  }
+
+  async hasGuardianLinkedStudentInParish(
+    rawGuardianUserId: string,
+    rawParishId: string,
+  ): Promise<boolean> {
+    if (!isUuidV4(rawGuardianUserId) || !isUuidV4(rawParishId)) {
+      return false;
+    }
+
+    const guardianUserId = normalizeUuid(rawGuardianUserId);
+    const parishId = normalizeUuid(rawParishId);
+    const count = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .innerJoin(
+        'student_guardians',
+        'guardianLink',
+        'guardianLink.student_id = enrollment.student_id',
+      )
+      .where('guardianLink.guardian_user_id = :guardianUserId', { guardianUserId })
+      .andWhere('guardianLink.status = :guardianStatus', { guardianStatus: 'ACTIVE' })
+      .andWhere('enrollment.parishId = :parishId', { parishId })
+      .andWhere('enrollment.status = :enrollmentStatus', {
+        enrollmentStatus: EnrollmentStatus.Active,
+      })
+      .getCount();
+
+    return count > 0;
+  }
+
+  async hasGuardianLinkedStudentInClass(
+    rawGuardianUserId: string,
+    rawClassId: string,
+  ): Promise<boolean> {
+    if (!isUuidV4(rawGuardianUserId) || !isUuidV4(rawClassId)) {
+      return false;
+    }
+
+    const guardianUserId = normalizeUuid(rawGuardianUserId);
+    const classId = normalizeUuid(rawClassId);
+    const count = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .innerJoin(
+        'student_guardians',
+        'guardianLink',
+        'guardianLink.student_id = enrollment.student_id',
+      )
+      .where('guardianLink.guardian_user_id = :guardianUserId', { guardianUserId })
+      .andWhere('guardianLink.status = :guardianStatus', { guardianStatus: 'ACTIVE' })
+      .andWhere('enrollment.classId = :classId', { classId })
+      .andWhere('enrollment.status = :enrollmentStatus', {
+        enrollmentStatus: EnrollmentStatus.Active,
+      })
+      .getCount();
+
+    return count > 0;
+  }
+
+  async listStudentIdsForGuardian(rawGuardianUserId: string): Promise<string[]> {
+    if (!isUuidV4(rawGuardianUserId)) {
+      return [];
+    }
+
+    const guardianUserId = normalizeUuid(rawGuardianUserId);
+    const rows = await this.enrollmentRepository.manager
+      .createQueryBuilder()
+      .select('DISTINCT guardianLink.student_id', 'studentId')
+      .from('student_guardians', 'guardianLink')
+      .where('guardianLink.guardian_user_id = :guardianUserId', { guardianUserId })
+      .andWhere('guardianLink.status = :guardianStatus', { guardianStatus: 'ACTIVE' })
+      .getRawMany<{ studentId: string }>();
+
+    return rows.map((row) => normalizeUuid(row.studentId));
+  }
+
+  async listActiveStudentIdsInParishes(parishIds: readonly string[]): Promise<string[]> {
+    if (parishIds.length === 0) {
+      return [];
+    }
+
+    const normalizedParishIds = parishIds.map((parishId) => normalizeUuid(parishId));
+    const rows = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .select('DISTINCT enrollment.studentId', 'studentId')
+      .where('enrollment.parishId IN (:...parishIds)', { parishIds: normalizedParishIds })
+      .andWhere('enrollment.status = :status', { status: EnrollmentStatus.Active })
+      .getRawMany<{ studentId: string }>();
+
+    return rows.map((row) => normalizeUuid(row.studentId));
+  }
+
+  async listActiveStudentIdsInClasses(classIds: readonly string[]): Promise<string[]> {
+    if (classIds.length === 0) {
+      return [];
+    }
+
+    const normalizedClassIds = classIds.map((classId) => normalizeUuid(classId));
+    const rows = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .select('DISTINCT enrollment.studentId', 'studentId')
+      .where('enrollment.classId IN (:...classIds)', { classIds: normalizedClassIds })
+      .andWhere('enrollment.status = :status', { status: EnrollmentStatus.Active })
+      .getRawMany<{ studentId: string }>();
+
+    return rows.map((row) => normalizeUuid(row.studentId));
+  }
+
+  async hasActiveEnrollmentInParishForStudent(
+    rawStudentId: string,
+    rawParishId: string,
+  ): Promise<boolean> {
+    if (!isUuidV4(rawStudentId) || !isUuidV4(rawParishId)) {
+      return false;
+    }
+
+    const studentId = normalizeUuid(rawStudentId);
+    const parishId = normalizeUuid(rawParishId);
+    const count = await this.enrollmentRepository.count({
+      where: {
+        studentId,
+        parishId,
+        status: EnrollmentStatus.Active,
+      },
+    });
+
+    return count > 0;
+  }
+
+  async hasActiveEnrollmentInAssignedClassForStudent(
+    rawStudentId: string,
+    classIds: readonly string[],
+  ): Promise<boolean> {
+    if (!isUuidV4(rawStudentId) || classIds.length === 0) {
+      return false;
+    }
+
+    const studentId = normalizeUuid(rawStudentId);
+    const normalizedClassIds = classIds.map((classId) => normalizeUuid(classId));
+    const count = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .where('enrollment.studentId = :studentId', { studentId })
+      .andWhere('enrollment.classId IN (:...classIds)', { classIds: normalizedClassIds })
+      .andWhere('enrollment.status = :status', { status: EnrollmentStatus.Active })
+      .getCount();
+
+    return count > 0;
   }
 
   private applyEnrollmentFilters(

@@ -1,5 +1,12 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InvalidParishIdError, ParishNotFoundError } from '../../parish/errors/parish.errors';
+import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
+import { ClassScopeAccessDeniedError } from '../../class/errors/class-scope.errors';
 import {
   InvalidStudentFullNameError,
   InvalidStudentIdError,
@@ -10,6 +17,10 @@ import {
   StudentUpdateRequiresFieldsError,
   StudentUserAlreadyLinkedError,
 } from '../errors/student.errors';
+import {
+  StudentAccessDeniedError,
+  StudentManageAccessDeniedError,
+} from '../errors/student-access.errors';
 
 export function rethrowStudentServiceError(error: unknown): never {
   if (error instanceof InvalidStudentIdError) {
@@ -50,6 +61,15 @@ export function rethrowStudentServiceError(error: unknown): never {
 
   if (error instanceof ParishNotFoundError) {
     throw new NotFoundException(error.message);
+  }
+
+  if (
+    error instanceof StudentAccessDeniedError ||
+    error instanceof StudentManageAccessDeniedError ||
+    error instanceof ParishScopeAccessDeniedError ||
+    error instanceof ClassScopeAccessDeniedError
+  ) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

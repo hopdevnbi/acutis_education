@@ -206,6 +206,19 @@ Parish student list returns distinct profiles with at least one **ACTIVE** enrol
 
 Enrollment requires an **ACTIVE** student and **ACTIVE** class. One ACTIVE enrollment per student per parish and academic year. Transfer closes the source row as `TRANSFERRED` and creates a new ACTIVE row in the target class (same parish and year).
 
+## Scoped authorization (class domain)
+
+Global permissions (`classes.read`, `students.read`, etc.) express capability. **Resource scope** is enforced server-side in addition to permissions:
+
+| Role | Scope evidence |
+|------|----------------|
+| `SUPER_ADMIN` | Bypass (all parishes/resources) |
+| `PARISH_ADMIN` | Active `parish_memberships` row for the parish |
+| `CATECHIST` | Active `class_catechist_assignments` for the class (roster reads) |
+| `PARENT` | Active `student_guardians` link (student/enrollment reads for linked children) |
+
+List endpoints filter results to accessible resources (e.g. `GET /students` no longer returns all students globally for scoped roles).
+
 See Swagger at `/api/docs` when enabled.
 
 ## Database safety

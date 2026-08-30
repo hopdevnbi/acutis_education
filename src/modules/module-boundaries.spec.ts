@@ -7,6 +7,7 @@ import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
 import { ClassModule } from './class/class.module';
+import { ClassScopeService } from './class/services/class-scope.service';
 import { ClassCatechistAssignmentService } from './class/services/class-catechist-assignment.service';
 import { ClassService } from './class/services/class.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
@@ -17,8 +18,10 @@ import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ParishModule } from './parish/parish.module';
+import { ParishScopeService } from './parish/services/parish-scope.service';
 import { ParishService } from './parish/services/parish.service';
 import { StudentModule } from './student/student.module';
+import { StudentAccessService } from './student/services/student-access.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
 import { UserAccountService } from './users/services/user-account.service';
@@ -64,11 +67,12 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports ParishService only from ParishModule', () => {
+  it('exports ParishService and ParishScopeService from ParishModule', () => {
     const exports = resolveModuleExports(ParishModule);
 
-    expect(exports).toHaveLength(1);
-    expect(exports[0]).toBe(ParishService);
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(ParishService);
+    expect(exports).toContain(ParishScopeService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
@@ -81,21 +85,23 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports StudentService and StudentGuardianService only from StudentModule', () => {
+  it('exports StudentService, StudentGuardianService, and StudentAccessService from StudentModule', () => {
     const exports = resolveModuleExports(StudentModule);
 
-    expect(exports).toHaveLength(2);
+    expect(exports).toHaveLength(3);
     expect(exports).toContain(StudentService);
     expect(exports).toContain(StudentGuardianService);
+    expect(exports).toContain(StudentAccessService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports ClassService and ClassCatechistAssignmentService only from ClassModule', () => {
+  it('exports ClassService, ClassCatechistAssignmentService, and ClassScopeService from ClassModule', () => {
     const exports = resolveModuleExports(ClassModule);
 
-    expect(exports).toHaveLength(2);
+    expect(exports).toHaveLength(3);
     expect(exports).toContain(ClassService);
     expect(exports).toContain(ClassCatechistAssignmentService);
+    expect(exports).toContain(ClassScopeService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

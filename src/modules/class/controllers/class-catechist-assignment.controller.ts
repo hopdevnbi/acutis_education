@@ -17,6 +17,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -34,6 +36,7 @@ import {
   toCatechistAssignmentResponseDto,
 } from '../mappers/class-catechist-assignment-response.mapper';
 import { ClassCatechistAssignmentService } from '../services/class-catechist-assignment.service';
+import { ClassScopeService } from '../services/class-scope.service';
 import { rethrowClassCatechistAssignmentServiceError } from '../utils/class-catechist-assignment-http.util';
 
 @ApiTags('class-catechists')
@@ -41,7 +44,10 @@ import { rethrowClassCatechistAssignmentServiceError } from '../utils/class-cate
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @ApiBearerAuth('access-token')
 export class ClassCatechistAssignmentController {
-  constructor(private readonly classCatechistAssignmentService: ClassCatechistAssignmentService) {}
+  constructor(
+    private readonly classCatechistAssignmentService: ClassCatechistAssignmentService,
+    private readonly classScopeService: ClassScopeService,
+  ) {}
 
   @Post('classes/:classId/catechists')
   @RequirePermissions(CLASS_CATECHIST_MANAGE_PERMISSION)
@@ -49,10 +55,13 @@ export class ClassCatechistAssignmentController {
   @ApiOperation({ summary: 'Assign a catechist to a class' })
   @ApiCreatedResponse({ type: CatechistAssignmentResponseDto })
   async assignCatechist(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('classId') classId: string,
     @Body() request: AssignCatechistRequestDto,
   ): Promise<CatechistAssignmentResponseDto> {
     try {
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, classId);
+
       const snapshot = await this.classCatechistAssignmentService.assignCatechist(classId, {
         catechistUserId: request.catechistUserId,
         assignmentRole: request.assignmentRole,
@@ -69,10 +78,13 @@ export class ClassCatechistAssignmentController {
   @ApiOperation({ summary: 'List catechist assignments for a class' })
   @ApiOkResponse({ type: CatechistAssignmentListResponseDto })
   async listAssignmentsByClass(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('classId') classId: string,
     @Query() query: CatechistAssignmentListQueryDto,
   ): Promise<CatechistAssignmentListResponseDto> {
     try {
+      await this.classScopeService.assertCanReadClass(authenticatedUser.userId, classId);
+
       const result = await this.classCatechistAssignmentService.listAssignmentsByClass(classId, {
         page: query.page,
         limit: query.limit,
@@ -90,10 +102,18 @@ export class ClassCatechistAssignmentController {
   @ApiOperation({ summary: 'End a catechist assignment' })
   @ApiOkResponse({ type: CatechistAssignmentResponseDto })
   async updateAssignmentStatus(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') assignmentId: string,
     @Body() request: UpdateCatechistAssignmentStatusRequestDto,
   ): Promise<CatechistAssignmentResponseDto> {
     try {
+      const assignment = await this.classCatechistAssignmentService.getAssignmentById(assignmentId);
+
+      await this.classScopeService.assertCanManageClass(
+        authenticatedUser.userId,
+        assignment.classId,
+      );
+
       const snapshot = await this.classCatechistAssignmentService.updateAssignmentStatus(
         assignmentId,
         request.status,

@@ -1,9 +1,16 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ClassNotAcceptingEnrollmentError,
   ClassNotFoundError,
   InvalidClassIdError,
 } from '../errors/class.errors';
+import { ClassScopeAccessDeniedError } from '../errors/class-scope.errors';
+import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
   CatechistAssignmentAlreadyActiveError,
   CatechistAssignmentNotFoundError,
@@ -58,6 +65,13 @@ export function rethrowClassCatechistAssignmentServiceError(error: unknown): nev
 
   if (error instanceof ClassNotAcceptingEnrollmentError) {
     throw new BadRequestException(error.message);
+  }
+
+  if (
+    error instanceof ClassScopeAccessDeniedError ||
+    error instanceof ParishScopeAccessDeniedError
+  ) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

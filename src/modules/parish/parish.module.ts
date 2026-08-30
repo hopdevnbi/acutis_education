@@ -6,6 +6,7 @@ import { ParishController } from './controllers/parish.controller';
 import { ParishEntity } from './entities/parish.entity';
 import { ParishMembershipEntity } from './entities/parish-membership.entity';
 import { ParishService } from './services/parish.service';
+import { ParishScopeService } from './services/parish-scope.service';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { ParishService } from './services/parish.service';
     AccessControlModule,
   ],
   controllers: [ParishController],
-  providers: [ParishService],
-  exports: [ParishService],
+  providers: [ParishService, ParishScopeService],
+  exports: [ParishService, ParishScopeService],
 })
 export class ParishModule {}

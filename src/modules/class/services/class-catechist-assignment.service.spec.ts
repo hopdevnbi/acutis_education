@@ -16,7 +16,10 @@ import { ClassCatechistAssignmentService } from './class-catechist-assignment.se
 describe('ClassCatechistAssignmentService', () => {
   let classCatechistAssignmentService: ClassCatechistAssignmentService;
   let assignmentRepository: jest.Mocked<
-    Pick<Repository<ClassCatechistAssignmentEntity>, 'create' | 'save' | 'findOne' | 'createQueryBuilder'>
+    Pick<
+      Repository<ClassCatechistAssignmentEntity>,
+      'create' | 'save' | 'findOne' | 'createQueryBuilder'
+    >
   >;
   let classService: jest.Mocked<Pick<ClassService, 'getClassById'>>;
   let userAccountService: jest.Mocked<Pick<UserAccountService, 'getAccountSnapshotById'>>;

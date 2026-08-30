@@ -321,7 +321,9 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect((sourceResponse.body as EnrollmentResponseBody).status).toBe(EnrollmentStatus.Transferred);
+    expect((sourceResponse.body as EnrollmentResponseBody).status).toBe(
+      EnrollmentStatus.Transferred,
+    );
   });
 
   it('assigns and ends a catechist over HTTP', async () => {

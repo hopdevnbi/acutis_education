@@ -1,4 +1,13 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  StudentAccessDeniedError,
+  StudentManageAccessDeniedError,
+} from '../errors/student-access.errors';
 import {
   GuardianLinkAlreadyActiveError,
   GuardianLinkNotFoundError,
@@ -46,6 +55,13 @@ export function rethrowStudentGuardianServiceError(error: unknown): never {
 
   if (error instanceof GuardianPrimaryAlreadyAssignedError) {
     throw new ConflictException(error.message);
+  }
+
+  if (
+    error instanceof StudentAccessDeniedError ||
+    error instanceof StudentManageAccessDeniedError
+  ) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

@@ -1,9 +1,20 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ClassNotAcceptingEnrollmentError,
   ClassNotFoundError,
   InvalidClassIdError,
 } from '../../class/errors/class.errors';
+import { ClassScopeAccessDeniedError } from '../../class/errors/class-scope.errors';
+import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
+import {
+  StudentAccessDeniedError,
+  StudentManageAccessDeniedError,
+} from '../../student/errors/student-access.errors';
 import { StudentInactiveError, StudentNotFoundError } from '../../student/errors/student.errors';
 import {
   EnrollmentImmutableError,
@@ -67,6 +78,15 @@ export function rethrowEnrollmentServiceError(error: unknown): never {
 
   if (error instanceof StudentAlreadyEnrolledInParishYearError) {
     throw new ConflictException(error.message);
+  }
+
+  if (
+    error instanceof ParishScopeAccessDeniedError ||
+    error instanceof ClassScopeAccessDeniedError ||
+    error instanceof StudentAccessDeniedError ||
+    error instanceof StudentManageAccessDeniedError
+  ) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

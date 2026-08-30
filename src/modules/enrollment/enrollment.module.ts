@@ -13,7 +13,7 @@ import { EnrollmentService } from './services/enrollment.service';
   imports: [
     TypeOrmModule.forFeature([EnrollmentEntity]),
     forwardRef(() => StudentModule),
-    ClassModule,
+    forwardRef(() => ClassModule),
     AuthModule,
     AccessControlModule,
   ],

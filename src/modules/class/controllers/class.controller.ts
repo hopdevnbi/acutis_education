@@ -20,9 +20,14 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { assertParishReadScope } from '../../parish/utils/assert-parish-read-scope';
+import { ParishScopeService } from '../../parish/services/parish-scope.service';
+import { StudentAccessService } from '../../student/services/student-access.service';
 import {
   CLASS_MANAGE_PERMISSION,
   CLASS_READ_PERMISSION,
@@ -34,6 +39,7 @@ import { CreateClassRequestDto } from '../dto/create-class-request.dto';
 import { UpdateClassRequestDto } from '../dto/update-class-request.dto';
 import { UpdateClassStatusRequestDto } from '../dto/update-class-status-request.dto';
 import { toClassListResponseDto, toClassResponseDto } from '../mappers/class-response.mapper';
+import { ClassScopeService } from '../services/class-scope.service';
 import { ClassService } from '../services/class.service';
 import { rethrowClassServiceError } from '../utils/class-http.util';
 
@@ -42,7 +48,12 @@ import { rethrowClassServiceError } from '../utils/class-http.util';
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @ApiBearerAuth('access-token')
 export class ClassController {
-  constructor(private readonly classService: ClassService) {}
+  constructor(
+    private readonly classService: ClassService,
+    private readonly classScopeService: ClassScopeService,
+    private readonly parishScopeService: ParishScopeService,
+    private readonly studentAccessService: StudentAccessService,
+  ) {}
 
   @Post('parishes/:parishId/classes')
   @RequirePermissions(CLASS_MANAGE_PERMISSION)
@@ -52,10 +63,13 @@ export class ClassController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing classes.manage permission' })
   async createClass(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('parishId') parishId: string,
     @Body() request: CreateClassRequestDto,
   ): Promise<ClassResponseDto> {
     try {
+      await this.parishScopeService.assertCanManageParish(authenticatedUser.userId, parishId);
+
       const snapshot = await this.classService.createClass(parishId, {
         academicYearId: request.academicYearId,
         catechismLevelId: request.catechismLevelId,
@@ -76,10 +90,21 @@ export class ClassController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing classes.read permission' })
   async listClassesByParish(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('parishId') parishId: string,
     @Query() query: ClassListQueryDto,
   ): Promise<ClassListResponseDto> {
     try {
+      await assertParishReadScope(authenticatedUser.userId, parishId, {
+        isSuperAdmin: (userId) => this.parishScopeService.isSuperAdmin(userId),
+        hasActiveParishMembership: (userId, scopedParishId) =>
+          this.parishScopeService.hasActiveParishMembership(userId, scopedParishId),
+        canReadParishAsCatechist: (userId, scopedParishId) =>
+          this.classScopeService.canReadParishAsCatechist(userId, scopedParishId),
+        canReadParishAsGuardian: (userId, scopedParishId) =>
+          this.studentAccessService.canReadParishAsGuardian(userId, scopedParishId),
+      });
+
       const result = await this.classService.listClassesByParish(parishId, {
         page: query.page,
         limit: query.limit,
@@ -103,8 +128,13 @@ export class ClassController {
   @ApiOkResponse({ type: ClassResponseDto })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing classes.read permission' })
-  async getClassById(@Param('id') classId: string): Promise<ClassResponseDto> {
+  async getClassById(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('id') classId: string,
+  ): Promise<ClassResponseDto> {
     try {
+      await this.classScopeService.assertCanReadClass(authenticatedUser.userId, classId);
+
       const snapshot = await this.classService.getClassById(classId);
 
       return toClassResponseDto(snapshot);
@@ -120,6 +150,7 @@ export class ClassController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing classes.manage permission' })
   async updateClass(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') classId: string,
     @Body() request: UpdateClassRequestDto,
   ): Promise<ClassResponseDto> {
@@ -128,6 +159,8 @@ export class ClassController {
     }
 
     try {
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, classId);
+
       const snapshot = await this.classService.updateClass(classId, {
         code: request.code,
         name: request.name,
@@ -146,10 +179,13 @@ export class ClassController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing classes.manage permission' })
   async updateClassStatus(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') classId: string,
     @Body() request: UpdateClassStatusRequestDto,
   ): Promise<ClassResponseDto> {
     try {
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, classId);
+
       const snapshot = await this.classService.updateClassStatus(classId, request.status);
 
       return toClassResponseDto(snapshot);

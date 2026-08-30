@@ -19,9 +19,13 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { ClassScopeService } from '../../class/services/class-scope.service';
+import { StudentAccessService } from '../../student/services/student-access.service';
 import {
   ENROLLMENT_MANAGE_PERMISSION,
   ENROLLMENT_READ_PERMISSION,
@@ -44,7 +48,11 @@ import { rethrowEnrollmentServiceError } from '../utils/enrollment-http.util';
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @ApiBearerAuth('access-token')
 export class EnrollmentController {
-  constructor(private readonly enrollmentService: EnrollmentService) {}
+  constructor(
+    private readonly enrollmentService: EnrollmentService,
+    private readonly classScopeService: ClassScopeService,
+    private readonly studentAccessService: StudentAccessService,
+  ) {}
 
   @Post('classes/:classId/enrollments')
   @RequirePermissions(ENROLLMENT_MANAGE_PERMISSION)
@@ -54,10 +62,13 @@ export class EnrollmentController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing enrollments.manage permission' })
   async enrollStudent(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('classId') classId: string,
     @Body() request: CreateEnrollmentRequestDto,
   ): Promise<EnrollmentResponseDto> {
     try {
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, classId);
+
       const snapshot = await this.enrollmentService.enrollStudent(classId, request.studentId);
 
       return toEnrollmentResponseDto(snapshot);
@@ -71,10 +82,13 @@ export class EnrollmentController {
   @ApiOperation({ summary: 'List enrollments for a class roster' })
   @ApiOkResponse({ type: EnrollmentListResponseDto })
   async listEnrollmentsByClass(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('classId') classId: string,
     @Query() query: EnrollmentListQueryDto,
   ): Promise<EnrollmentListResponseDto> {
     try {
+      await this.classScopeService.assertCanReadClass(authenticatedUser.userId, classId);
+
       const result = await this.enrollmentService.listEnrollmentsByClass(classId, {
         page: query.page,
         limit: query.limit,
@@ -94,10 +108,13 @@ export class EnrollmentController {
   @ApiOperation({ summary: 'List enrollment history for a student' })
   @ApiOkResponse({ type: EnrollmentListResponseDto })
   async listEnrollmentsByStudent(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('studentId') studentId: string,
     @Query() query: EnrollmentListQueryDto,
   ): Promise<EnrollmentListResponseDto> {
     try {
+      await this.studentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
+
       const result = await this.enrollmentService.listEnrollmentsByStudent(studentId, {
         page: query.page,
         limit: query.limit,
@@ -116,9 +133,18 @@ export class EnrollmentController {
   @RequirePermissions(ENROLLMENT_READ_PERMISSION)
   @ApiOperation({ summary: 'Get an enrollment by id' })
   @ApiOkResponse({ type: EnrollmentResponseDto })
-  async getEnrollmentById(@Param('id') enrollmentId: string): Promise<EnrollmentResponseDto> {
+  async getEnrollmentById(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('id') enrollmentId: string,
+  ): Promise<EnrollmentResponseDto> {
     try {
       const snapshot = await this.enrollmentService.getEnrollmentById(enrollmentId);
+
+      await this.assertCanReadEnrollment(
+        authenticatedUser.userId,
+        snapshot.classId,
+        snapshot.studentId,
+      );
 
       return toEnrollmentResponseDto(snapshot);
     } catch (error: unknown) {
@@ -131,10 +157,15 @@ export class EnrollmentController {
   @ApiOperation({ summary: 'Complete or withdraw an active enrollment' })
   @ApiOkResponse({ type: EnrollmentResponseDto })
   async updateEnrollmentStatus(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') enrollmentId: string,
     @Body() request: UpdateEnrollmentStatusRequestDto,
   ): Promise<EnrollmentResponseDto> {
     try {
+      const existing = await this.enrollmentService.getEnrollmentById(enrollmentId);
+
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, existing.classId);
+
       const snapshot = await this.enrollmentService.updateEnrollmentStatus(
         enrollmentId,
         request.status,
@@ -152,10 +183,19 @@ export class EnrollmentController {
   @ApiOperation({ summary: 'Transfer an active enrollment to another class' })
   @ApiCreatedResponse({ type: EnrollmentResponseDto })
   async transferEnrollment(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') enrollmentId: string,
     @Body() request: TransferEnrollmentRequestDto,
   ): Promise<EnrollmentResponseDto> {
     try {
+      const existing = await this.enrollmentService.getEnrollmentById(enrollmentId);
+
+      await this.classScopeService.assertCanManageClass(authenticatedUser.userId, existing.classId);
+      await this.classScopeService.assertCanManageClass(
+        authenticatedUser.userId,
+        request.targetClassId,
+      );
+
       const snapshot = await this.enrollmentService.transferEnrollment(enrollmentId, {
         targetClassId: request.targetClassId,
       });
@@ -164,5 +204,21 @@ export class EnrollmentController {
     } catch (error: unknown) {
       rethrowEnrollmentServiceError(error);
     }
+  }
+
+  private async assertCanReadEnrollment(
+    userId: string,
+    classId: string,
+    studentId: string,
+  ): Promise<void> {
+    if (await this.classScopeService.canReadClass(userId, classId)) {
+      return;
+    }
+
+    if (await this.studentAccessService.canReadStudent(userId, studentId)) {
+      return;
+    }
+
+    await this.classScopeService.assertCanReadClass(userId, classId);
   }
 }

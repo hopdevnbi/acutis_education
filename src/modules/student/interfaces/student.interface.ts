@@ -27,6 +27,7 @@ export interface ListStudentsInput {
   readonly sort: 'ASC' | 'DESC';
   readonly status?: StudentStatus;
   readonly search?: string;
+  readonly studentIds?: readonly string[];
 }
 
 export interface ListStudentsResult {

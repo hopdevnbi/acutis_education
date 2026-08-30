@@ -141,6 +141,12 @@ export class StudentGuardianService {
     };
   }
 
+  async getGuardianLinkById(rawGuardianLinkId: string): Promise<GuardianLinkSnapshot> {
+    const guardianLink = await this.findGuardianLinkEntity(rawGuardianLinkId);
+
+    return toGuardianLinkSnapshot(guardianLink);
+  }
+
   async updateGuardianLinkStatus(
     rawGuardianLinkId: string,
     status: GuardianLinkStatus,

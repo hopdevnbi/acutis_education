@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   InvalidParishCodeError,
   InvalidParishIdError,
@@ -7,6 +12,7 @@ import {
   ParishInactiveError,
   ParishNotFoundError,
 } from '../errors/parish.errors';
+import { ParishScopeAccessDeniedError } from '../errors/parish-scope.errors';
 
 export function rethrowParishServiceError(error: unknown): never {
   if (error instanceof InvalidParishCodeError) {
@@ -31,6 +37,10 @@ export function rethrowParishServiceError(error: unknown): never {
 
   if (error instanceof ParishInactiveError) {
     throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ParishScopeAccessDeniedError) {
+    throw new ForbiddenException(error.message);
   }
 
   throw error;

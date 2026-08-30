@@ -19,6 +19,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -35,6 +37,7 @@ import {
   toGuardianLinkListResponseDto,
   toGuardianLinkResponseDto,
 } from '../mappers/student-guardian-response.mapper';
+import { StudentAccessService } from '../services/student-access.service';
 import { StudentGuardianService } from '../services/student-guardian.service';
 import { rethrowStudentGuardianServiceError } from '../utils/student-guardian-http.util';
 
@@ -43,7 +46,10 @@ import { rethrowStudentGuardianServiceError } from '../utils/student-guardian-ht
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @ApiBearerAuth('access-token')
 export class StudentGuardianController {
-  constructor(private readonly studentGuardianService: StudentGuardianService) {}
+  constructor(
+    private readonly studentGuardianService: StudentGuardianService,
+    private readonly studentAccessService: StudentAccessService,
+  ) {}
 
   @Post('students/:studentId/guardians')
   @RequirePermissions(STUDENT_GUARDIAN_MANAGE_PERMISSION)
@@ -53,10 +59,13 @@ export class StudentGuardianController {
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Missing student-guardians.manage permission' })
   async linkGuardian(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('studentId') studentId: string,
     @Body() request: LinkGuardianRequestDto,
   ): Promise<GuardianLinkResponseDto> {
     try {
+      await this.studentAccessService.assertCanManageStudent(authenticatedUser.userId, studentId);
+
       const snapshot = await this.studentGuardianService.linkGuardian(studentId, {
         guardianUserId: request.guardianUserId,
         relationshipType: request.relationshipType,
@@ -74,10 +83,13 @@ export class StudentGuardianController {
   @ApiOperation({ summary: 'List guardian links for a student' })
   @ApiOkResponse({ type: GuardianLinkListResponseDto })
   async listGuardiansByStudent(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('studentId') studentId: string,
     @Query() query: GuardianLinkListQueryDto,
   ): Promise<GuardianLinkListResponseDto> {
     try {
+      await this.studentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
+
       const result = await this.studentGuardianService.listGuardiansByStudent(studentId, {
         page: query.page,
         limit: query.limit,
@@ -95,10 +107,18 @@ export class StudentGuardianController {
   @ApiOperation({ summary: 'End a guardian link' })
   @ApiOkResponse({ type: GuardianLinkResponseDto })
   async updateGuardianLinkStatus(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('id') guardianLinkId: string,
     @Body() request: UpdateGuardianLinkStatusRequestDto,
   ): Promise<GuardianLinkResponseDto> {
     try {
+      const link = await this.studentGuardianService.getGuardianLinkById(guardianLinkId);
+
+      await this.studentAccessService.assertCanManageStudent(
+        authenticatedUser.userId,
+        link.studentId,
+      );
+
       const snapshot = await this.studentGuardianService.updateGuardianLinkStatus(
         guardianLinkId,
         request.status,

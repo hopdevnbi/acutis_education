@@ -123,6 +123,12 @@ export class ClassCatechistAssignmentService {
     };
   }
 
+  async getAssignmentById(rawAssignmentId: string): Promise<CatechistAssignmentSnapshot> {
+    const assignment = await this.findAssignmentEntity(rawAssignmentId);
+
+    return toCatechistAssignmentSnapshot(assignment);
+  }
+
   async updateAssignmentStatus(
     rawAssignmentId: string,
     status: CatechistAssignmentStatus,
@@ -165,6 +171,43 @@ export class ClassCatechistAssignmentService {
     }
 
     return toCatechistAssignmentSnapshot(assignment);
+  }
+
+  async hasActiveAssignmentInParish(
+    rawCatechistUserId: string,
+    rawParishId: string,
+  ): Promise<boolean> {
+    if (!isUuidV4(rawCatechistUserId) || !isUuidV4(rawParishId)) {
+      return false;
+    }
+
+    const catechistUserId = normalizeUuid(rawCatechistUserId);
+    const parishId = normalizeUuid(rawParishId);
+    const count = await this.assignmentRepository
+      .createQueryBuilder('assignment')
+      .innerJoin('classes', 'classEntity', 'classEntity.id = assignment.class_id')
+      .where('assignment.catechistUserId = :catechistUserId', { catechistUserId })
+      .andWhere('assignment.status = :status', { status: CatechistAssignmentStatus.Active })
+      .andWhere('classEntity.parish_id = :parishId', { parishId })
+      .getCount();
+
+    return count > 0;
+  }
+
+  async listAssignedClassIds(rawCatechistUserId: string): Promise<string[]> {
+    if (!isUuidV4(rawCatechistUserId)) {
+      return [];
+    }
+
+    const catechistUserId = normalizeUuid(rawCatechistUserId);
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        catechistUserId,
+        status: CatechistAssignmentStatus.Active,
+      },
+    });
+
+    return assignments.map((assignment) => normalizeUuid(assignment.classId));
   }
 
   private async assertCatechistUserEligible(catechistUserId: string): Promise<void> {
