@@ -7,7 +7,7 @@ import { RbacTestModule } from './rbac-test/rbac-test.module';
 
 export async function createRbacDatabaseTestApplication(): Promise<INestApplication> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule, RbacTestModule],
+    imports: [AppModule.forRoot(), RbacTestModule],
   }).compile();
 
   const application = moduleFixture.createNestApplication({ bufferLogs: true });

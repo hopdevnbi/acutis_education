@@ -34,7 +34,7 @@ describe('Dev RBAC endpoints with seeded accounts (db e2e)', () => {
     const seedService = seedModuleRef.get(AuthRbacSeedService);
     await seedService.run();
 
-    application = await createDatabaseTestApplication();
+    application = await createDatabaseTestApplication({ authRbacDemoEnabled: true });
   });
 
   afterAll(async () => {
@@ -120,5 +120,22 @@ describe('Dev RBAC endpoints with seeded accounts (db e2e)', () => {
       .get('/api/v1/dev/rbac/manage')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(403);
+  });
+
+  it('does not register dev RBAC routes when demo mode is disabled', async () => {
+    const disabledDemoApplication = await createDatabaseTestApplication({
+      authRbacDemoEnabled: false,
+    });
+
+    try {
+      const accessToken = await login(`admin@${AUTH_RBAC_SAMPLE_DOMAIN}`);
+
+      await request(getTestHttpServer(disabledDemoApplication))
+        .get('/api/v1/dev/rbac/read')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(404);
+    } finally {
+      await disabledDemoApplication.close();
+    }
   });
 });

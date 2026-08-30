@@ -31,4 +31,5 @@ export const envValidationSchema = Joi.object({
     .invalid(...FORBIDDEN_JWT_REFRESH_HASH_SECRETS)
     .required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  AUTH_RBAC_DEMO_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(false),
 });

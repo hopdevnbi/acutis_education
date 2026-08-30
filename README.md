@@ -103,10 +103,11 @@ TypeORM uses `synchronize=false` and `migrationsRun=false` in all environments.
 
 1. Apply migrations: `npm run migration:run`
 2. Seed local sample roles, permissions, and accounts: `npm run seed:auth-rbac`
-3. Start the API: `npm run start:dev`
-4. Import the Postman collection and environment from `docs/postman/` (see local handoff report in `docs/` for sample credentials)
+3. Optional: enable dev RBAC demo routes for Postman (`AUTH_RBAC_DEMO_ENABLED=true` in `.env`)
+4. Start the API: `npm run start:dev`
+5. Import the Postman collection and environment from `docs/postman/` (see local handoff report in `docs/` for sample credentials)
 
-The seed command is manual, development-only, and refuses `NODE_ENV=production` or unknown database names.
+The seed command is manual, development-only, and refuses `NODE_ENV=production` or unknown database names. Dev RBAC demo endpoints require explicit opt-in and are never registered in production.
 
 ## Database safety
 

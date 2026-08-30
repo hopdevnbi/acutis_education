@@ -29,6 +29,7 @@ describe('envValidationSchema', () => {
       JWT_ACCESS_EXPIRES_IN: '15m',
       JWT_REFRESH_HASH_SECRET: 'local-development-refresh-hash-secret-32chars-min',
       JWT_REFRESH_EXPIRES_IN: '7d',
+      AUTH_RBAC_DEMO_ENABLED: false,
     });
   });
 
@@ -58,6 +59,7 @@ describe('envValidationSchema', () => {
       JWT_ACCESS_EXPIRES_IN: '15m',
       JWT_REFRESH_HASH_SECRET: 'local-development-refresh-hash-secret-32chars-min',
       JWT_REFRESH_EXPIRES_IN: '7d',
+      AUTH_RBAC_DEMO_ENABLED: false,
     });
   });
 
