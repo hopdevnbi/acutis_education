@@ -1,3 +1,4 @@
+import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { UserEntity } from '../entities/user.entity';
 import type {
   AuthenticatedAccountSnapshot,
@@ -6,7 +7,7 @@ import type {
 
 export function toUserAccountSnapshot(entity: UserEntity): UserAccountSnapshot {
   return {
-    id: entity.id,
+    id: normalizeUuid(entity.id),
     email: entity.email,
     status: entity.status,
     createdAt: entity.createdAt,
@@ -16,7 +17,7 @@ export function toUserAccountSnapshot(entity: UserEntity): UserAccountSnapshot {
 
 export function toAuthenticatedAccountSnapshot(entity: UserEntity): AuthenticatedAccountSnapshot {
   return {
-    id: entity.id,
+    id: normalizeUuid(entity.id),
     email: entity.email,
     status: entity.status,
   };

@@ -10,6 +10,7 @@ export class AuthSessionEntity {
   @Column({ type: 'uniqueidentifier' })
   userId!: string;
 
+  @Index('UQ_auth_sessions_refresh_token_hash', { unique: true })
   @Column({ type: 'nvarchar', length: 255 })
   refreshTokenHash!: string;
 

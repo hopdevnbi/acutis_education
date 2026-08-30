@@ -2,6 +2,7 @@ import { MODULE_METADATA } from '@nestjs/common/constants';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UserAccountService } from './users/services/user-account.service';
 import { UsersModule } from './users/users.module';
 
@@ -26,11 +27,16 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it.each([
-    ['AuthModule', AuthModule],
-    ['AccessControlModule', AccessControlModule],
-  ])('does not export persistence infrastructure from %s', (_label, moduleType) => {
-    const exports = resolveModuleExports(moduleType);
+  it('exports only JwtAuthGuard from AuthModule', () => {
+    const exports = resolveModuleExports(AuthModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(JwtAuthGuard);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('does not export persistence infrastructure from AccessControlModule', () => {
+    const exports = resolveModuleExports(AccessControlModule);
 
     expect(exports).not.toContain(TypeOrmModule);
     expect(exports).toHaveLength(0);

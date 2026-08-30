@@ -10,3 +10,7 @@ export function generateUuidV4(): string {
 export function isUuidV4(value: string): boolean {
   return UUID_V4_PATTERN.test(value);
 }
+
+export function normalizeUuid(value: string): string {
+  return value.toLowerCase();
+}

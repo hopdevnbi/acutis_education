@@ -29,4 +29,32 @@ export function loadTestEnvironment(): void {
   }
 
   assertSafeTestDatabaseName(process.env['DB_NAME']);
+
+  if (
+    process.env['JWT_ACCESS_SECRET'] === undefined ||
+    process.env['JWT_ACCESS_SECRET'].trim().length === 0
+  ) {
+    process.env['JWT_ACCESS_SECRET'] = 'test-only-jwt-access-secret-32chars-minimum-value';
+  }
+
+  if (
+    process.env['JWT_ACCESS_EXPIRES_IN'] === undefined ||
+    process.env['JWT_ACCESS_EXPIRES_IN'].trim().length === 0
+  ) {
+    process.env['JWT_ACCESS_EXPIRES_IN'] = '15m';
+  }
+
+  if (
+    process.env['JWT_REFRESH_HASH_SECRET'] === undefined ||
+    process.env['JWT_REFRESH_HASH_SECRET'].trim().length === 0
+  ) {
+    process.env['JWT_REFRESH_HASH_SECRET'] = 'test-only-refresh-hash-secret-32chars-minimum-value';
+  }
+
+  if (
+    process.env['JWT_REFRESH_EXPIRES_IN'] === undefined ||
+    process.env['JWT_REFRESH_EXPIRES_IN'].trim().length === 0
+  ) {
+    process.env['JWT_REFRESH_EXPIRES_IN'] = '7d';
+  }
 }

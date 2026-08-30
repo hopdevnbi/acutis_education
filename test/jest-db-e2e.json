@@ -5,7 +5,10 @@
   "setupFiles": ["<rootDir>/setup-integration-env.ts"],
   "testRegex": ".db.e2e-spec.ts$",
   "transform": {
-    "^.+\\.ts$": "ts-jest"
+    "^.+\\.(t|j)s$": "ts-jest"
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@nestjs/jwt)/)"
+  ],
   "testTimeout": 90000
 }

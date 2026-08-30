@@ -1,3 +1,4 @@
+import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
@@ -106,6 +107,24 @@ export class UserAccountService {
       valid: true,
       account: toAuthenticatedAccountSnapshot(user),
     };
+  }
+
+  async getAccountSnapshotById(userId: string): Promise<UserAccountSnapshot | null> {
+    const user = await this.userRepository.findOne({
+      where: { id: normalizeUuid(userId) },
+    });
+
+    if (user === null) {
+      return null;
+    }
+
+    return toUserAccountSnapshot(user);
+  }
+
+  async isAccountEligibleForAuthentication(userId: string): Promise<boolean> {
+    const accountSnapshot = await this.getAccountSnapshotById(userId);
+
+    return accountSnapshot !== null && accountSnapshot.status === UserStatus.Active;
   }
 
   private async runTimingSafePasswordCheck(password: string): Promise<void> {

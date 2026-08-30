@@ -10,6 +10,15 @@ export function configureSwagger(application: INestApplication): void {
     .setDescription('Parish catechism platform backend API')
     .setVersion('1.0')
     .addServer(`/${API_GLOBAL_PREFIX}`, 'Version 1')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Short-lived access token from POST /auth/login',
+      },
+      'access-token',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(application, swaggerConfig, {

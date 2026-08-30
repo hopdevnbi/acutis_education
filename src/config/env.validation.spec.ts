@@ -6,6 +6,10 @@ const validDatabaseEnvironment = {
   DB_NAME: 'catechism_api',
   DB_USER: 'sa',
   DB_PASSWORD: 'test-password',
+  JWT_ACCESS_SECRET: 'local-development-jwt-access-secret-32chars-min',
+  JWT_ACCESS_EXPIRES_IN: '15m',
+  JWT_REFRESH_HASH_SECRET: 'local-development-refresh-hash-secret-32chars-min',
+  JWT_REFRESH_EXPIRES_IN: '7d',
 };
 
 describe('envValidationSchema', () => {
@@ -21,6 +25,10 @@ describe('envValidationSchema', () => {
       DB_NAME: 'catechism_api',
       DB_USER: 'sa',
       DB_PASSWORD: 'test-password',
+      JWT_ACCESS_SECRET: 'local-development-jwt-access-secret-32chars-min',
+      JWT_ACCESS_EXPIRES_IN: '15m',
+      JWT_REFRESH_HASH_SECRET: 'local-development-refresh-hash-secret-32chars-min',
+      JWT_REFRESH_EXPIRES_IN: '7d',
     });
   });
 
@@ -46,6 +54,10 @@ describe('envValidationSchema', () => {
       DB_PASSWORD: 'test-password',
       DB_ENCRYPT: true,
       DB_TRUST_SERVER_CERTIFICATE: false,
+      JWT_ACCESS_SECRET: 'local-development-jwt-access-secret-32chars-min',
+      JWT_ACCESS_EXPIRES_IN: '15m',
+      JWT_REFRESH_HASH_SECRET: 'local-development-refresh-hash-secret-32chars-min',
+      JWT_REFRESH_EXPIRES_IN: '7d',
     });
   });
 
@@ -100,6 +112,49 @@ describe('envValidationSchema', () => {
     const validationResult = envValidationSchema.validate({
       ...validDatabaseEnvironment,
       DB_ENCRYPT: 'maybe',
+    });
+
+    expect(validationResult.error).toBeDefined();
+  });
+
+  it('rejects missing JWT_ACCESS_SECRET values', () => {
+    const validationResult = envValidationSchema.validate({
+      DB_HOST: 'localhost',
+      DB_PORT: '1433',
+      DB_NAME: 'catechism_api',
+      DB_USER: 'sa',
+      DB_PASSWORD: 'test-password',
+    });
+
+    expect(validationResult.error).toBeDefined();
+  });
+
+  it('rejects forbidden JWT_ACCESS_SECRET placeholders', () => {
+    const validationResult = envValidationSchema.validate({
+      ...validDatabaseEnvironment,
+      JWT_ACCESS_SECRET: 'changeme',
+    });
+
+    expect(validationResult.error).toBeDefined();
+  });
+
+  it('rejects missing JWT_REFRESH_HASH_SECRET values', () => {
+    const validationResult = envValidationSchema.validate({
+      DB_HOST: 'localhost',
+      DB_PORT: '1433',
+      DB_NAME: 'catechism_api',
+      DB_USER: 'sa',
+      DB_PASSWORD: 'test-password',
+      JWT_ACCESS_SECRET: 'local-development-jwt-access-secret-32chars-min',
+    });
+
+    expect(validationResult.error).toBeDefined();
+  });
+
+  it('rejects forbidden JWT_REFRESH_HASH_SECRET placeholders', () => {
+    const validationResult = envValidationSchema.validate({
+      ...validDatabaseEnvironment,
+      JWT_REFRESH_HASH_SECRET: 'changeme',
     });
 
     expect(validationResult.error).toBeDefined();

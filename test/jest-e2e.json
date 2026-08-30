@@ -6,6 +6,9 @@
   "testRegex": ".e2e-spec.ts$",
   "testPathIgnorePatterns": ["\\.db\\.e2e-spec\\.ts$"],
   "transform": {
-    "^.+\\.ts$": "ts-jest"
-  }
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@nestjs/jwt)/)"
+  ]
 }

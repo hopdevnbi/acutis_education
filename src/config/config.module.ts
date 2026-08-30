@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import appConfiguration from './app.configuration';
 import databaseConfiguration from './database.configuration';
+import authConfiguration from '../modules/auth/config/auth.configuration';
 import { AppConfigService } from './app-config.service';
 import { envValidationSchema } from './env.validation';
 
@@ -10,7 +11,7 @@ import { envValidationSchema } from './env.validation';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfiguration, databaseConfiguration],
+      load: [appConfiguration, databaseConfiguration, authConfiguration],
       validationSchema: envValidationSchema,
       validationOptions: {
         abortEarly: true,

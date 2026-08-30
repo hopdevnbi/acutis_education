@@ -41,6 +41,10 @@ definitions:
           - export DB_ENCRYPT=true
           - export DB_TRUST_SERVER_CERTIFICATE=true
           - export SWAGGER_ENABLED=false
+          - export JWT_ACCESS_SECRET=test-only-jwt-access-secret-32chars-minimum-value
+          - export JWT_ACCESS_EXPIRES_IN=15m
+          - export JWT_REFRESH_HASH_SECRET=test-only-refresh-hash-secret-32chars-minimum-value
+          - export JWT_REFRESH_EXPIRES_IN=7d
           - npm ci
           - npm run ci:wait-for-mssql
           - npm run test:db:migrations
