@@ -4,6 +4,15 @@ import AppDataSource from '../../src/database/data-source';
 import { TYPEORM_MIGRATIONS_TABLE_NAME } from '../../src/database/database.constants';
 import { buildTypeOrmDataSourceOptions } from '../../src/database/typeorm-options.factory';
 
+const EXPECTED_AUTH_TABLES = [
+  'auth_sessions',
+  'permissions',
+  'role_permissions',
+  'roles',
+  'user_roles',
+  'users',
+] as const;
+
 describe('Database integration (MSSQL)', () => {
   const expectedDatabaseName = process.env['DB_NAME'];
 
@@ -64,21 +73,27 @@ describe('Database integration (MSSQL)', () => {
     expect(dataSourceOptions.migrationsRun).toBe(false);
   });
 
-  it('reports migration metadata state and no unexpected business tables', async () => {
+  it('applies auth foundation migrations and exposes only expected business tables', async () => {
     await AppDataSource.initialize();
 
     try {
       const hasPendingMigrations = await AppDataSource.showMigrations();
-      expect(typeof hasPendingMigrations).toBe('boolean');
+
+      if (hasPendingMigrations) {
+        await AppDataSource.runMigrations();
+      }
 
       const businessTablesResult = await AppDataSource.query<Array<{ TABLE_NAME: string }>>(`
         SELECT TABLE_NAME
         FROM INFORMATION_SCHEMA.TABLES
         WHERE TABLE_TYPE = 'BASE TABLE'
           AND TABLE_NAME NOT IN ('${TYPEORM_MIGRATIONS_TABLE_NAME}')
+        ORDER BY TABLE_NAME
       `);
 
-      expect(businessTablesResult).toHaveLength(0);
+      const businessTableNames = businessTablesResult.map((row) => row.TABLE_NAME);
+
+      expect(businessTableNames).toEqual([...EXPECTED_AUTH_TABLES]);
     } finally {
       await AppDataSource.destroy();
     }
