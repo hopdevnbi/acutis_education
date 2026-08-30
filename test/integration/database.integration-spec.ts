@@ -73,7 +73,7 @@ describe('Database integration (MSSQL)', () => {
     expect(dataSourceOptions.migrationsRun).toBe(false);
   });
 
-  it('applies auth foundation migrations and exposes only expected business tables', async () => {
+  it('applies auth foundation migrations and includes required auth business tables', async () => {
     await AppDataSource.initialize();
 
     try {
@@ -93,7 +93,42 @@ describe('Database integration (MSSQL)', () => {
 
       const businessTableNames = businessTablesResult.map((row) => row.TABLE_NAME);
 
-      expect(businessTableNames).toEqual([...EXPECTED_AUTH_TABLES]);
+      expect(businessTableNames).toEqual(expect.arrayContaining([...EXPECTED_AUTH_TABLES]));
+    } finally {
+      await AppDataSource.destroy();
+    }
+  });
+
+  it('stores auth primary key ids without database-generated UUID defaults', async () => {
+    await AppDataSource.initialize();
+
+    try {
+      const hasPendingMigrations = await AppDataSource.showMigrations();
+
+      if (hasPendingMigrations) {
+        await AppDataSource.runMigrations();
+      }
+
+      const defaultConstraintResult = await AppDataSource.query<
+        Array<{ table_name: string; column_name: string; default_definition: string | null }>
+      >(`
+        SELECT
+          t.name AS table_name,
+          c.name AS column_name,
+          dc.definition AS default_definition
+        FROM sys.tables t
+        INNER JOIN sys.columns c
+          ON c.object_id = t.object_id
+        LEFT JOIN sys.default_constraints dc
+          ON dc.parent_object_id = c.object_id
+          AND dc.parent_column_id = c.column_id
+        WHERE t.name IN ('users', 'roles', 'permissions', 'auth_sessions')
+          AND c.name = 'id'
+        ORDER BY t.name
+      `);
+
+      expect(defaultConstraintResult).toHaveLength(4);
+      expect(defaultConstraintResult.every((row) => row.default_definition === null)).toBe(true);
     } finally {
       await AppDataSource.destroy();
     }

@@ -1,16 +1,10 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { generateUuidV4 } from '../../../database/uuid-v4.util';
 
 @Entity('roles')
 export class RoleEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  @PrimaryColumn({ type: 'uniqueidentifier' })
+  id: string = generateUuidV4();
 
   @Index('UQ_roles_code', { unique: true })
   @Column({ type: 'varchar', length: 64 })

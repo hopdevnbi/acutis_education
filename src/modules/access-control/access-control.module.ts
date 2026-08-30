@@ -9,6 +9,5 @@ import { UserRoleEntity } from './entities/user-role.entity';
   imports: [
     TypeOrmModule.forFeature([RoleEntity, PermissionEntity, UserRoleEntity, RolePermissionEntity]),
   ],
-  exports: [TypeOrmModule],
 })
 export class AccessControlModule {}

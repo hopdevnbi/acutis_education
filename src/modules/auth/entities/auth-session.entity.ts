@@ -1,9 +1,10 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
+import { generateUuidV4 } from '../../../database/uuid-v4.util';
 
 @Entity('auth_sessions')
 export class AuthSessionEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  @PrimaryColumn({ type: 'uniqueidentifier' })
+  id: string = generateUuidV4();
 
   @Index('IDX_auth_sessions_user_id')
   @Column({ type: 'uniqueidentifier' })

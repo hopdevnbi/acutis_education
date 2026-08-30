@@ -62,4 +62,14 @@ describe('Auth foundation entities', () => {
 
     expect(rolePermissionPrimaryColumns.sort()).toEqual(['permissionId', 'roleId']);
   });
+
+  it('uses application-assigned primary keys instead of generated columns', () => {
+    const generatedColumnCount = getMetadataArgsStorage().generations.filter((generation) =>
+      [UserEntity, RoleEntity, PermissionEntity, AuthSessionEntity].includes(
+        generation.target as typeof UserEntity,
+      ),
+    ).length;
+
+    expect(generatedColumnCount).toBe(0);
+  });
 });
