@@ -17,6 +17,7 @@ describe('database configuration parsing', () => {
       DB_USER: 'sa',
       DB_PASSWORD: 'test-password',
     };
+    delete process.env['MSSQL_PUBLISH_PORT'];
   });
 
   afterAll(() => {
