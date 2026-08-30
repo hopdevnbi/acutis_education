@@ -12,6 +12,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ClassModule } from './modules/class/class.module';
 import { CurriculumModule } from './modules/curriculum/curriculum.module';
 import { CurriculumOrchestrationModule } from './modules/curriculum-orchestration/curriculum-orchestration.module';
+import { CurriculumDeliveryModule } from './modules/curriculum-delivery/curriculum-delivery.module';
 import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
@@ -47,6 +48,7 @@ export class AppModule {
         CurriculumModule,
         LearningContentModule,
         CurriculumOrchestrationModule,
+        CurriculumDeliveryModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],

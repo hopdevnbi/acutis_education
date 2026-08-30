@@ -211,6 +211,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'class-catechists.read',
     'enrollments.read',
     'curricula.read',
+    'lesson-content.read',
   ],
   PARENT: [
     'classes.read',
@@ -220,6 +221,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'students.read',
     'student-guardians.read',
     'enrollments.read',
+    'curricula.read',
+    'lesson-content.read',
   ],
 };
 

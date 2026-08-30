@@ -14,6 +14,7 @@ import { ClassCatechistAssignmentService } from './class/services/class-catechis
 import { ClassService } from './class/services/class.service';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { CurriculumOrchestrationModule } from './curriculum-orchestration/curriculum-orchestration.module';
+import { CurriculumDeliveryModule } from './curriculum-delivery/curriculum-delivery.module';
 import { CurriculumService } from './curriculum/services/curriculum.service';
 import { LessonService } from './curriculum/services/lesson.service';
 import { TopicService } from './curriculum/services/topic.service';
@@ -145,6 +146,12 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).toHaveLength(0);
   });
 
+  it('exports nothing from CurriculumDeliveryModule', () => {
+    const exports = resolveModuleExports(CurriculumDeliveryModule);
+
+    expect(exports).toHaveLength(0);
+  });
+
   it('exports LearningContentService only from LearningContentModule', () => {
     const exports = resolveModuleExports(LearningContentModule);
 
@@ -167,6 +174,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'enrollment/enrollment.module.ts'),
       join(__dirname, 'parish/parish.module.ts'),
       join(__dirname, 'curriculum-orchestration/curriculum-orchestration.module.ts'),
+      join(__dirname, 'curriculum-delivery/curriculum-delivery.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {
