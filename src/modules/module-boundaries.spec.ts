@@ -13,6 +13,7 @@ import { ClassScopeService } from './class/services/class-scope.service';
 import { ClassCatechistAssignmentService } from './class/services/class-catechist-assignment.service';
 import { ClassService } from './class/services/class.service';
 import { CurriculumModule } from './curriculum/curriculum.module';
+import { CurriculumService } from './curriculum/services/curriculum.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { EnrollmentAccessService } from './enrollment/services/enrollment-access.service';
 import { EnrollmentGuardianScopeService } from './enrollment/services/enrollment-guardian-scope.service';
@@ -124,10 +125,11 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from CurriculumModule at schema foundation stage', () => {
+  it('exports CurriculumService only from CurriculumModule', () => {
     const exports = resolveModuleExports(CurriculumModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(CurriculumService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

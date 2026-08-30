@@ -1,0 +1,118 @@
+export class InvalidCurriculumIdError extends Error {
+  constructor() {
+    super('Invalid curriculum id.');
+    this.name = 'InvalidCurriculumIdError';
+  }
+}
+
+export class CurriculumNotFoundError extends Error {
+  constructor() {
+    super('Curriculum not found.');
+    this.name = 'CurriculumNotFoundError';
+  }
+}
+
+export class InvalidCurriculumCodeError extends Error {
+  constructor() {
+    super('Invalid curriculum code.');
+    this.name = 'InvalidCurriculumCodeError';
+  }
+}
+
+export class InvalidCurriculumSourceLocaleError extends Error {
+  constructor() {
+    super('Invalid curriculum source locale.');
+    this.name = 'InvalidCurriculumSourceLocaleError';
+  }
+}
+
+export class InvalidCurriculumNameError extends Error {
+  constructor() {
+    super('Invalid curriculum name.');
+    this.name = 'InvalidCurriculumNameError';
+  }
+}
+
+export class InvalidCurriculumDescriptionError extends Error {
+  constructor() {
+    super('Invalid curriculum description.');
+    this.name = 'InvalidCurriculumDescriptionError';
+  }
+}
+
+export class CurriculumCodeAlreadyExistsError extends Error {
+  constructor(public readonly code: string) {
+    super(`Curriculum code "${code}" already exists for this parish and catechism level.`);
+    this.name = 'CurriculumCodeAlreadyExistsError';
+  }
+}
+
+export class CurriculumInactiveError extends Error {
+  constructor() {
+    super('Curriculum is inactive.');
+    this.name = 'CurriculumInactiveError';
+  }
+}
+
+export class CurriculumStructuralFieldImmutableError extends Error {
+  constructor() {
+    super('Curriculum parish and catechism level cannot be changed.');
+    this.name = 'CurriculumStructuralFieldImmutableError';
+  }
+}
+
+export class CurriculumSourceLocaleImmutableError extends Error {
+  constructor() {
+    super('Curriculum source locale cannot be changed after published history exists.');
+    this.name = 'CurriculumSourceLocaleImmutableError';
+  }
+}
+
+export class CurriculumUpdateRequiresFieldsError extends Error {
+  constructor() {
+    super('At least one curriculum field must be provided for update.');
+    this.name = 'CurriculumUpdateRequiresFieldsError';
+  }
+}
+
+export class InvalidCurriculumVersionIdError extends Error {
+  constructor() {
+    super('Invalid curriculum version id.');
+    this.name = 'InvalidCurriculumVersionIdError';
+  }
+}
+
+export class CurriculumVersionNotFoundError extends Error {
+  constructor() {
+    super('Curriculum version not found.');
+    this.name = 'CurriculumVersionNotFoundError';
+  }
+}
+
+export class CurriculumDraftAlreadyExistsError extends Error {
+  constructor() {
+    super('A draft curriculum version already exists.');
+    this.name = 'CurriculumDraftAlreadyExistsError';
+  }
+}
+
+export class CurriculumVersionNotDraftError extends Error {
+  constructor() {
+    super('Curriculum version is not a draft.');
+    this.name = 'CurriculumVersionNotDraftError';
+  }
+}
+
+export class CurriculumVersionNumberConflictError extends Error {
+  constructor() {
+    super('Curriculum version number conflict.');
+    this.name = 'CurriculumVersionNumberConflictError';
+  }
+}
+
+export class CurriculumCatechismLevelInactiveError extends Error {
+  constructor() {
+    super('Catechism level is not active.');
+    this.name = 'CurriculumCatechismLevelInactiveError';
+  }
+}
