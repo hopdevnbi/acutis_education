@@ -12,17 +12,18 @@ import { ClassStatus } from '../../src/modules/class/enums/class-status.enum';
 import { ClassCatechistAssignmentService } from '../../src/modules/class/services/class-catechist-assignment.service';
 import { ClassScopeService } from '../../src/modules/class/services/class-scope.service';
 import { ClassService } from '../../src/modules/class/services/class.service';
+import { EnrollmentAccessService } from '../../src/modules/enrollment/services/enrollment-access.service';
 import { EnrollmentModule } from '../../src/modules/enrollment/enrollment.module';
 import { EnrollmentService } from '../../src/modules/enrollment/services/enrollment.service';
 import { ParishMembershipStatus } from '../../src/modules/parish/enums/parish-membership-status.enum';
 import { ParishModule } from '../../src/modules/parish/parish.module';
 import { ParishScopeService } from '../../src/modules/parish/services/parish-scope.service';
 import { ParishService } from '../../src/modules/parish/services/parish.service';
-import { StudentAccessService } from '../../src/modules/student/services/student-access.service';
 import { StudentModule } from '../../src/modules/student/student.module';
 import { StudentService } from '../../src/modules/student/services/student.service';
 import { UserAccountService } from '../../src/modules/users/services/user-account.service';
 import { UsersModule } from '../../src/modules/users/users.module';
+import { ClassDomainScopeModule } from '../../src/modules/enrollment/class-domain-scope.module';
 
 const TEST_PREFIX = 'cls006-int-';
 const DUMMY_PASSWORD = 'SecurePassword123!';
@@ -31,7 +32,7 @@ describe('Scoped authorization integration (MSSQL)', () => {
   let moduleRef: TestingModule;
   let parishScopeService: ParishScopeService;
   let classScopeService: ClassScopeService;
-  let studentAccessService: StudentAccessService;
+  let enrollmentAccessService: EnrollmentAccessService;
   let enrollmentService: EnrollmentService;
   let classCatechistAssignmentService: ClassCatechistAssignmentService;
   let studentService: StudentService;
@@ -60,12 +61,13 @@ describe('Scoped authorization integration (MSSQL)', () => {
         ClassModule,
         StudentModule,
         EnrollmentModule,
+        ClassDomainScopeModule,
       ],
     }).compile();
 
     parishScopeService = moduleRef.get(ParishScopeService);
     classScopeService = moduleRef.get(ClassScopeService);
-    studentAccessService = moduleRef.get(StudentAccessService);
+    enrollmentAccessService = moduleRef.get(EnrollmentAccessService);
     enrollmentService = moduleRef.get(EnrollmentService);
     classCatechistAssignmentService = moduleRef.get(ClassCatechistAssignmentService);
     studentService = moduleRef.get(StudentService);
@@ -199,7 +201,9 @@ describe('Scoped authorization integration (MSSQL)', () => {
   it('allows parish admins and assigned catechists to read a class', async () => {
     const { classId, adminUserId, catechistUserId, outsiderUserId } = await seedScopedFixture();
 
-    await expect(classScopeService.assertCanReadClass(adminUserId, classId)).resolves.toBeUndefined();
+    await expect(
+      classScopeService.assertCanReadClass(adminUserId, classId),
+    ).resolves.toBeUndefined();
     await expect(
       classScopeService.assertCanReadClass(catechistUserId, classId),
     ).resolves.toBeUndefined();
@@ -219,12 +223,14 @@ describe('Scoped authorization integration (MSSQL)', () => {
     const { studentId, adminUserId, catechistUserId, outsiderUserId } = await seedScopedFixture();
 
     await expect(
-      studentAccessService.assertCanReadStudent(adminUserId, studentId),
+      enrollmentAccessService.assertCanReadStudent(adminUserId, studentId),
     ).resolves.toBeUndefined();
     await expect(
-      studentAccessService.assertCanReadStudent(catechistUserId, studentId),
+      enrollmentAccessService.assertCanReadStudent(catechistUserId, studentId),
     ).resolves.toBeUndefined();
-    await expect(studentAccessService.assertCanReadStudent(outsiderUserId, studentId)).rejects.toThrow();
+    await expect(
+      enrollmentAccessService.assertCanReadStudent(outsiderUserId, studentId),
+    ).rejects.toThrow();
   });
 
   it('scopes parish read access for admins and catechists', async () => {
@@ -234,6 +240,8 @@ describe('Scoped authorization integration (MSSQL)', () => {
       parishScopeService.assertCanManageParish(adminUserId, parishId),
     ).resolves.toBeUndefined();
     expect(await classScopeService.canReadParishAsCatechist(catechistUserId, parishId)).toBe(true);
-    expect(await parishScopeService.hasActiveParishMembership(outsiderUserId, parishId)).toBe(false);
+    expect(await parishScopeService.hasActiveParishMembership(outsiderUserId, parishId)).toBe(
+      false,
+    );
   });
 });

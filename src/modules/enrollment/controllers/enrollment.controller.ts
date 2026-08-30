@@ -25,7 +25,6 @@ import { RequirePermissions } from '../../access-control/decorators/require-perm
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ClassScopeService } from '../../class/services/class-scope.service';
-import { StudentAccessService } from '../../student/services/student-access.service';
 import {
   ENROLLMENT_MANAGE_PERMISSION,
   ENROLLMENT_READ_PERMISSION,
@@ -40,6 +39,7 @@ import {
   toEnrollmentListResponseDto,
   toEnrollmentResponseDto,
 } from '../mappers/enrollment-response.mapper';
+import { EnrollmentAccessService } from '../services/enrollment-access.service';
 import { EnrollmentService } from '../services/enrollment.service';
 import { rethrowEnrollmentServiceError } from '../utils/enrollment-http.util';
 
@@ -51,7 +51,7 @@ export class EnrollmentController {
   constructor(
     private readonly enrollmentService: EnrollmentService,
     private readonly classScopeService: ClassScopeService,
-    private readonly studentAccessService: StudentAccessService,
+    private readonly enrollmentAccessService: EnrollmentAccessService,
   ) {}
 
   @Post('classes/:classId/enrollments')
@@ -113,7 +113,7 @@ export class EnrollmentController {
     @Query() query: EnrollmentListQueryDto,
   ): Promise<EnrollmentListResponseDto> {
     try {
-      await this.studentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
+      await this.enrollmentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
 
       const result = await this.enrollmentService.listEnrollmentsByStudent(studentId, {
         page: query.page,
@@ -140,7 +140,7 @@ export class EnrollmentController {
     try {
       const snapshot = await this.enrollmentService.getEnrollmentById(enrollmentId);
 
-      await this.assertCanReadEnrollment(
+      await this.enrollmentAccessService.assertCanReadEnrollment(
         authenticatedUser.userId,
         snapshot.classId,
         snapshot.studentId,
@@ -204,21 +204,5 @@ export class EnrollmentController {
     } catch (error: unknown) {
       rethrowEnrollmentServiceError(error);
     }
-  }
-
-  private async assertCanReadEnrollment(
-    userId: string,
-    classId: string,
-    studentId: string,
-  ): Promise<void> {
-    if (await this.classScopeService.canReadClass(userId, classId)) {
-      return;
-    }
-
-    if (await this.studentAccessService.canReadStudent(userId, studentId)) {
-      return;
-    }
-
-    await this.classScopeService.assertCanReadClass(userId, classId);
   }
 }

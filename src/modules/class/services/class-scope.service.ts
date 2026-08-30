@@ -1,5 +1,8 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
-import { EnrollmentQueryService } from '../../enrollment/services/enrollment-query.service';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import {
+  CLASS_PARENT_READ_SCOPE_PORT,
+  type ClassParentReadScopePort,
+} from '../interfaces/class-parent-read-scope.port';
 import { ParishScopeService } from '../../parish/services/parish-scope.service';
 import { ClassScopeAccessDeniedError } from '../errors/class-scope.errors';
 import { ClassCatechistAssignmentService } from './class-catechist-assignment.service';
@@ -11,8 +14,9 @@ export class ClassScopeService {
     private readonly parishScopeService: ParishScopeService,
     private readonly classService: ClassService,
     private readonly classCatechistAssignmentService: ClassCatechistAssignmentService,
-    @Inject(forwardRef(() => EnrollmentQueryService))
-    private readonly enrollmentQueryService: EnrollmentQueryService,
+    @Optional()
+    @Inject(CLASS_PARENT_READ_SCOPE_PORT)
+    private readonly classParentReadScopePort: ClassParentReadScopePort | null,
   ) {}
 
   async canReadParishAsCatechist(rawUserId: string, rawParishId: string): Promise<boolean> {
@@ -51,9 +55,13 @@ export class ClassScopeService {
 
       return true;
     } catch {
-      // Fall through to guardian enrollment check.
+      // Fall through to optional guardian enrollment scope port.
     }
 
-    return this.enrollmentQueryService.hasGuardianLinkedStudentInClass(rawUserId, rawClassId);
+    if (this.classParentReadScopePort === null) {
+      return false;
+    }
+
+    return this.classParentReadScopePort.canReadClassAsGuardian(rawUserId, rawClassId);
   }
 }

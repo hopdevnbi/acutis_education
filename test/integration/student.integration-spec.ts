@@ -8,6 +8,7 @@ import { AcademicYearService } from '../../src/modules/academic-structure/servic
 import { CatechismLevelService } from '../../src/modules/academic-structure/services/catechism-level.service';
 import { ClassModule } from '../../src/modules/class/class.module';
 import { ClassService } from '../../src/modules/class/services/class.service';
+import { ClassDomainScopeModule } from '../../src/modules/enrollment/class-domain-scope.module';
 import { EnrollmentQueryService } from '../../src/modules/enrollment/services/enrollment-query.service';
 import { EnrollmentModule } from '../../src/modules/enrollment/enrollment.module';
 import { ParishModule } from '../../src/modules/parish/parish.module';
@@ -53,6 +54,7 @@ describe('Student services integration (MSSQL)', () => {
         AcademicStructureModule,
         ClassModule,
         EnrollmentModule,
+        ClassDomainScopeModule,
         StudentModule,
       ],
     }).compile();

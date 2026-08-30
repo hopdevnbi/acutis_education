@@ -12,6 +12,10 @@ import { StudentStatus } from '../src/modules/student/enums/student-status.enum'
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
+import {
+  seedActiveEnrollmentForStudent,
+  seedScopedParishForUser,
+} from './scoped-e2e-fixture';
 
 const TEST_EMAIL_PREFIX = 'cls004-e2e-';
 const TEST_PASSWORD = 'SecurePassword123!';
@@ -51,11 +55,35 @@ describe('Student API (db e2e)', () => {
     }
 
     await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'cls004-e2e-%')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE class_id IN (SELECT id FROM classes WHERE code LIKE 'cls004-e2e-%')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM classes WHERE code LIKE 'cls004-e2e-%'
+    `);
+    await AppDataSource.query(`
       DELETE FROM student_guardians
       WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'cls004-e2e-%')
     `);
     await AppDataSource.query(`
       DELETE FROM students WHERE full_name LIKE 'cls004-e2e-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE user_id IN (SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM catechism_levels WHERE code LIKE 'cls004-e2e-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM academic_years WHERE name LIKE 'cls004-e2e-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parishes WHERE code LIKE 'cls004-e2e-%'
     `);
     await AppDataSource.query(`
       DELETE FROM role_permissions
@@ -113,7 +141,9 @@ describe('Student API (db e2e)', () => {
     }
   }
 
-  async function setupManageUser(localPart: string): Promise<string> {
+  async function setupManageUser(
+    localPart: string,
+  ): Promise<{ accessToken: string; userId: string; parishId: string }> {
     const email = `${TEST_EMAIL_PREFIX}${localPart}@example.com`;
     const account = await userAccountService.createAccount({ email, password: TEST_PASSWORD });
 
@@ -128,7 +158,9 @@ describe('Student API (db e2e)', () => {
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'student-guardians.manage');
     await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
 
-    return login(email);
+    const { parishId } = await seedScopedParishForUser(account.id, `${TEST_EMAIL_PREFIX}${localPart}-`);
+
+    return { accessToken: await login(email), userId: account.id, parishId };
   }
 
   it('returns 401 for unauthenticated student requests', async () => {
@@ -136,7 +168,7 @@ describe('Student API (db e2e)', () => {
   });
 
   it('allows students.manage to create, update, and read students', async () => {
-    const accessToken = await setupManageUser('manage');
+    const { accessToken, parishId } = await setupManageUser('manage');
 
     const createResponse = await request(getTestHttpServer(application))
       .post('/api/v1/students')
@@ -146,6 +178,7 @@ describe('Student API (db e2e)', () => {
 
     const created = createResponse.body as StudentResponseBody;
     expect(created.status).toBe(StudentStatus.Active);
+    await seedActiveEnrollmentForStudent(created.id, parishId, `${TEST_EMAIL_PREFIX}manage-`);
 
     await request(getTestHttpServer(application))
       .patch(`/api/v1/students/${created.id}`)
@@ -160,7 +193,7 @@ describe('Student API (db e2e)', () => {
   });
 
   it('links and ends guardian relationships over HTTP', async () => {
-    const accessToken = await setupManageUser('guardian');
+    const { accessToken, parishId } = await setupManageUser('guardian');
     const guardianAccount = await userAccountService.createAccount({
       email: `${TEST_EMAIL_PREFIX}linked-guardian@example.com`,
       password: TEST_PASSWORD,
@@ -173,6 +206,7 @@ describe('Student API (db e2e)', () => {
       .expect(201);
 
     const student = createResponse.body as StudentResponseBody;
+    await seedActiveEnrollmentForStudent(student.id, parishId, `${TEST_EMAIL_PREFIX}guardian-`);
 
     const linkResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/students/${student.id}/guardians`)

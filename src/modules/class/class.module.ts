@@ -1,11 +1,9 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AcademicStructureModule } from '../academic-structure/academic-structure.module';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthModule } from '../auth/auth.module';
-import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { ParishModule } from '../parish/parish.module';
-import { StudentModule } from '../student/student.module';
 import { UsersModule } from '../users/users.module';
 import { ClassCatechistAssignmentController } from './controllers/class-catechist-assignment.controller';
 import { ClassController } from './controllers/class.controller';
@@ -21,8 +19,6 @@ import { ClassService } from './services/class.service';
     ParishModule,
     AcademicStructureModule,
     UsersModule,
-    forwardRef(() => EnrollmentModule),
-    forwardRef(() => StudentModule),
     AuthModule,
     AccessControlModule,
   ],

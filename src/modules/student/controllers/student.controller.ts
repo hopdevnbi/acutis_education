@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
@@ -22,23 +23,22 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
-import { EnrollmentQueryService } from '../../enrollment/services/enrollment-query.service';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { ClassScopeService } from '../../class/services/class-scope.service';
-import { ParishService } from '../../parish/services/parish.service';
-import { ParishScopeService } from '../../parish/services/parish-scope.service';
-import { assertParishReadScope } from '../../parish/utils/assert-parish-read-scope';
-import { STUDENT_MANAGE_PERMISSION, STUDENT_READ_PERMISSION } from '../constants/student.constants';
 import { CreateStudentRequestDto } from '../dto/create-student-request.dto';
-import { ParishStudentListQueryDto, StudentListQueryDto } from '../dto/student-list-query.dto';
+import { StudentListQueryDto } from '../dto/student-list-query.dto';
 import { StudentListResponseDto } from '../dto/student-list-response.dto';
 import { StudentResponseDto } from '../dto/student-response.dto';
 import { UpdateStudentRequestDto } from '../dto/update-student-request.dto';
+import {
+  STUDENT_DOMAIN_SCOPE_PORT,
+  type StudentDomainScopePort,
+} from '../interfaces/student-domain-scope.port';
 import { toStudentListResponseDto, toStudentResponseDto } from '../mappers/student-response.mapper';
 import { StudentAccessService } from '../services/student-access.service';
 import { StudentService } from '../services/student.service';
+import { STUDENT_MANAGE_PERMISSION, STUDENT_READ_PERMISSION } from '../constants/student.constants';
 import { rethrowStudentServiceError } from '../utils/student-http.util';
 
 @ApiTags('students')
@@ -49,10 +49,8 @@ export class StudentController {
   constructor(
     private readonly studentService: StudentService,
     private readonly studentAccessService: StudentAccessService,
-    private readonly parishService: ParishService,
-    private readonly parishScopeService: ParishScopeService,
-    private readonly classScopeService: ClassScopeService,
-    private readonly enrollmentQueryService: EnrollmentQueryService,
+    @Inject(STUDENT_DOMAIN_SCOPE_PORT)
+    private readonly studentDomainScope: StudentDomainScopePort,
   ) {}
 
   @Post('students')
@@ -89,7 +87,7 @@ export class StudentController {
     @Query() query: StudentListQueryDto,
   ): Promise<StudentListResponseDto> {
     try {
-      const accessibleStudentIds = await this.studentAccessService.resolveAccessibleStudentIds(
+      const accessibleStudentIds = await this.studentDomainScope.resolveAccessibleStudentIds(
         authenticatedUser.userId,
       );
 
@@ -118,7 +116,7 @@ export class StudentController {
     @Param('id') studentId: string,
   ): Promise<StudentResponseDto> {
     try {
-      await this.studentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
+      await this.studentDomainScope.assertCanReadStudent(authenticatedUser.userId, studentId);
 
       const snapshot = await this.studentService.getStudentById(studentId);
 
@@ -146,7 +144,7 @@ export class StudentController {
     }
 
     try {
-      await this.studentAccessService.assertCanManageStudent(authenticatedUser.userId, studentId);
+      await this.studentDomainScope.assertCanManageStudent(authenticatedUser.userId, studentId);
 
       const snapshot = await this.studentService.updateStudent(studentId, {
         fullName: request.fullName,
@@ -155,71 +153,6 @@ export class StudentController {
       });
 
       return toStudentResponseDto(snapshot);
-    } catch (error: unknown) {
-      rethrowStudentServiceError(error);
-    }
-  }
-
-  @Get('parishes/:parishId/students')
-  @RequirePermissions(STUDENT_READ_PERMISSION)
-  @ApiOperation({
-    summary: 'List students with active enrollments in a parish',
-    description:
-      'Returns distinct student profiles with at least one ACTIVE enrollment in the parish.',
-  })
-  @ApiOkResponse({ type: StudentListResponseDto })
-  async listStudentsByParish(
-    @CurrentUser() authenticatedUser: AuthenticatedUser,
-    @Param('parishId') parishId: string,
-    @Query() query: ParishStudentListQueryDto,
-  ): Promise<StudentListResponseDto> {
-    try {
-      await assertParishReadScope(authenticatedUser.userId, parishId, {
-        isSuperAdmin: (userId) => this.parishScopeService.isSuperAdmin(userId),
-        hasActiveParishMembership: (userId, scopedParishId) =>
-          this.parishScopeService.hasActiveParishMembership(userId, scopedParishId),
-        canReadParishAsCatechist: (userId, scopedParishId) =>
-          this.classScopeService.canReadParishAsCatechist(userId, scopedParishId),
-        canReadParishAsGuardian: (userId, scopedParishId) =>
-          this.studentAccessService.canReadParishAsGuardian(userId, scopedParishId),
-      });
-
-      await this.parishService.getParishById(parishId);
-
-      const enrollmentResult =
-        await this.enrollmentQueryService.listDistinctActiveStudentIdsInParish(parishId, {
-          page: query.page,
-          limit: query.limit,
-          sortBy: query.sortBy,
-          sort: query.sort,
-          academicYearId: query.academicYearId,
-          search: query.search,
-        });
-
-      const accessibleStudentIds = await this.studentAccessService.resolveAccessibleStudentIds(
-        authenticatedUser.userId,
-      );
-      const filteredStudentIds =
-        accessibleStudentIds === null
-          ? enrollmentResult.studentIds
-          : enrollmentResult.studentIds.filter((studentId) =>
-              accessibleStudentIds.includes(studentId),
-            );
-
-      const items = await this.studentService.getStudentSnapshotsByIds(filteredStudentIds);
-
-      return {
-        items: items.map(toStudentResponseDto),
-        page: enrollmentResult.page,
-        limit: enrollmentResult.limit,
-        total: accessibleStudentIds === null ? enrollmentResult.total : filteredStudentIds.length,
-        totalPages:
-          accessibleStudentIds === null
-            ? enrollmentResult.totalPages
-            : filteredStudentIds.length === 0
-              ? 0
-              : Math.ceil(filteredStudentIds.length / enrollmentResult.limit),
-      };
     } catch (error: unknown) {
       rethrowStudentServiceError(error);
     }

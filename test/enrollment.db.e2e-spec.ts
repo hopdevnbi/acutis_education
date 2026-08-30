@@ -15,6 +15,7 @@ import { StudentStatus } from '../src/modules/student/enums/student-status.enum'
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
+import { ensureTestParishMembership } from './scoped-e2e-fixture';
 
 const TEST_EMAIL_PREFIX = 'cls005-e2e-';
 const TEST_PASSWORD = 'SecurePassword123!';
@@ -99,6 +100,10 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
       WHERE parish_id IN (SELECT id FROM parishes WHERE code LIKE '${TEST_CODE_PREFIX}%')
     `);
     await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE user_id IN (SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%')
+    `);
+    await AppDataSource.query(`
       DELETE FROM parishes WHERE code LIKE '${TEST_CODE_PREFIX}%'
     `);
     await AppDataSource.query(`
@@ -179,7 +184,7 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
     await ensureRole();
   }
 
-  async function setupManageUser(localPart: string): Promise<string> {
+  async function setupManageUser(localPart: string): Promise<{ accessToken: string; userId: string }> {
     const email = buildTestEmail(localPart);
     const account = await userAccountService.createAccount({ email, password: TEST_PASSWORD });
     await seedPermissions();
@@ -194,10 +199,13 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'enrollments.read');
     await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
 
-    return login(email);
+    return { accessToken: await login(email), userId: account.id };
   }
 
-  async function seedActiveClassPair(accessToken: string): Promise<{
+  async function seedActiveClassPair(
+    accessToken: string,
+    userId: string,
+  ): Promise<{
     parishId: string;
     classAId: string;
     classBId: string;
@@ -211,6 +219,7 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
       })
       .expect(201);
     const parish = parishResponse.body as ParishResponseBody;
+    await ensureTestParishMembership(userId, parish.id);
 
     const yearResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/parishes/${parish.id}/academic-years`)
@@ -286,8 +295,8 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
   });
 
   it('enrolls and transfers a student over HTTP', async () => {
-    const accessToken = await setupManageUser('enroll-transfer');
-    const { classAId, classBId } = await seedActiveClassPair(accessToken);
+    const { accessToken, userId } = await setupManageUser('enroll-transfer');
+    const { classAId, classBId } = await seedActiveClassPair(accessToken, userId);
 
     const studentResponse = await request(getTestHttpServer(application))
       .post('/api/v1/students')
@@ -327,8 +336,8 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
   });
 
   it('assigns and ends a catechist over HTTP', async () => {
-    const accessToken = await setupManageUser('catechist');
-    const { classAId } = await seedActiveClassPair(accessToken);
+    const { accessToken, userId } = await setupManageUser('catechist');
+    const { classAId } = await seedActiveClassPair(accessToken, userId);
     const catechistAccount = await userAccountService.createAccount({
       email: buildTestEmail('catechist-user'),
       password: TEST_PASSWORD,

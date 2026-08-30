@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
@@ -39,7 +39,6 @@ export class EnrollmentService {
   constructor(
     @InjectRepository(EnrollmentEntity)
     private readonly enrollmentRepository: Repository<EnrollmentEntity>,
-    @Inject(forwardRef(() => StudentService))
     private readonly studentService: StudentService,
     private readonly classService: ClassService,
     private readonly dataSource: DataSource,

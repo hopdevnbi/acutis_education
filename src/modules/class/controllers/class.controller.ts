@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
@@ -26,8 +27,11 @@ import { RequirePermissions } from '../../access-control/decorators/require-perm
 import { PermissionGuard } from '../../access-control/guards/permission.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { assertParishReadScope } from '../../parish/utils/assert-parish-read-scope';
+import {
+  PARISH_GUARDIAN_READ_SCOPE_PORT,
+  type ParishGuardianReadScopePort,
+} from '../../parish/interfaces/parish-guardian-read-scope.port';
 import { ParishScopeService } from '../../parish/services/parish-scope.service';
-import { StudentAccessService } from '../../student/services/student-access.service';
 import {
   CLASS_MANAGE_PERMISSION,
   CLASS_READ_PERMISSION,
@@ -52,7 +56,8 @@ export class ClassController {
     private readonly classService: ClassService,
     private readonly classScopeService: ClassScopeService,
     private readonly parishScopeService: ParishScopeService,
-    private readonly studentAccessService: StudentAccessService,
+    @Inject(PARISH_GUARDIAN_READ_SCOPE_PORT)
+    private readonly parishGuardianReadScope: ParishGuardianReadScopePort,
   ) {}
 
   @Post('parishes/:parishId/classes')
@@ -102,7 +107,7 @@ export class ClassController {
         canReadParishAsCatechist: (userId, scopedParishId) =>
           this.classScopeService.canReadParishAsCatechist(userId, scopedParishId),
         canReadParishAsGuardian: (userId, scopedParishId) =>
-          this.studentAccessService.canReadParishAsGuardian(userId, scopedParishId),
+          this.parishGuardianReadScope.canReadParishAsGuardian(userId, scopedParishId),
       });
 
       const result = await this.classService.listClassesByParish(parishId, {

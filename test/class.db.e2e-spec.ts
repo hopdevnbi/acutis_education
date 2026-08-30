@@ -12,6 +12,7 @@ import { ParishStatus } from '../src/modules/parish/enums/parish-status.enum';
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
+import { ensureTestParishMembership } from './scoped-e2e-fixture';
 
 const TEST_EMAIL_PREFIX = 'cls003-e2e-';
 const TEST_PASSWORD = 'SecurePassword123!';
@@ -82,6 +83,10 @@ describe('Class API (db e2e)', () => {
       await AppDataSource.initialize();
     }
 
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE user_id IN (SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%')
+    `);
     await AppDataSource.query(`
       DELETE FROM classes
       WHERE code LIKE '${TEST_CODE_PREFIX}%'
@@ -221,7 +226,7 @@ describe('Class API (db e2e)', () => {
     return response.body as CatechismLevelResponseBody;
   }
 
-  async function setupManageUser(localPart: string): Promise<string> {
+  async function setupManageUser(localPart: string): Promise<{ accessToken: string; userId: string }> {
     const email = buildTestEmail(localPart);
     const account = await userAccountService.createAccount({ email, password: TEST_PASSWORD });
     await seedClassPermissions();
@@ -232,7 +237,7 @@ describe('Class API (db e2e)', () => {
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'classes.manage');
     await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
 
-    return login(email);
+    return { accessToken: await login(email), userId: account.id };
   }
 
   it('returns 401 for unauthenticated class list requests', async () => {
@@ -253,8 +258,9 @@ describe('Class API (db e2e)', () => {
   });
 
   it('allows classes.manage to create, update, activate, and list classes', async () => {
-    const accessToken = await setupManageUser('manage');
+    const { accessToken, userId } = await setupManageUser('manage');
     const parish = await createParish(accessToken, 'manage');
+    await ensureTestParishMembership(userId, parish.id);
     const academicYear = await createAcademicYear(accessToken, parish.id, 'year-manage');
     const catechismLevel = await createCatechismLevel(accessToken, parish.id, 'level-manage');
 
@@ -329,8 +335,9 @@ describe('Class API (db e2e)', () => {
   });
 
   it('returns 409 for duplicate class codes within parish and academic year', async () => {
-    const accessToken = await setupManageUser('duplicate');
+    const { accessToken, userId } = await setupManageUser('duplicate');
     const parish = await createParish(accessToken, 'duplicate');
+    await ensureTestParishMembership(userId, parish.id);
     const academicYear = await createAcademicYear(accessToken, parish.id, 'year-dup');
     const catechismLevel = await createCatechismLevel(accessToken, parish.id, 'level-dup');
     const duplicateCode = `${TEST_CODE_PREFIX}dup-class`;

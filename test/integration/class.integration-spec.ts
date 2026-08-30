@@ -13,8 +13,11 @@ import {
   ClassCodeAlreadyExistsError,
 } from '../../src/modules/class/errors/class.errors';
 import { ClassService } from '../../src/modules/class/services/class.service';
+import { ClassDomainScopeModule } from '../../src/modules/enrollment/class-domain-scope.module';
+import { EnrollmentModule } from '../../src/modules/enrollment/enrollment.module';
 import { ParishModule } from '../../src/modules/parish/parish.module';
 import { ParishService } from '../../src/modules/parish/services/parish.service';
+import { StudentModule } from '../../src/modules/student/student.module';
 
 const TEST_CODE_PREFIX = 'cls003-int-';
 
@@ -40,7 +43,10 @@ describe('ClassService integration (MSSQL)', () => {
         DatabaseModule,
         ParishModule,
         AcademicStructureModule,
+        StudentModule,
         ClassModule,
+        EnrollmentModule,
+        ClassDomainScopeModule,
       ],
     }).compile();
 

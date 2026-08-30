@@ -119,6 +119,16 @@ npm run seed:parish-academic
 
 This command is manual, development-only, idempotent, and uses public module services only.
 
+Optional local class/enrollment demo data (memberships, classes, students, guardians, catechist assignments, enrollments):
+
+```powershell
+npm run seed:class-enrollment
+```
+
+Prerequisites (run in order): `npm run seed:auth-rbac`, then `npm run seed:parish-academic`, then `npm run seed:class-enrollment`.
+
+This command is manual, development-only, idempotent, and uses public module services only. Sample users (`admin@`, `catechist@`, `parent@local.catechism.test`) gain scoped links after this seed runs.
+
 ## Parish API
 
 Authenticated parish endpoints (require JWT + RBAC):

@@ -12,6 +12,7 @@ import { CatechistAssignmentStatus } from '../../src/modules/class/enums/catechi
 import { ClassStatus } from '../../src/modules/class/enums/class-status.enum';
 import { ClassCatechistAssignmentService } from '../../src/modules/class/services/class-catechist-assignment.service';
 import { ClassService } from '../../src/modules/class/services/class.service';
+import { ClassDomainScopeModule } from '../../src/modules/enrollment/class-domain-scope.module';
 import { EnrollmentModule } from '../../src/modules/enrollment/enrollment.module';
 import { EnrollmentStatus } from '../../src/modules/enrollment/enums/enrollment-status.enum';
 import { EnrollmentService } from '../../src/modules/enrollment/services/enrollment.service';
@@ -55,6 +56,7 @@ describe('Enrollment and catechist assignment integration (MSSQL)', () => {
         ClassModule,
         StudentModule,
         EnrollmentModule,
+        ClassDomainScopeModule,
       ],
     }).compile();
 

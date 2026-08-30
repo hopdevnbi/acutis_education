@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
@@ -37,7 +38,10 @@ import {
   toGuardianLinkListResponseDto,
   toGuardianLinkResponseDto,
 } from '../mappers/student-guardian-response.mapper';
-import { StudentAccessService } from '../services/student-access.service';
+import {
+  STUDENT_DOMAIN_SCOPE_PORT,
+  type StudentDomainScopePort,
+} from '../interfaces/student-domain-scope.port';
 import { StudentGuardianService } from '../services/student-guardian.service';
 import { rethrowStudentGuardianServiceError } from '../utils/student-guardian-http.util';
 
@@ -48,7 +52,8 @@ import { rethrowStudentGuardianServiceError } from '../utils/student-guardian-ht
 export class StudentGuardianController {
   constructor(
     private readonly studentGuardianService: StudentGuardianService,
-    private readonly studentAccessService: StudentAccessService,
+    @Inject(STUDENT_DOMAIN_SCOPE_PORT)
+    private readonly studentDomainScope: StudentDomainScopePort,
   ) {}
 
   @Post('students/:studentId/guardians')
@@ -64,7 +69,7 @@ export class StudentGuardianController {
     @Body() request: LinkGuardianRequestDto,
   ): Promise<GuardianLinkResponseDto> {
     try {
-      await this.studentAccessService.assertCanManageStudent(authenticatedUser.userId, studentId);
+      await this.studentDomainScope.assertCanManageStudent(authenticatedUser.userId, studentId);
 
       const snapshot = await this.studentGuardianService.linkGuardian(studentId, {
         guardianUserId: request.guardianUserId,
@@ -88,7 +93,7 @@ export class StudentGuardianController {
     @Query() query: GuardianLinkListQueryDto,
   ): Promise<GuardianLinkListResponseDto> {
     try {
-      await this.studentAccessService.assertCanReadStudent(authenticatedUser.userId, studentId);
+      await this.studentDomainScope.assertCanReadStudent(authenticatedUser.userId, studentId);
 
       const result = await this.studentGuardianService.listGuardiansByStudent(studentId, {
         page: query.page,
@@ -114,7 +119,7 @@ export class StudentGuardianController {
     try {
       const link = await this.studentGuardianService.getGuardianLinkById(guardianLinkId);
 
-      await this.studentAccessService.assertCanManageStudent(
+      await this.studentDomainScope.assertCanManageStudent(
         authenticatedUser.userId,
         link.studentId,
       );

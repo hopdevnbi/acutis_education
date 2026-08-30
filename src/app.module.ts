@@ -10,6 +10,7 @@ import { AcademicStructureModule } from './modules/academic-structure/academic-s
 import { AccessControlModule } from './modules/access-control/access-control.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ClassModule } from './modules/class/class.module';
+import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
@@ -40,6 +41,7 @@ export class AppModule {
         StudentModule,
         ClassModule,
         EnrollmentModule,
+        ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],
       providers: [GlobalExceptionFilter],
