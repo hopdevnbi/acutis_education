@@ -99,17 +99,7 @@ describe('AuthSessionService', () => {
 
   it('rejects refresh when the token hash is unknown', async () => {
     refreshTokenService.hashRefreshToken.mockReturnValue('missing-hash');
-    authSessionRepository.manager.transaction = jest
-      .fn()
-      .mockImplementation((callback: (manager: unknown) => unknown) =>
-        callback({
-          getRepository: () => ({
-            findOne: jest.fn().mockResolvedValue(null),
-            save: jest.fn(),
-            create: jest.fn(),
-          }),
-        }),
-      ) as Repository<AuthSessionEntity>['manager']['transaction'];
+    authSessionRepository.findOne.mockResolvedValue(null);
 
     await expect(authSessionService.refreshSession('unknown-token')).rejects.toBeInstanceOf(
       UnauthorizedException,

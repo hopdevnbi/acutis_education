@@ -48,6 +48,6 @@ import { AuthService } from './services/auth.service';
     JwtAuthGuard,
     RefreshTokenService,
   ],
-  exports: [JwtAuthGuard],
+  exports: [JwtAuthGuard, AccessTokenService],
 })
 export class AuthModule {}

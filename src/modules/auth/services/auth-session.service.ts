@@ -125,10 +125,7 @@ export class AuthSessionService {
       return;
     }
 
-    await this.revokeActiveSessionsInFamily(
-      this.authSessionRepository,
-      session.tokenFamilyId,
-    );
+    await this.revokeActiveSessionsInFamily(this.authSessionRepository, session.tokenFamilyId);
   }
 
   private async revokeActiveSessionsInFamily(
