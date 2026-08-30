@@ -12,6 +12,7 @@ import { ClassModule } from './class/class.module';
 import { ClassScopeService } from './class/services/class-scope.service';
 import { ClassCatechistAssignmentService } from './class/services/class-catechist-assignment.service';
 import { ClassService } from './class/services/class.service';
+import { CurriculumModule } from './curriculum/curriculum.module';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { EnrollmentAccessService } from './enrollment/services/enrollment-access.service';
 import { EnrollmentGuardianScopeService } from './enrollment/services/enrollment-guardian-scope.service';
@@ -26,6 +27,7 @@ import { ParishMembershipService } from './parish/services/parish-membership.ser
 import { ParishScopeService } from './parish/services/parish-scope.service';
 import { ParishService } from './parish/services/parish.service';
 import { StudentModule } from './student/student.module';
+import { LearningContentModule } from './learning-content/learning-content.module';
 import { StudentAccessService } from './student/services/student-access.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
@@ -119,6 +121,20 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).toContain(EnrollmentService);
     expect(exports).toContain(EnrollmentGuardianScopeService);
     expect(exports).toContain(EnrollmentAccessService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports nothing from CurriculumModule at schema foundation stage', () => {
+    const exports = resolveModuleExports(CurriculumModule);
+
+    expect(exports).toHaveLength(0);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports nothing from LearningContentModule at schema foundation stage', () => {
+    const exports = resolveModuleExports(LearningContentModule);
+
+    expect(exports).toHaveLength(0);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

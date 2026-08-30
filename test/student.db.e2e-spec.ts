@@ -12,10 +12,7 @@ import { StudentStatus } from '../src/modules/student/enums/student-status.enum'
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
-import {
-  seedActiveEnrollmentForStudent,
-  seedScopedParishForUser,
-} from './scoped-e2e-fixture';
+import { seedActiveEnrollmentForStudent, seedScopedParishForUser } from './scoped-e2e-fixture';
 
 const TEST_EMAIL_PREFIX = 'cls004-e2e-';
 const TEST_PASSWORD = 'SecurePassword123!';
@@ -158,7 +155,10 @@ describe('Student API (db e2e)', () => {
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'student-guardians.manage');
     await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
 
-    const { parishId } = await seedScopedParishForUser(account.id, `${TEST_EMAIL_PREFIX}${localPart}-`);
+    const { parishId } = await seedScopedParishForUser(
+      account.id,
+      `${TEST_EMAIL_PREFIX}${localPart}-`,
+    );
 
     return { accessToken: await login(email), userId: account.id, parishId };
   }

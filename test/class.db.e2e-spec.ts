@@ -226,7 +226,9 @@ describe('Class API (db e2e)', () => {
     return response.body as CatechismLevelResponseBody;
   }
 
-  async function setupManageUser(localPart: string): Promise<{ accessToken: string; userId: string }> {
+  async function setupManageUser(
+    localPart: string,
+  ): Promise<{ accessToken: string; userId: string }> {
     const email = buildTestEmail(localPart);
     const account = await userAccountService.createAccount({ email, password: TEST_PASSWORD });
     await seedClassPermissions();
