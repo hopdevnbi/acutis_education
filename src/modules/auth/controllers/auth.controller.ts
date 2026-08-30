@@ -14,8 +14,10 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AppConfigService } from '../../../config/app-config.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -32,6 +34,7 @@ import {
   createInvalidCredentialsException,
   extractRefreshTokenFromRequest,
 } from '../utils/auth-http.util';
+import { applyNoStoreCacheControl } from '../utils/auth-response.util';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -43,6 +46,8 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ 'auth-login': {} })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with email and password' })
   @ApiOkResponse({
@@ -51,6 +56,7 @@ export class AuthController {
       'Returns an access token in JSON and sets an HttpOnly refresh-token cookie scoped to /api/v1/auth.',
   })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
+  @ApiTooManyRequestsResponse({ description: 'Too many authentication attempts' })
   async login(
     @Body() loginRequest: LoginRequestDto,
     @Res({ passthrough: true }) response: Response,
@@ -61,11 +67,14 @@ export class AuthController {
       nodeEnv: this.appConfigService.getNodeEnv(),
       maxAgeSeconds: this.refreshTokenService.getRefreshTokenExpiresInSeconds(),
     });
+    applyNoStoreCacheControl(response);
 
     return loginResult.loginResponse;
   }
 
   @Post('refresh')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ 'auth-refresh': {} })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Rotate refresh token and issue a new access token',
@@ -76,6 +85,7 @@ export class AuthController {
     description: 'Returns a new access token and rotates the HttpOnly refresh-token cookie.',
   })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
+  @ApiTooManyRequestsResponse({ description: 'Too many refresh attempts' })
   async refreshAccessToken(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -92,6 +102,7 @@ export class AuthController {
       nodeEnv: this.appConfigService.getNodeEnv(),
       maxAgeSeconds: this.refreshTokenService.getRefreshTokenExpiresInSeconds(),
     });
+    applyNoStoreCacheControl(response);
 
     return refreshResult.accessTokenResponse;
   }

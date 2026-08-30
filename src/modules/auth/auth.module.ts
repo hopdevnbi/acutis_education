@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from '../users/users.module';
 import authConfiguration from './config/auth.configuration';
@@ -17,6 +18,32 @@ import { AuthService } from './services/auth.service';
   imports: [
     UsersModule,
     ConfigModule.forFeature(authConfiguration),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule.forFeature(authConfiguration)],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const authConfigurationValue = configService.get<AuthConfiguration>(
+          AUTH_CONFIGURATION_NAMESPACE,
+        );
+
+        if (authConfigurationValue === undefined) {
+          throw new Error('Auth configuration is not available.');
+        }
+
+        return [
+          {
+            name: 'auth-login',
+            ttl: authConfigurationValue.loginThrottleTtlMs,
+            limit: authConfigurationValue.loginThrottleLimit,
+          },
+          {
+            name: 'auth-refresh',
+            ttl: authConfigurationValue.refreshThrottleTtlMs,
+            limit: authConfigurationValue.refreshThrottleLimit,
+          },
+        ];
+      },
+    }),
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(authConfiguration)],
       inject: [ConfigService],
@@ -48,6 +75,6 @@ import { AuthService } from './services/auth.service';
     JwtAuthGuard,
     RefreshTokenService,
   ],
-  exports: [JwtAuthGuard, AccessTokenService],
+  exports: [JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

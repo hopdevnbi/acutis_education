@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
+import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -30,12 +31,13 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports JwtAuthGuard and AccessTokenService from AuthModule', () => {
+  it('exports JwtAuthGuard and JwtModule from AuthModule without exposing AccessTokenService', () => {
     const exports = resolveModuleExports(AuthModule);
 
     expect(exports).toHaveLength(2);
     expect(exports).toContain(JwtAuthGuard);
-    expect(exports).toContain(AccessTokenService);
+    expect(exports).toContain(JwtModule);
+    expect(exports).not.toContain(AccessTokenService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

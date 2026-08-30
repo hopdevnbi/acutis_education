@@ -14,7 +14,9 @@ import { UserAccountService } from './user-account.service';
 describe('UserAccountService', () => {
   let userAccountService: UserAccountService;
   let userRepository: jest.Mocked<Pick<Repository<UserEntity>, 'create' | 'save' | 'findOne'>>;
-  let passwordHashService: jest.Mocked<Pick<PasswordHashService, 'hash' | 'verify'>>;
+  let passwordHashService: jest.Mocked<
+    Pick<PasswordHashService, 'hash' | 'verify' | 'needsRehash'>
+  >;
 
   beforeEach(async () => {
     userRepository = {
@@ -26,6 +28,7 @@ describe('UserAccountService', () => {
     passwordHashService = {
       hash: jest.fn(),
       verify: jest.fn(),
+      needsRehash: jest.fn(),
     };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -131,6 +134,7 @@ describe('UserAccountService', () => {
       updatedAt: new Date(),
     } satisfies UserEntity);
     passwordHashService.verify.mockResolvedValue(true);
+    passwordHashService.needsRehash.mockReturnValue(false);
 
     const result = await userAccountService.verifyCredentials(
       '  Teacher@Parish.Example  ',
@@ -147,6 +151,61 @@ describe('UserAccountService', () => {
     });
   });
 
+  it('rehashes password hashes that require Argon2 parameter upgrades', async () => {
+    const user = {
+      id: '11111111-1111-4111-8111-111111111111',
+      email: 'teacher@parish.example',
+      passwordHash: '$argon2id$v=19$legacy',
+      status: UserStatus.Active,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies UserEntity;
+
+    userRepository.findOne.mockResolvedValue(user);
+    passwordHashService.verify.mockResolvedValue(true);
+    passwordHashService.needsRehash.mockReturnValue(true);
+    passwordHashService.hash.mockResolvedValue('$argon2id$v=19$upgraded');
+    userRepository.save.mockResolvedValue({
+      ...user,
+      passwordHash: '$argon2id$v=19$upgraded',
+    });
+
+    const result = await userAccountService.verifyCredentials(
+      'teacher@parish.example',
+      'SecurePassword123!',
+    );
+
+    expect(result.valid).toBe(true);
+    expect(passwordHashService.hash).toHaveBeenCalledWith('SecurePassword123!');
+    expect(userRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ passwordHash: '$argon2id$v=19$upgraded' }),
+    );
+  });
+
+  it('finds account snapshots by normalized email', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const updatedAt = new Date('2026-01-01T00:00:00.000Z');
+
+    userRepository.findOne.mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111',
+      email: 'teacher@parish.example',
+      passwordHash: '$argon2id$v=19$hash',
+      status: UserStatus.Active,
+      createdAt,
+      updatedAt,
+    } satisfies UserEntity);
+
+    await expect(
+      userAccountService.findAccountSnapshotByEmail('  Teacher@Parish.Example  '),
+    ).resolves.toEqual({
+      id: '11111111-1111-4111-8111-111111111111',
+      email: 'teacher@parish.example',
+      status: UserStatus.Active,
+      createdAt,
+      updatedAt,
+    });
+  });
+
   it.each([
     ['unknown email', null, false],
     ['wrong password', UserStatus.Active, false],
@@ -159,6 +218,7 @@ describe('UserAccountService', () => {
         userRepository.findOne.mockResolvedValue(null);
         passwordHashService.hash.mockResolvedValue('$argon2id$v=19$dummy');
         passwordHashService.verify.mockResolvedValue(false);
+        passwordHashService.needsRehash.mockReturnValue(false);
       } else {
         userRepository.findOne.mockResolvedValue({
           id: '11111111-1111-4111-8111-111111111111',
@@ -169,6 +229,7 @@ describe('UserAccountService', () => {
           updatedAt: new Date(),
         } satisfies UserEntity);
         passwordHashService.verify.mockResolvedValue(passwordMatches);
+        passwordHashService.needsRehash.mockReturnValue(false);
       }
 
       const result = await userAccountService.verifyCredentials(

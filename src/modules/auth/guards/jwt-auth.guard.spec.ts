@@ -1,9 +1,11 @@
 import { UnauthorizedException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
+import type { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { AUTH_CONFIGURATION_NAMESPACE } from '../config/auth.config.types';
 import type { RequestWithAuthenticatedUser } from '../interfaces/authenticated-user.interface';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { AccessTokenService } from '../services/access-token.service';
 
 type AuthenticatedRequest = Request &
   RequestWithAuthenticatedUser & {
@@ -12,14 +14,31 @@ type AuthenticatedRequest = Request &
 
 describe('JwtAuthGuard', () => {
   let jwtAuthGuard: JwtAuthGuard;
-  let accessTokenService: jest.Mocked<Pick<AccessTokenService, 'verifyAccessToken'>>;
+  let jwtService: jest.Mocked<Pick<JwtService, 'verifyAsync'>>;
+  let configService: jest.Mocked<Pick<ConfigService, 'get'>>;
 
   beforeEach(() => {
-    accessTokenService = {
-      verifyAccessToken: jest.fn(),
+    jwtService = {
+      verifyAsync: jest.fn(),
     };
 
-    jwtAuthGuard = new JwtAuthGuard(accessTokenService as unknown as AccessTokenService);
+    configService = {
+      get: jest.fn().mockImplementation((namespace: string) => {
+        if (namespace === AUTH_CONFIGURATION_NAMESPACE) {
+          return {
+            accessSecret: 'test-only-jwt-access-secret-32chars-minimum-value',
+            accessExpiresInSeconds: 900,
+          };
+        }
+
+        return undefined;
+      }),
+    };
+
+    jwtAuthGuard = new JwtAuthGuard(
+      jwtService as unknown as JwtService,
+      configService as unknown as ConfigService,
+    );
   });
 
   function createExecutionContext(request: AuthenticatedRequest): ExecutionContext {
@@ -35,9 +54,9 @@ describe('JwtAuthGuard', () => {
       header: jest.fn().mockReturnValue('Bearer signed-access-token'),
     } as AuthenticatedRequest;
 
-    accessTokenService.verifyAccessToken.mockResolvedValue({
-      userId: '11111111-1111-4111-8111-111111111111',
-      sessionId: '22222222-2222-4222-8222-222222222222',
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: '11111111-1111-4111-8111-111111111111',
+      sid: '22222222-2222-4222-8222-222222222222',
     });
 
     await expect(jwtAuthGuard.canActivate(createExecutionContext(request))).resolves.toBe(true);

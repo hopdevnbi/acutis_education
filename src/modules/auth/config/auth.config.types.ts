@@ -7,6 +7,10 @@ export interface AuthConfiguration {
   readonly refreshHashSecret: string;
   readonly refreshExpiresIn: string;
   readonly refreshExpiresInSeconds: number;
+  readonly loginThrottleLimit: number;
+  readonly loginThrottleTtlMs: number;
+  readonly refreshThrottleLimit: number;
+  readonly refreshThrottleTtlMs: number;
 }
 
 export interface JwtAccessTokenPayload {

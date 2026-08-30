@@ -55,6 +55,20 @@ function parseDurationConfig(
   };
 }
 
+function parsePositiveInteger(rawValue: string | undefined, defaultValue: number): number {
+  if (rawValue === undefined || rawValue.trim().length === 0) {
+    return defaultValue;
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    throw new Error(`Invalid throttle configuration value: ${rawValue}`);
+  }
+
+  return parsedValue;
+}
+
 export function buildAuthConfiguration(
   environment: NodeJS.ProcessEnv = process.env,
 ): AuthConfiguration {
@@ -78,6 +92,10 @@ export function buildAuthConfiguration(
     ),
     refreshExpiresIn: refreshExpires.duration,
     refreshExpiresInSeconds: refreshExpires.durationSeconds,
+    loginThrottleLimit: parsePositiveInteger(environment['AUTH_LOGIN_THROTTLE_LIMIT'], 10),
+    loginThrottleTtlMs: parsePositiveInteger(environment['AUTH_LOGIN_THROTTLE_TTL_MS'], 60_000),
+    refreshThrottleLimit: parsePositiveInteger(environment['AUTH_REFRESH_THROTTLE_LIMIT'], 20),
+    refreshThrottleTtlMs: parsePositiveInteger(environment['AUTH_REFRESH_THROTTLE_TTL_MS'], 60_000),
   };
 }
 

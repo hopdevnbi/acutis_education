@@ -103,6 +103,15 @@ export class UserAccountService {
       return INVALID_CREDENTIALS_RESULT;
     }
 
+    if (this.passwordHashService.needsRehash(user.passwordHash)) {
+      try {
+        user.passwordHash = await this.passwordHashService.hash(password);
+        await this.userRepository.save(user);
+      } catch {
+        // Password rehash upgrades must not block successful authentication.
+      }
+    }
+
     return {
       valid: true,
       account: toAuthenticatedAccountSnapshot(user),
@@ -112,6 +121,24 @@ export class UserAccountService {
   async getAccountSnapshotById(userId: string): Promise<UserAccountSnapshot | null> {
     const user = await this.userRepository.findOne({
       where: { id: normalizeUuid(userId) },
+    });
+
+    if (user === null) {
+      return null;
+    }
+
+    return toUserAccountSnapshot(user);
+  }
+
+  async findAccountSnapshotByEmail(email: string): Promise<UserAccountSnapshot | null> {
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!isValidEmail(normalizedEmail)) {
+      return null;
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
     });
 
     if (user === null) {

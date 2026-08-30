@@ -99,6 +99,15 @@ Integration tests use a dedicated test database (`catechism_api_test`). The deve
 
 TypeORM uses `synchronize=false` and `migrationsRun=false` in all environments.
 
+## Local Auth/RBAC demo
+
+1. Apply migrations: `npm run migration:run`
+2. Seed local sample roles, permissions, and accounts: `npm run seed:auth-rbac`
+3. Start the API: `npm run start:dev`
+4. Import the Postman collection and environment from `docs/postman/` (see local handoff report in `docs/` for sample credentials)
+
+The seed command is manual, development-only, and refuses `NODE_ENV=production` or unknown database names.
+
 ## Database safety
 
 - **Development DB:** `catechism_api`

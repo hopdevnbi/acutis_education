@@ -20,6 +20,10 @@ describe('buildAuthConfiguration', () => {
       refreshHashSecret: validEnvironment.JWT_REFRESH_HASH_SECRET,
       refreshExpiresIn: '7d',
       refreshExpiresInSeconds: 604800,
+      loginThrottleLimit: 10,
+      loginThrottleTtlMs: 60_000,
+      refreshThrottleLimit: 20,
+      refreshThrottleTtlMs: 60_000,
     });
   });
 
@@ -36,6 +40,27 @@ describe('buildAuthConfiguration', () => {
       refreshHashSecret: validEnvironment.JWT_REFRESH_HASH_SECRET,
       refreshExpiresIn: '7d',
       refreshExpiresInSeconds: 604800,
+      loginThrottleLimit: 10,
+      loginThrottleTtlMs: 60_000,
+      refreshThrottleLimit: 20,
+      refreshThrottleTtlMs: 60_000,
+    });
+  });
+
+  it('parses auth throttle limits from environment variables', () => {
+    expect(
+      buildAuthConfiguration({
+        ...validEnvironment,
+        AUTH_LOGIN_THROTTLE_LIMIT: '5',
+        AUTH_LOGIN_THROTTLE_TTL_MS: '30000',
+        AUTH_REFRESH_THROTTLE_LIMIT: '8',
+        AUTH_REFRESH_THROTTLE_TTL_MS: '45000',
+      }),
+    ).toMatchObject({
+      loginThrottleLimit: 5,
+      loginThrottleTtlMs: 30_000,
+      refreshThrottleLimit: 8,
+      refreshThrottleTtlMs: 45_000,
     });
   });
 

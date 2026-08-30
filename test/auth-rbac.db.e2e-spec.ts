@@ -174,4 +174,80 @@ describe('RBAC authorization (db e2e)', () => {
       .set('Authorization', `Bearer ${(loginResponse.body as LoginResponseBody).accessToken}`)
       .expect(200);
   });
+
+  it('returns 403 after permission removal while reusing the same access token', async () => {
+    const email = buildTestEmail('permission-removal');
+    const account = await userAccountService.createAccount({
+      email,
+      password: TEST_PASSWORD,
+    });
+
+    await accessControlService.createRole({
+      code: TEST_ROLE_CODE,
+      name: 'RBAC Tester',
+    });
+    await accessControlService.createPermission({
+      code: 'test.read',
+      name: 'Test read',
+    });
+    await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'test.read');
+    await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
+
+    const loginResponse = await request(getTestHttpServer(application))
+      .post('/api/v1/auth/login')
+      .send({ email, password: TEST_PASSWORD })
+      .expect(200);
+
+    const accessToken = (loginResponse.body as LoginResponseBody).accessToken;
+
+    await request(getTestHttpServer(application))
+      .get('/api/v1/test-rbac/read')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    await accessControlService.removePermissionFromRole(TEST_ROLE_CODE, 'test.read');
+
+    await request(getTestHttpServer(application))
+      .get('/api/v1/test-rbac/read')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(403);
+  });
+
+  it('returns 403 after role removal while reusing the same access token', async () => {
+    const email = buildTestEmail('role-removal');
+    const account = await userAccountService.createAccount({
+      email,
+      password: TEST_PASSWORD,
+    });
+
+    await accessControlService.createRole({
+      code: TEST_ROLE_CODE,
+      name: 'RBAC Tester',
+    });
+    await accessControlService.createPermission({
+      code: 'test.read',
+      name: 'Test read',
+    });
+    await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'test.read');
+    await accessControlService.assignRoleToUser(account.id, TEST_ROLE_CODE);
+
+    const loginResponse = await request(getTestHttpServer(application))
+      .post('/api/v1/auth/login')
+      .send({ email, password: TEST_PASSWORD })
+      .expect(200);
+
+    const accessToken = (loginResponse.body as LoginResponseBody).accessToken;
+
+    await request(getTestHttpServer(application))
+      .get('/api/v1/test-rbac/read')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    await accessControlService.removeRoleFromUser(account.id, TEST_ROLE_CODE);
+
+    await request(getTestHttpServer(application))
+      .get('/api/v1/test-rbac/read')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(403);
+  });
 });
