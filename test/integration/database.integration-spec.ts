@@ -13,6 +13,8 @@ const EXPECTED_AUTH_TABLES = [
   'users',
 ] as const;
 
+const EXPECTED_PARISH_ACADEMIC_TABLES = ['academic_years', 'catechism_levels', 'parishes'] as const;
+
 describe('Database integration (MSSQL)', () => {
   const expectedDatabaseName = process.env['DB_NAME'];
 
@@ -94,6 +96,9 @@ describe('Database integration (MSSQL)', () => {
       const businessTableNames = businessTablesResult.map((row) => row.TABLE_NAME);
 
       expect(businessTableNames).toEqual(expect.arrayContaining([...EXPECTED_AUTH_TABLES]));
+      expect(businessTableNames).toEqual(
+        expect.arrayContaining([...EXPECTED_PARISH_ACADEMIC_TABLES]),
+      );
     } finally {
       await AppDataSource.destroy();
     }
@@ -122,12 +127,12 @@ describe('Database integration (MSSQL)', () => {
         LEFT JOIN sys.default_constraints dc
           ON dc.parent_object_id = c.object_id
           AND dc.parent_column_id = c.column_id
-        WHERE t.name IN ('users', 'roles', 'permissions', 'auth_sessions')
+        WHERE t.name IN ('users', 'roles', 'permissions', 'auth_sessions', 'parishes', 'academic_years', 'catechism_levels')
           AND c.name = 'id'
         ORDER BY t.name
       `);
 
-      expect(defaultConstraintResult).toHaveLength(4);
+      expect(defaultConstraintResult).toHaveLength(7);
       expect(defaultConstraintResult.every((row) => row.default_definition === null)).toBe(true);
     } finally {
       await AppDataSource.destroy();

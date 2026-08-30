@@ -1,5 +1,6 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AcademicStructureModule } from './academic-structure/academic-structure.module';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
@@ -7,6 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { ParishModule } from './parish/parish.module';
 import { UserAccountService } from './users/services/user-account.service';
 import { UsersModule } from './users/users.module';
 
@@ -47,6 +49,20 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).toHaveLength(2);
     expect(exports).toContain(AccessControlService);
     expect(exports).toContain(PermissionGuard);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports nothing from ParishModule at schema foundation stage', () => {
+    const exports = resolveModuleExports(ParishModule);
+
+    expect(exports).toHaveLength(0);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports nothing from AcademicStructureModule at schema foundation stage', () => {
+    const exports = resolveModuleExports(AcademicStructureModule);
+
+    expect(exports).toHaveLength(0);
     expect(exports).not.toContain(TypeOrmModule);
   });
 });

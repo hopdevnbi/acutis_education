@@ -6,8 +6,10 @@ import { isAuthRbacDemoEnabledFromEnvironment } from './dev/is-auth-rbac-demo-en
 import { HealthModule } from './health/health.module';
 import { GlobalExceptionFilter } from './http/global-exception.filter';
 import { ApplicationLoggingModule } from './logging/logging.module';
+import { AcademicStructureModule } from './modules/academic-structure/academic-structure.module';
 import { AccessControlModule } from './modules/access-control/access-control.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ParishModule } from './modules/parish/parish.module';
 import { UsersModule } from './modules/users/users.module';
 
 export interface AppModuleOptions {
@@ -30,6 +32,8 @@ export class AppModule {
         UsersModule,
         AuthModule,
         AccessControlModule,
+        ParishModule,
+        AcademicStructureModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],
       providers: [GlobalExceptionFilter],
