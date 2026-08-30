@@ -34,6 +34,8 @@ import { ParishService } from './parish/services/parish.service';
 import { StudentModule } from './student/student.module';
 import { LearningContentModule } from './learning-content/learning-content.module';
 import { LearningContentService } from './learning-content/services/learning-content.service';
+import { MediaModule } from './media/media.module';
+import { MediaAssetService } from './media/services/media-asset.service';
 import { StudentAccessService } from './student/services/student-access.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
@@ -157,6 +159,14 @@ describe('Auth module persistence boundaries', () => {
 
     expect(exports).toHaveLength(1);
     expect(exports).toContain(LearningContentService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports MediaAssetService only from MediaModule', () => {
+    const exports = resolveModuleExports(MediaModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(MediaAssetService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 

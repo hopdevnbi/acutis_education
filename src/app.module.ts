@@ -16,6 +16,7 @@ import { CurriculumDeliveryModule } from './modules/curriculum-delivery/curricul
 import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
+import { MediaModule } from './modules/media/media.module';
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
 import { UsersModule } from './modules/users/users.module';
@@ -49,6 +50,7 @@ export class AppModule {
         LearningContentModule,
         CurriculumOrchestrationModule,
         CurriculumDeliveryModule,
+        MediaModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],
