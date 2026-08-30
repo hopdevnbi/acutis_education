@@ -123,6 +123,26 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Manage student guardians',
     description: 'Local sample permission to manage guardian link records.',
   },
+  {
+    code: 'class-catechists.read',
+    name: 'Read class catechists',
+    description: 'Local sample permission to read catechist assignment records.',
+  },
+  {
+    code: 'class-catechists.manage',
+    name: 'Manage class catechists',
+    description: 'Local sample permission to manage catechist assignment records.',
+  },
+  {
+    code: 'enrollments.read',
+    name: 'Read enrollments',
+    description: 'Local sample permission to read enrollment records.',
+  },
+  {
+    code: 'enrollments.manage',
+    name: 'Manage enrollments',
+    description: 'Local sample permission to manage enrollment records.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -144,6 +164,10 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'students.manage',
     'student-guardians.read',
     'student-guardians.manage',
+    'class-catechists.read',
+    'class-catechists.manage',
+    'enrollments.read',
+    'enrollments.manage',
   ],
   CATECHIST: [
     'classes.read',
@@ -154,6 +178,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'catechism-levels.read',
     'students.read',
     'student-guardians.read',
+    'class-catechists.read',
+    'enrollments.read',
   ],
   PARENT: [
     'classes.read',
@@ -162,6 +188,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'catechism-levels.read',
     'students.read',
     'student-guardians.read',
+    'enrollments.read',
   ],
 };
 

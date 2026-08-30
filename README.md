@@ -185,6 +185,27 @@ Authenticated student and guardian endpoints (require JWT + RBAC):
 
 Parish student list returns distinct profiles with at least one **ACTIVE** enrollment in the parish (optional `academicYearId`, `search` filters).
 
+## Catechist Assignment API
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/classes/:classId/catechists` | `class-catechists.manage` |
+| `GET` | `/api/v1/classes/:classId/catechists` | `class-catechists.read` |
+| `PATCH` | `/api/v1/class-catechist-assignments/:id/status` | `class-catechists.manage` |
+
+## Enrollment API
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/classes/:classId/enrollments` | `enrollments.manage` |
+| `GET` | `/api/v1/classes/:classId/enrollments` | `enrollments.read` |
+| `GET` | `/api/v1/students/:studentId/enrollments` | `enrollments.read` |
+| `GET` | `/api/v1/enrollments/:id` | `enrollments.read` |
+| `PATCH` | `/api/v1/enrollments/:id/status` | `enrollments.manage` |
+| `POST` | `/api/v1/enrollments/:id/transfer` | `enrollments.manage` |
+
+Enrollment requires an **ACTIVE** student and **ACTIVE** class. One ACTIVE enrollment per student per parish and academic year. Transfer closes the source row as `TRANSFERRED` and creates a new ACTIVE row in the target class (same parish and year).
+
 See Swagger at `/api/docs` when enabled.
 
 ## Database safety

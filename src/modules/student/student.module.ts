@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthModule } from '../auth/auth.module';
@@ -17,7 +17,7 @@ import { StudentService } from './services/student.service';
     TypeOrmModule.forFeature([StudentEntity, StudentGuardianEntity]),
     UsersModule,
     ParishModule,
-    EnrollmentModule,
+    forwardRef(() => EnrollmentModule),
     AuthModule,
     AccessControlModule,
   ],

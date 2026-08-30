@@ -7,9 +7,11 @@ import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
 import { ClassModule } from './class/class.module';
+import { ClassCatechistAssignmentService } from './class/services/class-catechist-assignment.service';
 import { ClassService } from './class/services/class.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
 import { EnrollmentQueryService } from './enrollment/services/enrollment-query.service';
+import { EnrollmentService } from './enrollment/services/enrollment.service';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
@@ -88,19 +90,21 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports ClassService only from ClassModule', () => {
+  it('exports ClassService and ClassCatechistAssignmentService only from ClassModule', () => {
     const exports = resolveModuleExports(ClassModule);
 
-    expect(exports).toHaveLength(1);
-    expect(exports[0]).toBe(ClassService);
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(ClassService);
+    expect(exports).toContain(ClassCatechistAssignmentService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports EnrollmentQueryService only from EnrollmentModule', () => {
+  it('exports EnrollmentQueryService and EnrollmentService only from EnrollmentModule', () => {
     const exports = resolveModuleExports(EnrollmentModule);
 
-    expect(exports).toHaveLength(1);
-    expect(exports[0]).toBe(EnrollmentQueryService);
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(EnrollmentQueryService);
+    expect(exports).toContain(EnrollmentService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 });

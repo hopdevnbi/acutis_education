@@ -4,9 +4,12 @@ import { AcademicStructureModule } from '../academic-structure/academic-structur
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthModule } from '../auth/auth.module';
 import { ParishModule } from '../parish/parish.module';
+import { UsersModule } from '../users/users.module';
+import { ClassCatechistAssignmentController } from './controllers/class-catechist-assignment.controller';
 import { ClassController } from './controllers/class.controller';
 import { ClassCatechistAssignmentEntity } from './entities/class-catechist-assignment.entity';
 import { ClassEntity } from './entities/class.entity';
+import { ClassCatechistAssignmentService } from './services/class-catechist-assignment.service';
 import { ClassService } from './services/class.service';
 
 @Module({
@@ -14,11 +17,12 @@ import { ClassService } from './services/class.service';
     TypeOrmModule.forFeature([ClassEntity, ClassCatechistAssignmentEntity]),
     ParishModule,
     AcademicStructureModule,
+    UsersModule,
     AuthModule,
     AccessControlModule,
   ],
-  controllers: [ClassController],
-  providers: [ClassService],
-  exports: [ClassService],
+  controllers: [ClassController, ClassCatechistAssignmentController],
+  providers: [ClassService, ClassCatechistAssignmentService],
+  exports: [ClassService, ClassCatechistAssignmentService],
 })
 export class ClassModule {}
