@@ -1,0 +1,25 @@
+image: node:22.23.1-bookworm-slim
+
+definitions:
+  caches:
+    npm: ~/.npm
+
+  steps:
+    - step: &quality-step
+        name: Quality
+        caches:
+          - npm
+        max-time: 15
+        script:
+          - npm ci
+          - npm run quality
+          - npm audit --audit-level=moderate
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *quality-step
+
+  branches:
+    master:
+      - step: *quality-step

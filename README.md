@@ -59,6 +59,12 @@ Inside Docker Compose, the API connects to `mssql:1433`.
 | `npm run quality` | format, lint, typecheck, unit tests, DB-free e2e, build |
 | `npm run quality:full` | `quality` + DB migration validation, integration tests, DB-aware e2e (requires MSSQL) |
 
+## Continuous integration
+
+Bitbucket Pipelines (`bitbucket-pipelines.yml`) runs `npm ci`, `npm run quality`, and `npm audit --audit-level=moderate` on pull requests and the `master` branch. No database or Docker services are required for this baseline gate.
+
+The pipeline activates when the repository is hosted on Bitbucket. MSSQL and Docker production-build gates will be added in a later CI phase.
+
 ## Test layers
 
 | Command | Database |
