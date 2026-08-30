@@ -73,6 +73,16 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Auth test manage',
     description: 'Local dev-only permission for RBAC manage verification.',
   },
+  {
+    code: 'parishes.read',
+    name: 'Read parishes',
+    description: 'Local sample permission to read parish records.',
+  },
+  {
+    code: 'parishes.manage',
+    name: 'Manage parishes',
+    description: 'Local sample permission to manage parish records.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -84,9 +94,11 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'classes.manage',
     'auth.test.read',
     'auth.test.manage',
+    'parishes.read',
+    'parishes.manage',
   ],
-  CATECHIST: ['classes.read', 'classes.manage', 'auth.test.read'],
-  PARENT: ['classes.read'],
+  CATECHIST: ['classes.read', 'classes.manage', 'auth.test.read', 'parishes.read'],
+  PARENT: ['classes.read', 'parishes.read'],
 };
 
 export const AUTH_RBAC_SEED_USERS: readonly AuthRbacSeedUserDefinition[] = [

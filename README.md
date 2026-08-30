@@ -109,6 +109,24 @@ TypeORM uses `synchronize=false` and `migrationsRun=false` in all environments.
 
 The seed command is manual, development-only, and refuses `NODE_ENV=production` or unknown database names. Dev RBAC demo endpoints require explicit opt-in and are never registered in production.
 
+After schema changes that add parish permissions, re-run `npm run seed:auth-rbac` on a development database to refresh sample permission assignments.
+
+## Parish API
+
+Authenticated parish endpoints (require JWT + RBAC):
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/parishes` | `parishes.manage` |
+| `GET` | `/api/v1/parishes` | `parishes.read` |
+| `GET` | `/api/v1/parishes/:id` | `parishes.read` |
+| `PATCH` | `/api/v1/parishes/:id` | `parishes.manage` |
+| `PATCH` | `/api/v1/parishes/:id/status` | `parishes.manage` |
+
+List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
+
+See Swagger at `/api/docs` when enabled.
+
 ## Database safety
 
 - **Development DB:** `catechism_api`

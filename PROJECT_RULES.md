@@ -178,6 +178,8 @@ Examples of legitimate shared concerns:
 - Database infrastructure.
 - File storage abstraction.
 
+This repository is **backend only**. The frontend is a separate independent ReactJS repository/source. The frontend integrates with this backend exclusively through HTTP API contracts. Frontend and backend must not import each other's source, entities, repositories, or services. Each side maintains its own Docker and CI/CD pipeline. Shared contracts should use OpenAPI or generated client/types where appropriate, not copied business logic.
+
 Do not create all future domain modules in advance.
 
 Only introduce modules required by the active phase.
@@ -356,6 +358,15 @@ DELETE /api/v1/users/:id
 ```
 
 Pagination conventions must be standardized before the first paginated business endpoint.
+
+List endpoints use query parameters:
+
+- `page` (1-based, default `1`)
+- `limit` (default `20`, max `100`)
+- `sortBy` (whitelisted field names only)
+- `sort` (`ASC` or `DESC`)
+
+Responses return an envelope with `items`, `page`, `limit`, `total`, and `totalPages`.
 
 API responses and errors must use a consistent schema defined during backend bootstrap.
 

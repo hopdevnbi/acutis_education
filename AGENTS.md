@@ -2,6 +2,8 @@
 
 This repository is **backend only** (NestJS, TypeScript, Node.js v22.23.1, MSSQL).
 
+The frontend is a **separate ReactJS repository**. It communicates with this API over HTTP only; do not import or modify frontend source from backend tasks.
+
 Before any change:
 
 1. Read and follow `PROJECT_RULES.md` at the repository root. It is the authoritative source of truth.

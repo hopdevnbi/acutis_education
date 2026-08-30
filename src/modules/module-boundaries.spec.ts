@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ParishModule } from './parish/parish.module';
+import { ParishService } from './parish/services/parish.service';
 import { UserAccountService } from './users/services/user-account.service';
 import { UsersModule } from './users/users.module';
 
@@ -52,10 +53,11 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from ParishModule at schema foundation stage', () => {
+  it('exports ParishService only from ParishModule', () => {
     const exports = resolveModuleExports(ParishModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(ParishService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
