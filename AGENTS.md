@@ -11,3 +11,14 @@ Before any change:
 5. Do not run `git add`, `git commit`, or `push` unless the active prompt explicitly requests it.
 6. Never commit secrets, `.env` files, or credentials.
 7. If a request conflicts with `PROJECT_RULES.md`, stop and report the conflict instead of implementing.
+
+## Before a new business module
+
+Confirm module boundaries in the task report (see `PROJECT_RULES.md` §7.6):
+
+- Which tables/entities the module owns
+- What it exports publicly for other modules
+- Which modules it depends on (and only via public exports)
+- Whether the design blocks future microservice extraction
+
+Do not implement auth, users, or RBAC until the active AUTH prompt explicitly allows it.

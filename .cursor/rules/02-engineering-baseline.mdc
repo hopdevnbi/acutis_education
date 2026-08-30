@@ -10,7 +10,8 @@ alwaysApply: true
 - Strict TypeScript. Explicit return types on public methods/services/helpers.
 - Keep DTOs, persistence models, and domain representations separate.
 - Thin controllers; business logic in services; validate via DTOs/pipes.
-- Prefer domain/feature modules. Do not create dumping-ground `utils/` / `helpers/` / `common/` folders for unrelated logic.
+- Prefer domain/feature modules under `src/modules/`. Do not create dumping-ground `utils/` / `helpers/` / `common/` folders for unrelated logic.
+- Respect module boundaries per `PROJECT_RULES.md` §7; cross-module access via exported public APIs only.
 - Do not create future domain modules in advance.
 
 ## API

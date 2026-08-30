@@ -184,7 +184,90 @@ Only introduce modules required by the active phase.
 
 ---
 
-## 7. NestJS Conventions
+## 7. Modular Architecture & Future Microservice Extraction
+
+The backend is a **modular monolith** today. Module boundaries must remain clear enough that major capabilities can be extracted into separate services later with minimal domain rewriting.
+
+### 7.1 Module ownership
+
+Each major business capability is a separate NestJS module (bounded context). A module owns:
+
+- Controllers.
+- Application/services.
+- Persistence entities and data access for its tables.
+- Request/response DTOs.
+- Module-specific guards/policies.
+- Tests for its behavior.
+
+Place business modules under `src/modules/<feature>/` unless an approved architecture note says otherwise.
+
+### 7.2 Cross-module boundaries
+
+One module must **not** directly import another module's:
+
+- Repository or internal persistence layer.
+- Private/non-exported service.
+- Internal DTO or internal utility.
+- TypeORM entity for cross-module queries.
+
+Cross-module interaction uses **explicitly exported** services, facades, or contracts from the owning module's public API.
+
+Cross-module database queries are prohibited by default. The owning module provides an application-level API (for example `findAccountForLogin`, `userHasPermission`).
+
+Do not pass TypeORM entities across module boundaries as public contracts. Prefer domain IDs and narrow read models/snapshots.
+
+### 7.3 Shared code policy
+
+Shared/common code is allowed only for genuinely cross-cutting infrastructure, such as:
+
+- Configuration.
+- Logging.
+- HTTP exception mapping.
+- Request context.
+- Database bootstrap.
+- Generic security primitives that are not domain-specific.
+
+Do **not** move business/domain logic into `common/`, `utils/`, or `helpers/` merely because multiple modules use it.
+
+Do **not** create generic `BaseService`, `BaseRepository`, or `BaseController` abstractions for convenience.
+
+### 7.4 Transactions and coupling
+
+Avoid shared database transaction logic spanning unrelated modules unless truly necessary and documented in the implementation report.
+
+If a design creates tight coupling that would block future service extraction, document it explicitly before implementation.
+
+External integrations must be hidden behind adapters/interfaces in the owning module.
+
+### 7.5 Dependency direction
+
+- Dependencies flow toward the module that owns the data or policy being consumed.
+- Avoid cyclic module imports. Do not use `forwardRef()` as the default fix for boundary violations.
+- Other feature modules may depend on Auth/Access Control **public guards and contracts** only; they must not query auth tables directly.
+
+### 7.6 Reviews and audits
+
+Every new business-module implementation prompt must include a **Module Boundary Audit** section covering:
+
+- Owned data (tables/entities).
+- Public exports.
+- Inbound dependencies.
+- Outbound dependencies.
+- Possible future microservice extraction boundary.
+
+Major module final-audit prompts must document the same items.
+
+### 7.7 Foreign keys across modules
+
+SQL foreign keys across module-owned tables are allowed for relational integrity in the modular monolith.
+
+Application code must still respect ownership: only the owning module mutates its tables; other modules call the owner's public API.
+
+When extracting microservices later, FKs may be replaced by explicit cross-service validation and eventual consistency where needed.
+
+---
+
+## 8. NestJS Conventions
 
 Controllers:
 
@@ -216,7 +299,7 @@ Dependency injection:
 
 ---
 
-## 8. DTO & Validation Rules
+## 9. DTO & Validation Rules
 
 All external input must be validated.
 
@@ -246,7 +329,7 @@ Do not reuse persistence entities as incoming DTOs.
 
 ---
 
-## 9. API Conventions
+## 10. API Conventions
 
 Initial API version:
 
@@ -280,7 +363,7 @@ Do not return stack traces, SQL errors, secrets, or internal infrastructure deta
 
 ---
 
-## 10. Error Handling
+## 11. Error Handling
 
 Use centralized error handling.
 
@@ -299,7 +382,7 @@ Machine-readable error codes should be introduced when the bootstrap architectur
 
 ---
 
-## 11. Logging
+## 12. Logging
 
 Use structured application logging.
 
@@ -324,7 +407,7 @@ Production logs should be machine-readable or easily ingestible by centralized l
 
 ---
 
-## 12. Configuration & Environment Variables
+## 13. Configuration & Environment Variables
 
 All environment-dependent values must come from configuration.
 
@@ -353,7 +436,7 @@ Group configuration logically rather than reading `process.env` throughout busin
 
 ---
 
-## 13. MSSQL & Database Rules
+## 14. MSSQL & Database Rules
 
 Database changes must be migration-driven once the migration system is established.
 
@@ -377,7 +460,7 @@ Database naming conventions must remain consistent after they are selected.
 
 ---
 
-## 14. Data Integrity
+## 15. Data Integrity
 
 Application validation is not enough.
 
@@ -394,7 +477,7 @@ Design for race conditions on critical writes.
 
 ---
 
-## 15. Formatting — Prettier
+## 16. Formatting — Prettier
 
 Prettier is the canonical formatter.
 
@@ -423,7 +506,7 @@ If Cursor changes the Prettier configuration, it must explain why in the report.
 
 ---
 
-## 16. ESLint
+## 17. ESLint
 
 ESLint must use modern TypeScript-aware configuration compatible with the selected NestJS/TypeScript versions.
 
@@ -447,7 +530,7 @@ When disabling a rule locally:
 
 ---
 
-## 17. Imports
+## 18. Imports
 
 Imports should be organized consistently.
 
@@ -468,7 +551,7 @@ Path aliases may be introduced during bootstrap if configured consistently acros
 
 ---
 
-## 18. Functions & Complexity
+## 19. Functions & Complexity
 
 Prefer:
 
@@ -490,7 +573,7 @@ Do not split code solely to satisfy an arbitrary line-count metric.
 
 ---
 
-## 19. Comments
+## 20. Comments
 
 Comments should explain:
 
@@ -521,7 +604,7 @@ Git already stores history.
 
 ---
 
-## 20. Testing Rules
+## 21. Testing Rules
 
 Every meaningful business feature must include appropriate tests.
 
@@ -558,7 +641,7 @@ A task is not considered complete merely because it compiles.
 
 ---
 
-## 21. Test Naming
+## 22. Test Naming
 
 Test descriptions should state behavior.
 
@@ -578,7 +661,7 @@ Use Arrange / Act / Assert structure where it improves clarity.
 
 ---
 
-## 22. Security Rules
+## 23. Security Rules
 
 Security is mandatory because the platform includes minors.
 
@@ -607,7 +690,7 @@ Apply:
 
 ---
 
-## 23. Privacy Rules for Children
+## 24. Privacy Rules for Children
 
 Default to privacy.
 
@@ -626,7 +709,7 @@ Before production, applicable legal/privacy requirements must be reviewed separa
 
 ---
 
-## 24. Docker Rules
+## 25. Docker Rules
 
 Both development and production-oriented Docker files must remain understandable and reproducible.
 
@@ -653,7 +736,7 @@ Docker Compose should support local development without requiring Docker Desktop
 
 ---
 
-## 25. CI/CD Rules
+## 26. CI/CD Rules
 
 Bitbucket Pipelines will be the CI/CD platform.
 
@@ -680,7 +763,7 @@ Rules:
 
 ---
 
-## 26. Git Rules
+## 27. Git Rules
 
 Keep commits focused.
 
@@ -719,7 +802,7 @@ Do not perform commits unless the active Cursor prompt explicitly permits or req
 
 ---
 
-## 27. Cursor / AI Workflow
+## 28. Cursor / AI Workflow
 
 For every Cursor task:
 
@@ -768,7 +851,7 @@ Files there with `alwaysApply: true` are injected into every Cursor session so e
 
 ---
 
-## 28. No Silent Scope Expansion
+## 29. No Silent Scope Expansion
 
 If Cursor identifies additional useful work outside the requested task:
 
@@ -780,7 +863,7 @@ Only tiny changes required to make the requested implementation correct, secure,
 
 ---
 
-## 29. Backward Compatibility
+## 30. Backward Compatibility
 
 As the codebase grows:
 
@@ -794,7 +877,7 @@ Breaking changes require explicit approval and documentation.
 
 ---
 
-## 30. Definition of Done
+## 31. Definition of Done
 
 A backend task is complete only when applicable items are satisfied:
 
@@ -817,7 +900,7 @@ A backend task is complete only when applicable items are satisfied:
 
 ---
 
-## 31. Rule Changes
+## 32. Rule Changes
 
 This document is intentionally strict but may evolve.
 

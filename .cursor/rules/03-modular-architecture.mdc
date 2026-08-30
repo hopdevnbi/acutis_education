@@ -1,0 +1,35 @@
+---
+description: Modular monolith boundaries and future microservice extraction rules.
+alwaysApply: true
+---
+
+# Modular architecture
+
+This backend is a **modular monolith**. Business modules live under `src/modules/<feature>/`.
+
+## Boundaries
+
+- Each module owns its controllers, services, entities, DTOs, and tests.
+- Do **not** import another module's repository, internal service, internal DTO, or entity for cross-module queries.
+- Cross-module access uses the owning module's **exported public API** only.
+- Do not pass TypeORM entities across module boundaries; use IDs and narrow read models.
+- Avoid cyclic imports and `forwardRef()` as the default boundary fix.
+
+## Shared code
+
+Shared infrastructure (config, logging, HTTP filters, DB bootstrap, generic guards) is allowed when genuinely cross-cutting.
+
+Do **not** put domain logic in `common/`, `utils/`, or `helpers/`.
+
+Do **not** add generic base service/repository/controller abstractions for convenience.
+
+## Reviews
+
+Before implementing a new business module, confirm in the task report:
+
+- Owned tables/entities
+- Public exports
+- Inbound and outbound dependencies
+- Future microservice extraction boundary
+
+Full rules: `PROJECT_RULES.md` §7.
