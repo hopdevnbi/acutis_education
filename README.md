@@ -168,6 +168,23 @@ List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `academicYear
 
 Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activation requires an ACTIVE parish, ACTIVE academic year, and ACTIVE catechism level.
 
+## Student API
+
+Authenticated student and guardian endpoints (require JWT + RBAC):
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/students` | `students.manage` |
+| `GET` | `/api/v1/students` | `students.read` |
+| `GET` | `/api/v1/students/:id` | `students.read` |
+| `PATCH` | `/api/v1/students/:id` | `students.manage` |
+| `GET` | `/api/v1/parishes/:parishId/students` | `students.read` |
+| `POST` | `/api/v1/students/:studentId/guardians` | `student-guardians.manage` |
+| `GET` | `/api/v1/students/:studentId/guardians` | `student-guardians.read` |
+| `PATCH` | `/api/v1/student-guardians/:id/status` | `student-guardians.manage` |
+
+Parish student list returns distinct profiles with at least one **ACTIVE** enrollment in the parish (optional `academicYearId`, `search` filters).
+
 See Swagger at `/api/docs` when enabled.
 
 ## Database safety

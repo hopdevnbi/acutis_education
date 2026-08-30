@@ -9,6 +9,7 @@ import { PermissionGuard } from './access-control/guards/permission.guard';
 import { ClassModule } from './class/class.module';
 import { ClassService } from './class/services/class.service';
 import { EnrollmentModule } from './enrollment/enrollment.module';
+import { EnrollmentQueryService } from './enrollment/services/enrollment-query.service';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { AccessTokenService } from './auth/services/access-token.service';
@@ -16,6 +17,8 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ParishModule } from './parish/parish.module';
 import { ParishService } from './parish/services/parish.service';
 import { StudentModule } from './student/student.module';
+import { StudentGuardianService } from './student/services/student-guardian.service';
+import { StudentService } from './student/services/student.service';
 import { UserAccountService } from './users/services/user-account.service';
 import { UsersModule } from './users/users.module';
 
@@ -76,10 +79,12 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from StudentModule at persistence foundation stage', () => {
+  it('exports StudentService and StudentGuardianService only from StudentModule', () => {
     const exports = resolveModuleExports(StudentModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(StudentService);
+    expect(exports).toContain(StudentGuardianService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
@@ -91,10 +96,11 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from EnrollmentModule at persistence foundation stage', () => {
+  it('exports EnrollmentQueryService only from EnrollmentModule', () => {
     const exports = resolveModuleExports(EnrollmentModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(EnrollmentQueryService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 });
