@@ -109,7 +109,7 @@ TypeORM uses `synchronize=false` and `migrationsRun=false` in all environments.
 
 The seed command is manual, development-only, and refuses `NODE_ENV=production` or unknown database names. Dev RBAC demo endpoints require explicit opt-in and are never registered in production.
 
-After schema changes that add parish permissions, re-run `npm run seed:auth-rbac` on a development database to refresh sample permission assignments.
+After schema changes that add parish or academic structure permissions, re-run `npm run seed:auth-rbac` on a development database to refresh sample permission assignments.
 
 ## Parish API
 
@@ -122,6 +122,25 @@ Authenticated parish endpoints (require JWT + RBAC):
 | `GET` | `/api/v1/parishes/:id` | `parishes.read` |
 | `PATCH` | `/api/v1/parishes/:id` | `parishes.manage` |
 | `PATCH` | `/api/v1/parishes/:id/status` | `parishes.manage` |
+
+List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
+
+## Academic structure API
+
+Authenticated academic year and catechism level endpoints (require JWT + RBAC):
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `POST` | `/api/v1/parishes/:parishId/academic-years` | `academic-years.manage` |
+| `GET` | `/api/v1/parishes/:parishId/academic-years` | `academic-years.read` |
+| `GET` | `/api/v1/academic-years/:id` | `academic-years.read` |
+| `PATCH` | `/api/v1/academic-years/:id` | `academic-years.manage` |
+| `PATCH` | `/api/v1/academic-years/:id/status` | `academic-years.manage` |
+| `POST` | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.manage` |
+| `GET` | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.read` |
+| `GET` | `/api/v1/catechism-levels/:id` | `catechism-levels.read` |
+| `PATCH` | `/api/v1/catechism-levels/:id` | `catechism-levels.manage` |
+| `PATCH` | `/api/v1/catechism-levels/:id/status` | `catechism-levels.manage` |
 
 List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
 

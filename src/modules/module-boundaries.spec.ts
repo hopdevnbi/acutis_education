@@ -1,6 +1,8 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AcademicStructureModule } from './academic-structure/academic-structure.module';
+import { AcademicYearService } from './academic-structure/services/academic-year.service';
+import { CatechismLevelService } from './academic-structure/services/catechism-level.service';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AccessControlService } from './access-control/services/access-control.service';
 import { PermissionGuard } from './access-control/guards/permission.guard';
@@ -61,10 +63,12 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from AcademicStructureModule at schema foundation stage', () => {
+  it('exports AcademicYearService and CatechismLevelService only from AcademicStructureModule', () => {
     const exports = resolveModuleExports(AcademicStructureModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(AcademicYearService);
+    expect(exports).toContain(CatechismLevelService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 });
