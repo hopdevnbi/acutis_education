@@ -15,6 +15,15 @@ const EXPECTED_AUTH_TABLES = [
 
 const EXPECTED_PARISH_ACADEMIC_TABLES = ['academic_years', 'catechism_levels', 'parishes'] as const;
 
+const EXPECTED_CLASS_PEOPLE_ENROLLMENT_TABLES = [
+  'class_catechist_assignments',
+  'classes',
+  'enrollments',
+  'parish_memberships',
+  'student_guardians',
+  'students',
+] as const;
+
 describe('Database integration (MSSQL)', () => {
   const expectedDatabaseName = process.env['DB_NAME'];
 
@@ -99,6 +108,9 @@ describe('Database integration (MSSQL)', () => {
       expect(businessTableNames).toEqual(
         expect.arrayContaining([...EXPECTED_PARISH_ACADEMIC_TABLES]),
       );
+      expect(businessTableNames).toEqual(
+        expect.arrayContaining([...EXPECTED_CLASS_PEOPLE_ENROLLMENT_TABLES]),
+      );
     } finally {
       await AppDataSource.destroy();
     }
@@ -127,12 +139,26 @@ describe('Database integration (MSSQL)', () => {
         LEFT JOIN sys.default_constraints dc
           ON dc.parent_object_id = c.object_id
           AND dc.parent_column_id = c.column_id
-        WHERE t.name IN ('users', 'roles', 'permissions', 'auth_sessions', 'parishes', 'academic_years', 'catechism_levels')
+        WHERE t.name IN (
+            'users',
+            'roles',
+            'permissions',
+            'auth_sessions',
+            'parishes',
+            'academic_years',
+            'catechism_levels',
+            'parish_memberships',
+            'students',
+            'student_guardians',
+            'classes',
+            'class_catechist_assignments',
+            'enrollments'
+          )
           AND c.name = 'id'
         ORDER BY t.name
       `);
 
-      expect(defaultConstraintResult).toHaveLength(7);
+      expect(defaultConstraintResult).toHaveLength(13);
       expect(defaultConstraintResult.every((row) => row.default_definition === null)).toBe(true);
     } finally {
       await AppDataSource.destroy();

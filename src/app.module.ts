@@ -9,7 +9,10 @@ import { ApplicationLoggingModule } from './logging/logging.module';
 import { AcademicStructureModule } from './modules/academic-structure/academic-structure.module';
 import { AccessControlModule } from './modules/access-control/access-control.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ClassModule } from './modules/class/class.module';
+import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { ParishModule } from './modules/parish/parish.module';
+import { StudentModule } from './modules/student/student.module';
 import { UsersModule } from './modules/users/users.module';
 
 export interface AppModuleOptions {
@@ -34,6 +37,9 @@ export class AppModule {
         AccessControlModule,
         ParishModule,
         AcademicStructureModule,
+        StudentModule,
+        ClassModule,
+        EnrollmentModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],
       providers: [GlobalExceptionFilter],
