@@ -13,11 +13,13 @@ function loadEnvironmentFileIfPresent(relativePath: string): void {
 }
 
 export function loadTestEnvironment(): void {
-  loadEnvironmentFileIfPresent('.env');
-  loadEnvironmentFileIfPresent('.env.test');
+  if (process.env['CI'] !== 'true') {
+    loadEnvironmentFileIfPresent('.env');
+    loadEnvironmentFileIfPresent('.env.test');
 
-  if (!existsSync(resolve(process.cwd(), '.env.test'))) {
-    loadEnvironmentFileIfPresent('.env.test.example');
+    if (!existsSync(resolve(process.cwd(), '.env.test'))) {
+      loadEnvironmentFileIfPresent('.env.test.example');
+    }
   }
 
   process.env['NODE_ENV'] = 'test';

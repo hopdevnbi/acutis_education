@@ -61,9 +61,19 @@ Inside Docker Compose, the API connects to `mssql:1433`.
 
 ## Continuous integration
 
-Bitbucket Pipelines (`bitbucket-pipelines.yml`) runs `npm ci`, `npm run quality`, and `npm audit --audit-level=moderate` on pull requests and the `master` branch. No database or Docker services are required for this baseline gate.
+Bitbucket Pipelines (`bitbucket-pipelines.yml`) uses Node `22.23.1-bookworm-slim`.
 
-The pipeline activates when the repository is hosted on Bitbucket. MSSQL and Docker production-build gates will be added in a later CI phase.
+| Trigger | Steps |
+|---------|-------|
+| Pull requests | Quality — `npm ci`, `npm run quality`, `npm audit --audit-level=moderate` |
+| `master` | Quality → Database Tests → Docker Build |
+| Custom `full-ci` | Same three gates as `master` (manual validation) |
+
+Database Tests attach an MSSQL service container, wait for readiness, then run migration validation, integration tests, and DB-aware e2e against `catechism_api_test`. Docker Build validates `docker build --target production`.
+
+Configure a secured Bitbucket repository variable `DB_PASSWORD` (SQL Server complexity rules apply). Do not commit real secrets.
+
+The pipeline runs when the repository is hosted on Bitbucket. There is no deployment or image push yet.
 
 ## Test layers
 

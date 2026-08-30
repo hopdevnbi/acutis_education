@@ -1,20 +1,10 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { config as loadEnvironmentFile } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { parseNodeEnvironment } from '../config/app.configuration';
 import { buildDatabaseConfiguration } from '../config/database.configuration';
+import { loadCliDataSourceEnvironment } from './load-cli-data-source-environment';
 import { buildTypeOrmDataSourceOptions } from './typeorm-options.factory';
 
-const environmentFilePath = resolve(process.cwd(), '.env');
-
-if (!existsSync(environmentFilePath)) {
-  throw new Error(
-    'A local .env file is required for TypeORM CLI commands. Copy .env.example to .env and configure it.',
-  );
-}
-
-loadEnvironmentFile({ path: environmentFilePath });
+loadCliDataSourceEnvironment();
 
 const nodeEnv = parseNodeEnvironment(process.env['NODE_ENV']);
 const databaseConfiguration = buildDatabaseConfiguration(process.env);

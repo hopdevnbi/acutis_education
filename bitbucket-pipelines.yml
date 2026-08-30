@@ -4,6 +4,14 @@ definitions:
   caches:
     npm: ~/.npm
 
+  services:
+    mssql:
+      image: mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+      variables:
+        ACCEPT_EULA: 'Y'
+        MSSQL_PID: 'Developer'
+        MSSQL_SA_PASSWORD: $DB_PASSWORD
+
   steps:
     - step: &quality-step
         name: Quality
@@ -15,6 +23,37 @@ definitions:
           - npm run quality
           - npm audit --audit-level=moderate
 
+    - step: &database-tests-step
+        name: Database Tests
+        caches:
+          - npm
+        max-time: 20
+        services:
+          - mssql
+        script:
+          - export CI=true
+          - export NODE_ENV=test
+          - export DB_HOST=localhost
+          - export DB_PORT=1433
+          - export DB_NAME=catechism_api_test
+          - export DB_USER=sa
+          - export DB_ENCRYPT=true
+          - export DB_TRUST_SERVER_CERTIFICATE=true
+          - export SWAGGER_ENABLED=false
+          - npm ci
+          - npm run ci:wait-for-mssql
+          - npm run test:db:migrations
+          - npm run test:integration
+          - npm run test:e2e:db
+
+    - step: &docker-build-step
+        name: Docker Build
+        services:
+          - docker
+        max-time: 15
+        script:
+          - docker build --target production -t catechism-api:ci .
+
 pipelines:
   pull-requests:
     '**':
@@ -23,3 +62,11 @@ pipelines:
   branches:
     master:
       - step: *quality-step
+      - step: *database-tests-step
+      - step: *docker-build-step
+
+  custom:
+    full-ci:
+      - step: *quality-step
+      - step: *database-tests-step
+      - step: *docker-build-step
