@@ -32,11 +32,13 @@ import {
   CurriculumSourceLocaleImmutableError,
   CurriculumStructuralFieldImmutableError,
   CurriculumUpdateRequiresFieldsError,
+  CurriculumVersionCurriculumMismatchError,
   CurriculumVersionNotCloneableError,
   CurriculumVersionNotDraftError,
   CurriculumVersionNotFoundError,
   CurriculumVersionNotPublishedError,
   CurriculumVersionNumberConflictError,
+  CanonicalLessonKeyNotInCurriculumError,
   InvalidCurriculumAssignmentInputError,
   InvalidCurriculumCodeError,
   InvalidCurriculumDescriptionError,
@@ -201,6 +203,14 @@ export function rethrowCurriculumServiceError(error: unknown): never {
   }
 
   if (error instanceof CurriculumAssignmentVersionMismatchError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof CurriculumVersionCurriculumMismatchError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof CanonicalLessonKeyNotInCurriculumError) {
     throw new BadRequestException(error.message);
   }
 

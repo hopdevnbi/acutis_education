@@ -186,3 +186,17 @@ export class InvalidCurriculumAssignmentInputError extends Error {
     this.name = 'InvalidCurriculumAssignmentInputError';
   }
 }
+
+export class CanonicalLessonKeyNotInCurriculumError extends Error {
+  constructor() {
+    super('Canonical lesson key does not belong to the curriculum.');
+    this.name = 'CanonicalLessonKeyNotInCurriculumError';
+  }
+}
+
+export class CurriculumVersionCurriculumMismatchError extends Error {
+  constructor() {
+    super('Curriculum version does not belong to the curriculum.');
+    this.name = 'CurriculumVersionCurriculumMismatchError';
+  }
+}

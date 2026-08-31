@@ -23,6 +23,7 @@ import { TopicEntity } from '../entities/topic.entity';
 import { CurriculumStatus } from '../enums/curriculum-status.enum';
 import { CurriculumVersionStatus } from '../enums/curriculum-version-status.enum';
 import {
+  CanonicalLessonKeyNotInCurriculumError,
   CurriculumCatechismLevelInactiveError,
   CurriculumAssignmentAcademicYearNotDeliverableError,
   CurriculumAssignmentNotFoundError,
@@ -33,6 +34,7 @@ import {
   CurriculumNotFoundError,
   CurriculumSourceLocaleImmutableError,
   CurriculumUpdateRequiresFieldsError,
+  CurriculumVersionCurriculumMismatchError,
   CurriculumVersionNotCloneableError,
   CurriculumVersionNotDraftError,
   CurriculumVersionNotFoundError,
@@ -380,6 +382,42 @@ export class CurriculumService {
     }
 
     return toCurriculumVersionSnapshot(version);
+  }
+
+  async assertCanonicalLessonKeyBelongsToCurriculum(
+    rawCurriculumId: string,
+    rawCanonicalLessonKey: string,
+  ): Promise<void> {
+    const curriculumId = this.parseCurriculumId(rawCurriculumId);
+
+    if (!isUuidV4(rawCanonicalLessonKey)) {
+      throw new CanonicalLessonKeyNotInCurriculumError();
+    }
+
+    const canonicalLessonKey = normalizeUuid(rawCanonicalLessonKey);
+    const lessonCount = await this.lessonRepository
+      .createQueryBuilder('lesson')
+      .innerJoin(CurriculumVersionEntity, 'version', 'version.id = lesson.curriculumVersionId')
+      .where('version.curriculumId = :curriculumId', { curriculumId })
+      .andWhere('lesson.canonicalLessonKey = :canonicalLessonKey', { canonicalLessonKey })
+      .getCount();
+
+    if (lessonCount === 0) {
+      throw new CanonicalLessonKeyNotInCurriculumError();
+    }
+  }
+
+  async assertVersionBelongsToCurriculum(
+    rawVersionId: string,
+    rawCurriculumId: string,
+  ): Promise<void> {
+    const versionId = this.parseVersionId(rawVersionId);
+    const curriculumId = this.parseCurriculumId(rawCurriculumId);
+    const version = await this.findVersionEntity(versionId);
+
+    if (normalizeUuid(version.curriculumId) !== curriculumId) {
+      throw new CurriculumVersionCurriculumMismatchError();
+    }
   }
 
   async getVersionTree(rawVersionId: string): Promise<VersionTreeSnapshot> {

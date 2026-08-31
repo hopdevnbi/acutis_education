@@ -37,6 +37,7 @@ import { LearningContentService } from './learning-content/services/learning-con
 import { MediaModule } from './media/media.module';
 import { MediaAssetService } from './media/services/media-asset.service';
 import { QuestionBankModule } from './question-bank/question-bank.module';
+import { QuestionBankService } from './question-bank/services/question-bank.service';
 import { StudentAccessService } from './student/services/student-access.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
@@ -171,10 +172,12 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports nothing from QuestionBankModule', () => {
+  it('exports QuestionBankService only from QuestionBankModule', () => {
     const exports = resolveModuleExports(QuestionBankModule);
 
-    expect(exports).toHaveLength(0);
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(QuestionBankService);
+    expect(exports).not.toContain(TypeOrmModule);
   });
 
   it('does not import EnrollmentModule from StudentModule', () => {
