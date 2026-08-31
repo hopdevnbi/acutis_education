@@ -60,6 +60,55 @@ export interface QuestionAuthoringSnapshot {
   readonly correctOptionIds: string[];
 }
 
+export interface LearnerQuestionOptionProjection {
+  readonly id: string;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+  readonly sortOrder: number;
+}
+
+export interface LearnerQuestionProjection {
+  readonly questionVersionId: string;
+  readonly questionType: QuestionType;
+  readonly prompt: string;
+  readonly instruction: string | null;
+  readonly difficulty: QuestionDifficulty | null;
+  readonly promptMediaJson: string | null;
+  readonly options: readonly LearnerQuestionOptionProjection[];
+}
+
+export interface GradeAnswerInput {
+  readonly questionVersionId: string;
+  readonly selectedOptionIds: readonly string[];
+}
+
+export interface GradeAnswerResult {
+  readonly questionVersionId: string;
+  readonly questionType: QuestionType;
+  readonly isCorrect: boolean;
+  readonly score: 0 | 1;
+}
+
+export interface ImmutableAssessmentSnapshotOption {
+  readonly id: string;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+  readonly sortOrder: number;
+}
+
+export interface ImmutableAssessmentSnapshot {
+  readonly questionVersionId: string;
+  readonly questionId: string;
+  readonly questionType: QuestionType;
+  readonly sourceLocale: string;
+  readonly sourceContentHash: string | null;
+  readonly prompt: string;
+  readonly instruction: string | null;
+  readonly promptMediaJson: string | null;
+  readonly options: readonly ImmutableAssessmentSnapshotOption[];
+  readonly correctOptionIds: readonly string[];
+}
+
 export interface QuestionTagSnapshot {
   readonly id: string;
   readonly parishId: string;

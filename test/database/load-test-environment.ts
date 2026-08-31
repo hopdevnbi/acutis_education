@@ -58,31 +58,8 @@ export function loadTestEnvironment(): void {
     process.env['JWT_REFRESH_EXPIRES_IN'] = '7d';
   }
 
-  if (
-    process.env['AUTH_LOGIN_THROTTLE_LIMIT'] === undefined ||
-    process.env['AUTH_LOGIN_THROTTLE_LIMIT'].trim().length === 0
-  ) {
-    process.env['AUTH_LOGIN_THROTTLE_LIMIT'] = '1000';
-  }
-
-  if (
-    process.env['AUTH_LOGIN_THROTTLE_TTL_MS'] === undefined ||
-    process.env['AUTH_LOGIN_THROTTLE_TTL_MS'].trim().length === 0
-  ) {
-    process.env['AUTH_LOGIN_THROTTLE_TTL_MS'] = '60000';
-  }
-
-  if (
-    process.env['AUTH_REFRESH_THROTTLE_LIMIT'] === undefined ||
-    process.env['AUTH_REFRESH_THROTTLE_LIMIT'].trim().length === 0
-  ) {
-    process.env['AUTH_REFRESH_THROTTLE_LIMIT'] = '1000';
-  }
-
-  if (
-    process.env['AUTH_REFRESH_THROTTLE_TTL_MS'] === undefined ||
-    process.env['AUTH_REFRESH_THROTTLE_TTL_MS'].trim().length === 0
-  ) {
-    process.env['AUTH_REFRESH_THROTTLE_TTL_MS'] = '60000';
-  }
+  process.env['AUTH_LOGIN_THROTTLE_LIMIT'] = '1000';
+  process.env['AUTH_LOGIN_THROTTLE_TTL_MS'] = '60000';
+  process.env['AUTH_REFRESH_THROTTLE_LIMIT'] = '1000';
+  process.env['AUTH_REFRESH_THROTTLE_TTL_MS'] = '60000';
 }

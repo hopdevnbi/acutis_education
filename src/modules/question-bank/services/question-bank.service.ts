@@ -8,7 +8,7 @@ import {
   Repository,
   SelectQueryBuilder,
 } from 'typeorm';
-import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import { generateUuidV4, isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { isUniqueConstraintViolation } from '../../academic-structure/utils/unique-constraint.util';
 import { InvalidCurriculumSourceLocaleError } from '../../curriculum/errors/curriculum.errors';
 import { parseSourceLocale } from '../../curriculum/utils/curriculum-source-locale.util';
@@ -21,6 +21,8 @@ import {
 import { MediaAssetService } from '../../media/services/media-asset.service';
 import { ParishService } from '../../parish/services/parish.service';
 import { MAX_OPTIONS, MIN_OPTIONS } from '../constants/question-option.constants';
+import { QuestionCorrectOptionEntity } from '../entities/question-correct-option.entity';
+import { QuestionOptionEntity } from '../entities/question-option.entity';
 import { QuestionVersionEntity } from '../entities/question-version.entity';
 import { QuestionEntity } from '../entities/question.entity';
 import { QuestionDifficulty } from '../enums/question-difficulty.enum';
@@ -32,13 +34,16 @@ import {
   InvalidQuestionSourceLocaleError,
   InvalidQuestionTypeError,
   QuestionBlankDraftNotAllowedError,
+  QuestionCloneSourceInvalidError,
   QuestionCodeAlreadyExistsError,
   QuestionDraftAlreadyExistsError,
   QuestionInactiveError,
   QuestionNotFoundError,
   QuestionPublishValidationError,
   QuestionSourceLocaleImmutableError,
+  QuestionTypeChangeNotAllowedError,
   QuestionUpdateRequiresFieldsError,
+  QuestionVersionNotCloneableError,
   QuestionVersionNotDraftError,
   QuestionVersionNotFoundError,
   QuestionVersionNumberConflictError,
@@ -50,6 +55,10 @@ import type {
   CreateQuestionInput,
   CreateQuestionResult,
   CreateQuestionVersionInput,
+  GradeAnswerInput,
+  GradeAnswerResult,
+  ImmutableAssessmentSnapshot,
+  LearnerQuestionProjection,
   ListQuestionVersionsInput,
   ListQuestionsInput,
   ListQuestionsResult,
@@ -59,7 +68,11 @@ import type {
   UpdateQuestionInput,
   UpdateQuestionVersionInput,
 } from '../interfaces/question-bank.interface';
-import { toQuestionSnapshot, toQuestionVersionSnapshot } from '../mappers/question-bank.mapper';
+import {
+  toQuestionOptionSnapshot,
+  toQuestionSnapshot,
+  toQuestionVersionSnapshot,
+} from '../mappers/question-bank.mapper';
 import { parseQuestionCode } from '../utils/question-code.util';
 import {
   collectQuestionMediaJsonValidationIssues,
@@ -72,6 +85,7 @@ import {
   parseQuestionInstruction,
   parseQuestionPrompt,
 } from '../utils/question-text.util';
+import { QuestionGradingService } from './question-grading.service';
 import { QuestionOptionService } from './question-option.service';
 
 @Injectable()
@@ -83,6 +97,7 @@ export class QuestionBankService {
     private readonly questionVersionRepository: Repository<QuestionVersionEntity>,
     private readonly parishService: ParishService,
     private readonly questionOptionService: QuestionOptionService,
+    private readonly questionGradingService: QuestionGradingService,
     private readonly mediaAssetService: MediaAssetService,
     private readonly dataSource: DataSource,
   ) {}
@@ -388,7 +403,19 @@ export class QuestionBankService {
     this.assertQuestionActive(question);
 
     if (input.questionType !== undefined) {
-      version.questionType = this.parseQuestionType(input.questionType);
+      const nextQuestionType = this.parseQuestionType(input.questionType);
+
+      if (nextQuestionType !== version.questionType) {
+        const existingOptions = await this.questionOptionService.listOptionsByVersion(version.id);
+        const existingCorrectOptionIds =
+          await this.questionOptionService.getCorrectOptionIdsByVersion(version.id);
+
+        if (existingOptions.length > 0 || existingCorrectOptionIds.length > 0) {
+          throw new QuestionTypeChangeNotAllowedError();
+        }
+
+        version.questionType = nextQuestionType;
+      }
     }
 
     if (input.prompt !== undefined) {
@@ -419,10 +446,7 @@ export class QuestionBankService {
 
     const savedVersion = await this.questionVersionRepository.save(version);
 
-    if (
-      input.questionType === QuestionType.TrueFalse ||
-      version.questionType === QuestionType.TrueFalse
-    ) {
+    if (savedVersion.questionType === QuestionType.TrueFalse) {
       await this.questionOptionService.ensureTrueFalseOptions(savedVersion.id);
     }
 
@@ -449,6 +473,178 @@ export class QuestionBankService {
       options,
       correctOptionIds,
     };
+  }
+
+  async cloneVersionToDraft(
+    rawSourceVersionId: string,
+    createdByUserId: string,
+  ): Promise<QuestionAuthoringSnapshot> {
+    try {
+      return await this.dataSource.transaction(async (entityManager) =>
+        this.cloneVersionToDraftTransaction(rawSourceVersionId, createdByUserId, entityManager),
+      );
+    } catch (error: unknown) {
+      if (isUniqueConstraintViolation(error)) {
+        throw this.mapVersionUniqueConstraintError(error);
+      }
+
+      throw error;
+    }
+  }
+
+  async cloneVersionToDraftTransaction(
+    rawSourceVersionId: string,
+    createdByUserId: string,
+    entityManager: EntityManager,
+  ): Promise<QuestionAuthoringSnapshot> {
+    const sourceVersionId = this.parseVersionId(rawSourceVersionId);
+    const sourceVersion = await entityManager.findOne(QuestionVersionEntity, {
+      where: { id: sourceVersionId },
+    });
+
+    if (sourceVersion === null) {
+      throw new QuestionVersionNotFoundError();
+    }
+
+    if (
+      sourceVersion.status !== QuestionVersionStatus.Published &&
+      sourceVersion.status !== QuestionVersionStatus.Archived
+    ) {
+      throw new QuestionVersionNotCloneableError();
+    }
+
+    if (
+      sourceVersion.answerDefinitionJson !== null &&
+      sourceVersion.answerDefinitionJson.trim().length > 0
+    ) {
+      throw new QuestionCloneSourceInvalidError();
+    }
+
+    const question = await entityManager.findOne(QuestionEntity, {
+      where: { id: sourceVersion.questionId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (question === null) {
+      throw new QuestionNotFoundError();
+    }
+
+    this.assertQuestionActive(question);
+
+    const existingDraft = await entityManager.findOne(QuestionVersionEntity, {
+      where: {
+        questionId: question.id,
+        status: QuestionVersionStatus.Draft,
+      },
+    });
+
+    if (existingDraft !== null) {
+      throw new QuestionDraftAlreadyExistsError();
+    }
+
+    const maxVersionNumber = await entityManager
+      .createQueryBuilder(QuestionVersionEntity, 'version')
+      .select('MAX(version.versionNumber)', 'maxVersionNumber')
+      .where('version.questionId = :questionId', { questionId: question.id })
+      .getRawOne<{ maxVersionNumber: number | null }>();
+
+    const nextVersionNumber = (maxVersionNumber?.maxVersionNumber ?? 0) + 1;
+
+    const draftVersion = entityManager.create(QuestionVersionEntity, {
+      questionId: question.id,
+      versionNumber: nextVersionNumber,
+      status: QuestionVersionStatus.Draft,
+      questionType: sourceVersion.questionType,
+      prompt: sourceVersion.prompt,
+      instruction: sourceVersion.instruction,
+      explanation: sourceVersion.explanation,
+      promptMediaJson: sourceVersion.promptMediaJson,
+      explanationMediaJson: sourceVersion.explanationMediaJson,
+      answerDefinitionJson: null,
+      difficulty: sourceVersion.difficulty,
+      sourceContentHash: null,
+      createdByUserId: normalizeUuid(createdByUserId),
+      publishedByUserId: null,
+      publishedAt: null,
+    });
+
+    const savedDraftVersion = await entityManager.save(QuestionVersionEntity, draftVersion);
+
+    const sourceOptions = await entityManager.find(QuestionOptionEntity, {
+      where: { questionVersionId: sourceVersion.id },
+      order: { sortOrder: 'ASC' },
+    });
+
+    const optionIdMap = new Map<string, string>();
+
+    for (const sourceOption of sourceOptions) {
+      const newOptionId = generateUuidV4();
+      optionIdMap.set(normalizeUuid(sourceOption.id), newOptionId);
+
+      const clonedOption = entityManager.create(QuestionOptionEntity, {
+        id: newOptionId,
+        questionVersionId: savedDraftVersion.id,
+        code: sourceOption.code,
+        text: sourceOption.text,
+        mediaAssetId: sourceOption.mediaAssetId,
+        sortOrder: sourceOption.sortOrder,
+      });
+
+      await entityManager.save(QuestionOptionEntity, clonedOption);
+    }
+
+    const sourceCorrectOptions = await entityManager.find(QuestionCorrectOptionEntity, {
+      where: { questionVersionId: sourceVersion.id },
+    });
+
+    const correctOptionIds: string[] = [];
+
+    for (const sourceCorrectOption of sourceCorrectOptions) {
+      const remappedOptionId = optionIdMap.get(normalizeUuid(sourceCorrectOption.optionId));
+
+      if (remappedOptionId === undefined) {
+        throw new QuestionCloneSourceInvalidError();
+      }
+
+      const clonedCorrectOption = entityManager.create(QuestionCorrectOptionEntity, {
+        questionVersionId: savedDraftVersion.id,
+        optionId: remappedOptionId,
+      });
+
+      await entityManager.save(QuestionCorrectOptionEntity, clonedCorrectOption);
+      correctOptionIds.push(remappedOptionId);
+    }
+
+    await this.questionOptionService.recomputeSourceContentHash(
+      entityManager,
+      savedDraftVersion.id,
+    );
+
+    const refreshedVersion = await entityManager.findOne(QuestionVersionEntity, {
+      where: { id: savedDraftVersion.id },
+    });
+    const clonedOptions = await entityManager.find(QuestionOptionEntity, {
+      where: { questionVersionId: savedDraftVersion.id },
+      order: { sortOrder: 'ASC' },
+    });
+
+    return {
+      version: toQuestionVersionSnapshot(refreshedVersion ?? savedDraftVersion),
+      options: clonedOptions.map(toQuestionOptionSnapshot),
+      correctOptionIds,
+    };
+  }
+
+  async getLearnerQuestionProjection(rawVersionId: string): Promise<LearnerQuestionProjection> {
+    return this.questionGradingService.getLearnerQuestionProjection(rawVersionId);
+  }
+
+  async gradeAnswer(input: GradeAnswerInput): Promise<GradeAnswerResult> {
+    return this.questionGradingService.gradeAnswer(input);
+  }
+
+  async getImmutableAssessmentSnapshot(rawVersionId: string): Promise<ImmutableAssessmentSnapshot> {
+    return this.questionGradingService.getImmutableAssessmentSnapshot(rawVersionId);
   }
 
   async collectPublishValidationIssues(

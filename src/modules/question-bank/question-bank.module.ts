@@ -17,6 +17,7 @@ import { QuestionVersionEntity } from './entities/question-version.entity';
 import { QuestionEntity } from './entities/question.entity';
 import { QuestionBankService } from './services/question-bank.service';
 import { QuestionCurriculumLinkService } from './services/question-curriculum-link.service';
+import { QuestionGradingService } from './services/question-grading.service';
 import { QuestionOptionService } from './services/question-option.service';
 import { QuestionTagService } from './services/question-tag.service';
 
@@ -41,6 +42,7 @@ import { QuestionTagService } from './services/question-tag.service';
   providers: [
     QuestionBankService,
     QuestionOptionService,
+    QuestionGradingService,
     QuestionTagService,
     QuestionCurriculumLinkService,
   ],

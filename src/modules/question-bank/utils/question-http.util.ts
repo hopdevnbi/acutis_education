@@ -42,6 +42,7 @@ import {
   InvalidQuestionOptionTextError,
   InvalidCorrectOptionIdsError,
   DuplicateQuestionOptionCodeError,
+  InvalidGradeAnswerInputError,
   InvalidQuestionPromptError,
   InvalidQuestionSourceLocaleError,
   InvalidQuestionTagCodeError,
@@ -50,6 +51,7 @@ import {
   InvalidQuestionTypeError,
   InvalidQuestionVersionIdError,
   QuestionBlankDraftNotAllowedError,
+  QuestionCloneSourceInvalidError,
   QuestionCodeAlreadyExistsError,
   QuestionCurriculumLinkAlreadyExistsError,
   QuestionCurriculumLinkNotFoundError,
@@ -60,6 +62,7 @@ import {
   QuestionParishImmutableError,
   QuestionPublishValidationError,
   QuestionSourceLocaleImmutableError,
+  QuestionTypeChangeNotAllowedError,
   QuestionTagCodeAlreadyExistsError,
   QuestionTagInactiveError,
   QuestionTagLinkAlreadyExistsError,
@@ -70,6 +73,7 @@ import {
   QuestionVersionNotCloneableError,
   QuestionVersionNotDraftError,
   QuestionVersionNotFoundError,
+  QuestionVersionNotGradableError,
   QuestionVersionNotPublishedError,
   QuestionVersionNumberConflictError,
   QuestionOptionNotFoundError,
@@ -172,6 +176,14 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof InvalidGradeAnswerInputError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof QuestionCloneSourceInvalidError) {
+    throw new BadRequestException(error.message);
+  }
+
   if (
     error instanceof MediaAssetNotFoundError ||
     error instanceof MediaAssetNotReadyError ||
@@ -245,6 +257,14 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
   }
 
   if (error instanceof QuestionVersionNotCloneableError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof QuestionTypeChangeNotAllowedError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof QuestionVersionNotGradableError) {
     throw new ConflictException(error.message);
   }
 

@@ -96,6 +96,34 @@ export class QuestionVersionNotCloneableError extends Error {
   }
 }
 
+export class QuestionCloneSourceInvalidError extends Error {
+  constructor() {
+    super('Question version clone source is invalid.');
+    this.name = 'QuestionCloneSourceInvalidError';
+  }
+}
+
+export class QuestionTypeChangeNotAllowedError extends Error {
+  constructor() {
+    super('Question type cannot be changed while options or correct answers exist.');
+    this.name = 'QuestionTypeChangeNotAllowedError';
+  }
+}
+
+export class QuestionVersionNotGradableError extends Error {
+  constructor() {
+    super('Question version cannot be graded.');
+    this.name = 'QuestionVersionNotGradableError';
+  }
+}
+
+export class InvalidGradeAnswerInputError extends Error {
+  constructor() {
+    super('Invalid grade answer input.');
+    this.name = 'InvalidGradeAnswerInputError';
+  }
+}
+
 export class QuestionVersionNumberConflictError extends Error {
   constructor() {
     super('Question version number conflict.');

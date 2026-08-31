@@ -19,13 +19,17 @@ import {
   InvalidQuestionSourceLocaleError,
   QuestionCodeAlreadyExistsError,
   QuestionDraftAlreadyExistsError,
+  QuestionInactiveError,
   QuestionNotFoundError,
   QuestionSourceLocaleImmutableError,
+  QuestionTypeChangeNotAllowedError,
   QuestionUpdateRequiresFieldsError,
+  QuestionVersionNotCloneableError,
   QuestionVersionNotDraftError,
   QuestionPublishValidationError,
 } from '../errors/question-bank.errors';
 import { QuestionBankService } from './question-bank.service';
+import { QuestionGradingService } from './question-grading.service';
 import { QuestionOptionService } from './question-option.service';
 
 function mockDataSourceTransaction(
@@ -61,6 +65,12 @@ describe('QuestionBankService', () => {
       | 'recomputeSourceContentHash'
       | 'listOptionsByVersion'
       | 'getCorrectOptionIdsByVersion'
+    >
+  >;
+  let questionGradingService: jest.Mocked<
+    Pick<
+      QuestionGradingService,
+      'getLearnerQuestionProjection' | 'gradeAnswer' | 'getImmutableAssessmentSnapshot'
     >
   >;
   let mediaAssetService: jest.Mocked<Pick<MediaAssetService, 'assertAssetCategory'>>;
@@ -131,6 +141,12 @@ describe('QuestionBankService', () => {
       getCorrectOptionIdsByVersion: jest.fn().mockResolvedValue([]),
     };
 
+    questionGradingService = {
+      getLearnerQuestionProjection: jest.fn(),
+      gradeAnswer: jest.fn(),
+      getImmutableAssessmentSnapshot: jest.fn(),
+    };
+
     mediaAssetService = {
       assertAssetCategory: jest.fn().mockResolvedValue({
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -154,6 +170,7 @@ describe('QuestionBankService', () => {
         { provide: getRepositoryToken(QuestionVersionEntity), useValue: questionVersionRepository },
         { provide: ParishService, useValue: parishService },
         { provide: QuestionOptionService, useValue: questionOptionService },
+        { provide: QuestionGradingService, useValue: questionGradingService },
         { provide: MediaAssetService, useValue: mediaAssetService },
         { provide: DataSource, useValue: dataSource },
       ],
@@ -555,6 +572,170 @@ describe('QuestionBankService', () => {
 
     await expect(questionBankService.publishDraftVersion(versionId, userId)).rejects.toBeInstanceOf(
       QuestionPublishValidationError,
+    );
+  });
+
+  it('rejects question type change when options already exist', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      id: versionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Draft,
+      questionType: QuestionType.SingleChoice,
+      prompt: 'Prompt',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: null,
+      sourceContentHash: null,
+      createdByUserId: userId,
+      publishedByUserId: null,
+      publishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    questionRepository.findOne.mockResolvedValue(activeQuestion);
+    questionOptionService.listOptionsByVersion.mockResolvedValue([
+      {
+        id: '66666666-6666-4666-8666-666666666666',
+        questionVersionId: versionId,
+        code: 'a',
+        text: 'Option A',
+        mediaAssetId: null,
+        sortOrder: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    questionOptionService.getCorrectOptionIdsByVersion.mockResolvedValue([]);
+
+    await expect(
+      questionBankService.updateDraftVersion(versionId, { questionType: QuestionType.TrueFalse }),
+    ).rejects.toBeInstanceOf(QuestionTypeChangeNotAllowedError);
+  });
+
+  it('rejects cloning a draft source version', async () => {
+    const entityManager = {
+      findOne: jest.fn().mockResolvedValue({
+        id: versionId,
+        questionId,
+        versionNumber: 1,
+        status: QuestionVersionStatus.Draft,
+        questionType: QuestionType.SingleChoice,
+        prompt: 'Draft',
+        instruction: null,
+        explanation: null,
+        promptMediaJson: null,
+        explanationMediaJson: null,
+        answerDefinitionJson: null,
+        difficulty: null,
+        sourceContentHash: null,
+        createdByUserId: userId,
+        publishedByUserId: null,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    } as unknown as EntityManager;
+
+    mockDataSourceTransaction(dataSource, entityManager);
+
+    await expect(questionBankService.cloneVersionToDraft(versionId, userId)).rejects.toBeInstanceOf(
+      QuestionVersionNotCloneableError,
+    );
+  });
+
+  it('rejects cloning when question root is inactive', async () => {
+    const entityManager = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: versionId,
+          questionId,
+          versionNumber: 1,
+          status: QuestionVersionStatus.Published,
+          questionType: QuestionType.SingleChoice,
+          prompt: 'Published',
+          instruction: null,
+          explanation: null,
+          promptMediaJson: null,
+          explanationMediaJson: null,
+          answerDefinitionJson: null,
+          difficulty: QuestionDifficulty.Easy,
+          sourceContentHash: 'hash',
+          createdByUserId: userId,
+          publishedByUserId: userId,
+          publishedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .mockResolvedValueOnce({
+          ...activeQuestion,
+          status: QuestionStatus.Inactive,
+        }),
+    } as unknown as EntityManager;
+
+    mockDataSourceTransaction(dataSource, entityManager);
+
+    await expect(questionBankService.cloneVersionToDraft(versionId, userId)).rejects.toBeInstanceOf(
+      QuestionInactiveError,
+    );
+  });
+
+  it('rejects cloning when a draft already exists', async () => {
+    const entityManager = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce({
+          id: versionId,
+          questionId,
+          versionNumber: 1,
+          status: QuestionVersionStatus.Published,
+          questionType: QuestionType.SingleChoice,
+          prompt: 'Published',
+          instruction: null,
+          explanation: null,
+          promptMediaJson: null,
+          explanationMediaJson: null,
+          answerDefinitionJson: null,
+          difficulty: QuestionDifficulty.Easy,
+          sourceContentHash: 'hash',
+          createdByUserId: userId,
+          publishedByUserId: userId,
+          publishedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .mockResolvedValueOnce(activeQuestion)
+        .mockResolvedValueOnce({
+          id: '99999999-9999-4999-8999-999999999999',
+          questionId,
+          versionNumber: 2,
+          status: QuestionVersionStatus.Draft,
+          questionType: QuestionType.SingleChoice,
+          prompt: 'Draft',
+          instruction: null,
+          explanation: null,
+          promptMediaJson: null,
+          explanationMediaJson: null,
+          answerDefinitionJson: null,
+          difficulty: null,
+          sourceContentHash: null,
+          createdByUserId: userId,
+          publishedByUserId: null,
+          publishedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      createQueryBuilder: jest.fn(),
+    } as unknown as EntityManager;
+
+    mockDataSourceTransaction(dataSource, entityManager);
+
+    await expect(questionBankService.cloneVersionToDraft(versionId, userId)).rejects.toBeInstanceOf(
+      QuestionDraftAlreadyExistsError,
     );
   });
 });

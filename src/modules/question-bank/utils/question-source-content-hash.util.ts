@@ -30,7 +30,6 @@ export function computeQuestionSourceContentHash(input: QuestionSourceContentHas
     options: [...input.options]
       .sort((left, right) => left.sortOrder - right.sortOrder)
       .map((option) => ({
-        id: option.id,
         code: option.code,
         text: option.text,
         mediaAssetId: option.mediaAssetId,

@@ -198,6 +198,30 @@ export class QuestionVersionController {
     }
   }
 
+  @Post('question-versions/:versionId/clone-to-draft')
+  @RequirePermissions(QUESTION_MANAGE_PERMISSION)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Clone a published or archived question version to a new draft' })
+  @ApiOkResponse({ type: QuestionAuthoringResponseDto })
+  async cloneVersionToDraft(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('versionId') versionId: string,
+  ): Promise<QuestionAuthoringResponseDto> {
+    try {
+      const parishId = await this.questionBankService.getVersionQuestionParishId(versionId);
+      await this.parishScopeService.assertCanManageParish(authenticatedUser.userId, parishId);
+
+      const snapshot = await this.questionBankService.cloneVersionToDraft(
+        versionId,
+        authenticatedUser.userId,
+      );
+
+      return toQuestionAuthoringResponse(snapshot);
+    } catch (error: unknown) {
+      rethrowQuestionBankServiceError(error);
+    }
+  }
+
   @Post('question-versions/:versionId/publish')
   @RequirePermissions(QUESTION_PUBLISH_PERMISSION)
   @HttpCode(HttpStatus.OK)
