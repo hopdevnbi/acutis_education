@@ -6,6 +6,7 @@ import { CurriculumModule } from '../curriculum/curriculum.module';
 import { MediaModule } from '../media/media.module';
 import { ParishModule } from '../parish/parish.module';
 import { QuestionController } from './controllers/question.controller';
+import { QuestionImportController } from './controllers/question-import.controller';
 import { QuestionTagController } from './controllers/question-tag.controller';
 import { QuestionVersionController } from './controllers/question-version.controller';
 import { QuestionCorrectOptionEntity } from './entities/question-correct-option.entity';
@@ -17,7 +18,9 @@ import { QuestionVersionEntity } from './entities/question-version.entity';
 import { QuestionEntity } from './entities/question.entity';
 import { QuestionBankService } from './services/question-bank.service';
 import { QuestionCurriculumLinkService } from './services/question-curriculum-link.service';
+import { QuestionExportService } from './services/question-export.service';
 import { QuestionGradingService } from './services/question-grading.service';
+import { QuestionImportValidationService } from './services/question-import-validation.service';
 import { QuestionOptionService } from './services/question-option.service';
 import { QuestionTagService } from './services/question-tag.service';
 
@@ -38,13 +41,20 @@ import { QuestionTagService } from './services/question-tag.service';
     AuthModule,
     AccessControlModule,
   ],
-  controllers: [QuestionController, QuestionVersionController, QuestionTagController],
+  controllers: [
+    QuestionController,
+    QuestionVersionController,
+    QuestionTagController,
+    QuestionImportController,
+  ],
   providers: [
     QuestionBankService,
     QuestionOptionService,
     QuestionGradingService,
     QuestionTagService,
     QuestionCurriculumLinkService,
+    QuestionExportService,
+    QuestionImportValidationService,
   ],
   exports: [QuestionBankService],
 })

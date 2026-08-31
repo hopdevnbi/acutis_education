@@ -8,7 +8,11 @@ import type {
   QuestionCurriculumLinkListResponse,
   QuestionCurriculumLinkResponse,
   QuestionCurriculumLinkSnapshot,
+  QuestionExportPackageV1Response,
+  QuestionListItemResponse,
+  QuestionListItemSnapshot,
   QuestionListResponse,
+  QuestionListVersionSummary,
   QuestionOptionListResponse,
   QuestionOptionResponse,
   QuestionOptionSnapshot,
@@ -40,13 +44,82 @@ export function toQuestionResponse(snapshot: QuestionSnapshot): QuestionResponse
   };
 }
 
+export function toQuestionListVersionSummaryResponse(
+  summary: QuestionListVersionSummary,
+): QuestionListItemResponse['currentDraftVersion'] {
+  return {
+    id: summary.id,
+    versionNumber: summary.versionNumber,
+    questionType: summary.questionType,
+    difficulty: summary.difficulty,
+    status: summary.status,
+    publishedAt: summary.publishedAt?.toISOString() ?? null,
+  };
+}
+
+export function toQuestionListItemResponse(
+  snapshot: QuestionListItemSnapshot,
+): QuestionListItemResponse {
+  return {
+    id: snapshot.id,
+    parishId: snapshot.parishId,
+    code: snapshot.code,
+    status: snapshot.status,
+    sourceLocale: snapshot.sourceLocale,
+    currentPublishedVersionId: snapshot.currentPublishedVersionId,
+    createdByUserId: snapshot.createdByUserId,
+    createdAt: snapshot.createdAt.toISOString(),
+    updatedAt: snapshot.updatedAt.toISOString(),
+    currentDraftVersion:
+      snapshot.currentDraftVersion === null
+        ? null
+        : toQuestionListVersionSummaryResponse(snapshot.currentDraftVersion),
+    currentPublishedVersion:
+      snapshot.currentPublishedVersion === null
+        ? null
+        : toQuestionListVersionSummaryResponse(snapshot.currentPublishedVersion),
+    hasDraft: snapshot.hasDraft,
+    hasPublished: snapshot.hasPublished,
+  };
+}
+
 export function toQuestionListResponse(result: ListQuestionsResult): QuestionListResponse {
   return {
-    items: result.items.map(toQuestionResponse),
+    items: result.items.map(toQuestionListItemResponse),
     page: result.page,
     limit: result.limit,
     total: result.total,
     totalPages: result.totalPages,
+  };
+}
+
+export function toQuestionExportPackageResponse(
+  snapshot: QuestionExportPackageV1Response,
+): QuestionExportPackageV1Response {
+  return {
+    schemaVersion: snapshot.schemaVersion,
+    sourceQuestionCode: snapshot.sourceQuestionCode,
+    sourceLocale: snapshot.sourceLocale,
+    versionNumber: snapshot.versionNumber,
+    questionType: snapshot.questionType,
+    prompt: snapshot.prompt,
+    instruction: snapshot.instruction,
+    explanation: snapshot.explanation,
+    difficulty: snapshot.difficulty,
+    promptMediaJson: snapshot.promptMediaJson,
+    explanationMediaJson: snapshot.explanationMediaJson,
+    options: snapshot.options.map((option) => ({
+      exportKey: option.exportKey,
+      code: option.code,
+      text: option.text,
+      mediaAssetId: option.mediaAssetId,
+    })),
+    correctOptionKeys: [...snapshot.correctOptionKeys],
+    tagCodes: [...snapshot.tagCodes],
+    curriculumLinks: snapshot.curriculumLinks.map((link) => ({
+      curriculumId: link.curriculumId,
+      canonicalLessonKey: link.canonicalLessonKey,
+    })),
   };
 }
 

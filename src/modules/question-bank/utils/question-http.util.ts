@@ -78,6 +78,7 @@ import {
   QuestionVersionNotGradableError,
   QuestionVersionNotPublishedError,
   QuestionVersionNumberConflictError,
+  QuestionListFilterRequiresCurriculumIdError,
   QuestionOptionNotFoundError,
 } from '../errors/question-bank.errors';
 
@@ -203,6 +204,10 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidQuestionCurriculumLinkInputError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof QuestionListFilterRequiresCurriculumIdError) {
     throw new BadRequestException(error.message);
   }
 

@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { QuestionResponseDto } from './question-response.dto';
+import { QuestionListItemResponseDto } from './question-list-item-response.dto';
 
 export class QuestionListResponseDto {
-  @ApiProperty({ type: [QuestionResponseDto] })
-  items!: QuestionResponseDto[];
+  @ApiProperty({ type: [QuestionListItemResponseDto] })
+  items!: QuestionListItemResponseDto[];
 
   @ApiProperty()
   page!: number;

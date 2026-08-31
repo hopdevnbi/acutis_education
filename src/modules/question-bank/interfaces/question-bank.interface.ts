@@ -176,11 +176,46 @@ export interface ListQuestionsInput {
   readonly sort: (typeof QUESTION_SORT_DIRECTIONS)[number];
   readonly status?: QuestionStatus;
   readonly sourceLocale?: string;
+  readonly code?: string;
   readonly search?: string;
+  readonly questionType?: QuestionType;
+  readonly difficulty?: QuestionDifficulty;
+  readonly versionStatus?: QuestionVersionStatus;
+  readonly hasDraft?: boolean;
+  readonly hasPublished?: boolean;
+  readonly tagId?: string;
+  readonly tagCode?: string;
+  readonly curriculumId?: string;
+  readonly canonicalLessonKey?: string;
+}
+
+export interface QuestionListVersionSummary {
+  readonly id: string;
+  readonly versionNumber: number;
+  readonly questionType: QuestionType;
+  readonly difficulty: QuestionDifficulty | null;
+  readonly status: QuestionVersionStatus;
+  readonly publishedAt?: Date | null;
+}
+
+export interface QuestionListItemSnapshot {
+  readonly id: string;
+  readonly parishId: string;
+  readonly code: string | null;
+  readonly status: QuestionStatus;
+  readonly sourceLocale: string;
+  readonly currentPublishedVersionId: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly currentDraftVersion: QuestionListVersionSummary | null;
+  readonly currentPublishedVersion: QuestionListVersionSummary | null;
+  readonly hasDraft: boolean;
+  readonly hasPublished: boolean;
 }
 
 export interface ListQuestionsResult {
-  readonly items: QuestionSnapshot[];
+  readonly items: QuestionListItemSnapshot[];
   readonly page: number;
   readonly limit: number;
   readonly total: number;
@@ -288,12 +323,69 @@ export interface QuestionVersionResponse {
 }
 
 export interface QuestionListResponse {
-  readonly items: QuestionResponse[];
+  readonly items: QuestionListItemResponse[];
   readonly page: number;
   readonly limit: number;
   readonly total: number;
   readonly totalPages: number;
 }
+
+export interface QuestionListVersionSummaryResponse {
+  readonly id: string;
+  readonly versionNumber: number;
+  readonly questionType: QuestionType;
+  readonly difficulty: QuestionDifficulty | null;
+  readonly status: QuestionVersionStatus;
+  readonly publishedAt?: string | null;
+}
+
+export interface QuestionListItemResponse {
+  readonly id: string;
+  readonly parishId: string;
+  readonly code: string | null;
+  readonly status: QuestionStatus;
+  readonly sourceLocale: string;
+  readonly currentPublishedVersionId: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly currentDraftVersion: QuestionListVersionSummaryResponse | null;
+  readonly currentPublishedVersion: QuestionListVersionSummaryResponse | null;
+  readonly hasDraft: boolean;
+  readonly hasPublished: boolean;
+}
+
+export interface QuestionExportOptionV1Response {
+  readonly exportKey: string;
+  readonly code: string | null;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+}
+
+export interface QuestionExportCurriculumLinkV1Response {
+  readonly curriculumId: string;
+  readonly canonicalLessonKey: string | null;
+}
+
+export interface QuestionExportPackageV1Response {
+  readonly schemaVersion: number;
+  readonly sourceQuestionCode: string | null;
+  readonly sourceLocale: string;
+  readonly versionNumber: number;
+  readonly questionType: QuestionType;
+  readonly prompt: string;
+  readonly instruction: string | null;
+  readonly explanation: string | null;
+  readonly difficulty: QuestionDifficulty | null;
+  readonly promptMediaJson: string | null;
+  readonly explanationMediaJson: string | null;
+  readonly options: readonly QuestionExportOptionV1Response[];
+  readonly correctOptionKeys: readonly string[];
+  readonly tagCodes: readonly string[];
+  readonly curriculumLinks: readonly QuestionExportCurriculumLinkV1Response[];
+}
+
+export type QuestionExportPackageV1Snapshot = QuestionExportPackageV1Response;
 
 export interface QuestionVersionListResponse {
   readonly items: QuestionVersionResponse[];

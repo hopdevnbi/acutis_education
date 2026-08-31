@@ -32,6 +32,7 @@ import {
 } from '../constants/question-permissions.constants';
 import { QuestionAuthoringResponseDto } from '../dto/question-authoring-response.dto';
 import { QuestionOptionListResponseDto } from '../dto/question-option-response.dto';
+import { QuestionExportPackageV1Dto } from '../dto/question-export-package-v1.dto';
 import { QuestionPublishValidationErrorDto } from '../dto/publish-validation-error.dto';
 import { QuestionVersionPreviewResponseDto } from '../dto/question-version-preview-response.dto';
 import { QuestionVersionResponseDto } from '../dto/question-version-response.dto';
@@ -40,6 +41,7 @@ import { SetCorrectOptionsRequestDto } from '../dto/set-correct-options-request.
 import { UpdateQuestionVersionRequestDto } from '../dto/update-question-version-request.dto';
 import {
   toQuestionAuthoringResponse,
+  toQuestionExportPackageResponse,
   toQuestionOptionListResponse,
   toQuestionVersionPreviewResponse,
   toQuestionVersionResponse,
@@ -102,6 +104,32 @@ export class QuestionVersionController {
       const preview = await this.questionBankService.getQuestionVersionPreview(versionId);
 
       return toQuestionVersionPreviewResponse(preview);
+    } catch (error: unknown) {
+      rethrowQuestionBankServiceError(error);
+    }
+  }
+
+  @Get('question-versions/:versionId/export')
+  @RequirePermissions(QUESTION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Export a question version as a portable JSON package (schema v1)',
+    description:
+      'Read-only export for admin workflows. Includes tag codes and curriculum links. Media asset ids are environment-local.',
+  })
+  @ApiOkResponse({ type: QuestionExportPackageV1Dto })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Missing questions.read permission or parish scope' })
+  async exportVersion(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('versionId') versionId: string,
+  ): Promise<QuestionExportPackageV1Dto> {
+    try {
+      const parishId = await this.questionBankService.getVersionQuestionParishId(versionId);
+      await this.parishScopeService.assertCanReadParishAsAdmin(authenticatedUser.userId, parishId);
+
+      const exportPackage = await this.questionBankService.exportQuestionVersion(versionId);
+
+      return toQuestionExportPackageResponse(exportPackage) as QuestionExportPackageV1Dto;
     } catch (error: unknown) {
       rethrowQuestionBankServiceError(error);
     }

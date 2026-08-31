@@ -28,9 +28,12 @@ import {
   QuestionVersionNotCloneableError,
   QuestionVersionNotDraftError,
   QuestionPublishValidationError,
+  QuestionListFilterRequiresCurriculumIdError,
 } from '../errors/question-bank.errors';
 import { QuestionBankService } from './question-bank.service';
+import { QuestionExportService } from './question-export.service';
 import { QuestionGradingService } from './question-grading.service';
+import { QuestionImportValidationService } from './question-import-validation.service';
 import { QuestionOptionService } from './question-option.service';
 
 function mockDataSourceTransaction(
@@ -56,7 +59,10 @@ describe('QuestionBankService', () => {
     Pick<Repository<QuestionEntity>, 'create' | 'save' | 'findOne' | 'createQueryBuilder' | 'count'>
   >;
   let questionVersionRepository: jest.Mocked<
-    Pick<Repository<QuestionVersionEntity>, 'findOne' | 'count' | 'save' | 'manager'>
+    Pick<
+      Repository<QuestionVersionEntity>,
+      'findOne' | 'count' | 'save' | 'manager' | 'find' | 'createQueryBuilder'
+    >
   >;
   let parishService: jest.Mocked<Pick<ParishService, 'assertParishActive' | 'getParishById'>>;
   let questionOptionService: jest.Mocked<
@@ -82,8 +88,23 @@ describe('QuestionBankService', () => {
   let queryBuilder: jest.Mocked<
     Pick<
       SelectQueryBuilder<QuestionEntity>,
-      'where' | 'andWhere' | 'orderBy' | 'skip' | 'take' | 'getCount' | 'getMany'
+      | 'where'
+      | 'andWhere'
+      | 'orderBy'
+      | 'skip'
+      | 'take'
+      | 'getCount'
+      | 'getMany'
+      | 'leftJoin'
+      | 'innerJoin'
+      | 'distinct'
+      | 'clone'
+      | 'select'
+      | 'getRawOne'
     >
+  >;
+  let versionQueryBuilder: jest.Mocked<
+    Pick<SelectQueryBuilder<QuestionVersionEntity>, 'where' | 'andWhere' | 'getMany'>
   >;
 
   const parishId = '11111111-1111-4111-8111-111111111111';
@@ -121,6 +142,21 @@ describe('QuestionBankService', () => {
       take: jest.fn().mockReturnThis(),
       getCount: jest.fn().mockResolvedValue(0),
       getMany: jest.fn().mockResolvedValue([]),
+      leftJoin: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      distinct: jest.fn().mockReturnThis(),
+      clone: jest.fn(),
+      select: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ count: 0 }),
+    };
+    queryBuilder.clone.mockReturnValue(
+      queryBuilder as unknown as SelectQueryBuilder<QuestionEntity>,
+    );
+
+    versionQueryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
     };
 
     questionRepository = {
@@ -136,6 +172,8 @@ describe('QuestionBankService', () => {
       count: jest.fn().mockResolvedValue(0),
       save: jest.fn(),
       manager: {} as EntityManager,
+      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn().mockReturnValue(versionQueryBuilder),
     };
 
     questionOptionService = {
@@ -178,6 +216,14 @@ describe('QuestionBankService', () => {
         { provide: QuestionGradingService, useValue: questionGradingService },
         { provide: MediaAssetService, useValue: mediaAssetService },
         { provide: DataSource, useValue: dataSource },
+        {
+          provide: QuestionExportService,
+          useValue: { buildExportPackage: jest.fn() },
+        },
+        {
+          provide: QuestionImportValidationService,
+          useValue: { validate: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -362,21 +408,78 @@ describe('QuestionBankService', () => {
     );
   });
 
-  it('lists questions with pagination metadata', async () => {
+  it('lists questions with pagination metadata and version summaries', async () => {
     queryBuilder.getCount.mockResolvedValue(1);
     queryBuilder.getMany.mockResolvedValue([activeQuestion]);
+    versionQueryBuilder.getMany.mockResolvedValue([
+      {
+        id: versionId,
+        questionId,
+        versionNumber: 1,
+        status: QuestionVersionStatus.Draft,
+        questionType: QuestionType.SingleChoice,
+        prompt: 'Draft prompt',
+        instruction: null,
+        explanation: null,
+        promptMediaJson: null,
+        explanationMediaJson: null,
+        answerDefinitionJson: null,
+        difficulty: QuestionDifficulty.Easy,
+        sourceContentHash: null,
+        createdByUserId: userId,
+        publishedByUserId: null,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
 
     const result = await questionBankService.listQuestionsByParish(parishId, {
       page: 1,
       limit: 20,
-      sortBy: 'createdAt',
+      sortBy: 'updatedAt',
       sort: 'DESC',
     });
 
     expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.hasDraft).toBe(true);
+    expect(result.items[0]?.hasPublished).toBe(false);
+    expect(result.items[0]?.currentDraftVersion?.questionType).toBe(QuestionType.SingleChoice);
     expect(result.total).toBe(1);
     expect(result.totalPages).toBe(1);
     expect(parishService.getParishById).toHaveBeenCalledWith(parishId);
+  });
+
+  it('applies effective-version search filters with distinct joins', async () => {
+    queryBuilder.getRawOne.mockResolvedValue({ count: 2 });
+    queryBuilder.getMany.mockResolvedValue([activeQuestion]);
+
+    await questionBankService.listQuestionsByParish(parishId, {
+      page: 1,
+      limit: 20,
+      sortBy: 'updatedAt',
+      sort: 'DESC',
+      search: 'Bí tích',
+      questionType: QuestionType.SingleChoice,
+      difficulty: QuestionDifficulty.Easy,
+      hasDraft: true,
+    });
+
+    expect(queryBuilder.leftJoin).toHaveBeenCalled();
+    expect(queryBuilder.distinct).toHaveBeenCalledWith(true);
+    expect(queryBuilder.andWhere).toHaveBeenCalled();
+  });
+
+  it('rejects canonicalLessonKey filter without curriculumId', async () => {
+    await expect(
+      questionBankService.listQuestionsByParish(parishId, {
+        page: 1,
+        limit: 20,
+        sortBy: 'updatedAt',
+        sort: 'DESC',
+        canonicalLessonKey: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      }),
+    ).rejects.toBeInstanceOf(QuestionListFilterRequiresCurriculumIdError);
   });
 
   it('collects publish validation issues for incomplete draft versions', async () => {

@@ -112,7 +112,11 @@ export class QuestionController {
 
   @Get('parishes/:parishId/questions')
   @RequirePermissions(QUESTION_READ_PERMISSION)
-  @ApiOperation({ summary: 'List questions for a parish' })
+  @ApiOperation({
+    summary: 'List questions for a parish',
+    description:
+      'Returns one row per question root with draft/published version summaries. Effective-version filters (type, difficulty, prompt search) prefer DRAFT when present, otherwise current PUBLISHED.',
+  })
   @ApiOkResponse({ type: QuestionListResponseDto })
   async listQuestionsByParish(
     @CurrentUser() authenticatedUser: AuthenticatedUser,
@@ -129,7 +133,17 @@ export class QuestionController {
         sort: query.sort,
         status: query.status,
         sourceLocale: query.sourceLocale,
+        code: query.code,
         search: query.search,
+        questionType: query.questionType,
+        difficulty: query.difficulty,
+        versionStatus: query.versionStatus,
+        hasDraft: query.hasDraft,
+        hasPublished: query.hasPublished,
+        tagId: query.tagId,
+        tagCode: query.tagCode,
+        curriculumId: query.curriculumId,
+        canonicalLessonKey: query.canonicalLessonKey,
       });
 
       return toQuestionListResponse(result);

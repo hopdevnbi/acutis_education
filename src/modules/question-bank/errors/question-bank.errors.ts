@@ -382,3 +382,37 @@ export class QuestionCurriculumParishMismatchError extends Error {
     this.name = 'QuestionCurriculumParishMismatchError';
   }
 }
+
+export class QuestionListFilterRequiresCurriculumIdError extends Error {
+  constructor() {
+    super('canonicalLessonKey filter requires curriculumId.');
+    this.name = 'QuestionListFilterRequiresCurriculumIdError';
+  }
+}
+
+export type ImportValidationSeverity = 'ERROR' | 'WARNING';
+
+export interface ImportValidationIssue {
+  readonly code: string;
+  readonly path?: string;
+  readonly message: string;
+  readonly severity: ImportValidationSeverity;
+}
+
+export interface QuestionImportValidationResult {
+  readonly valid: boolean;
+  readonly issues: readonly ImportValidationIssue[];
+  readonly normalizedPreview?: import('../interfaces/question-bank.interface').QuestionExportPackageV1Snapshot;
+}
+
+export interface QuestionExportOptionV1 {
+  readonly exportKey: string;
+  readonly code: string | null;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+}
+
+export interface QuestionExportCurriculumLinkV1 {
+  readonly curriculumId: string;
+  readonly canonicalLessonKey: string | null;
+}

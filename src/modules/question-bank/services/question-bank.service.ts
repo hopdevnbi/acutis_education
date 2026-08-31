@@ -4,6 +4,7 @@ import {
   Brackets,
   DataSource,
   EntityManager,
+  In,
   QueryFailedError,
   Repository,
   SelectQueryBuilder,
@@ -22,7 +23,10 @@ import { MediaAssetService } from '../../media/services/media-asset.service';
 import { ParishService } from '../../parish/services/parish.service';
 import { MAX_OPTIONS, MIN_OPTIONS } from '../constants/question-option.constants';
 import { QuestionCorrectOptionEntity } from '../entities/question-correct-option.entity';
+import { QuestionCurriculumLinkEntity } from '../entities/question-curriculum-link.entity';
 import { QuestionOptionEntity } from '../entities/question-option.entity';
+import { QuestionTagLinkEntity } from '../entities/question-tag-link.entity';
+import { QuestionTagEntity } from '../entities/question-tag.entity';
 import { QuestionVersionEntity } from '../entities/question-version.entity';
 import { QuestionEntity } from '../entities/question.entity';
 import { QuestionDifficulty } from '../enums/question-difficulty.enum';
@@ -50,7 +54,9 @@ import {
   QuestionVersionNumberConflictError,
   InvalidQuestionIdError,
   InvalidQuestionVersionIdError,
+  QuestionListFilterRequiresCurriculumIdError,
   type QuestionPublishValidationIssue,
+  type QuestionImportValidationResult,
 } from '../errors/question-bank.errors';
 import type {
   CreateQuestionInput,
@@ -65,6 +71,9 @@ import type {
   ListQuestionsResult,
   PublishedQuestionSelectionSnapshot,
   QuestionAuthoringSnapshot,
+  QuestionExportPackageV1Snapshot,
+  QuestionListItemSnapshot,
+  QuestionListVersionSummary,
   QuestionSnapshot,
   QuestionVersionPreview,
   QuestionVersionSnapshot,
@@ -77,6 +86,7 @@ import {
   toQuestionVersionSnapshot,
 } from '../mappers/question-bank.mapper';
 import { parseQuestionCode } from '../utils/question-code.util';
+import { parseQuestionTagCode } from '../utils/question-tag-code.util';
 import {
   collectQuestionMediaJsonValidationIssues,
   parseOptionalQuestionMediaJson,
@@ -90,6 +100,8 @@ import {
 } from '../utils/question-text.util';
 import { QuestionGradingService } from './question-grading.service';
 import { QuestionOptionService } from './question-option.service';
+import { QuestionExportService } from './question-export.service';
+import { QuestionImportValidationService } from './question-import-validation.service';
 
 @Injectable()
 export class QuestionBankService {
@@ -103,6 +115,8 @@ export class QuestionBankService {
     private readonly questionGradingService: QuestionGradingService,
     private readonly mediaAssetService: MediaAssetService,
     private readonly dataSource: DataSource,
+    private readonly questionExportService: QuestionExportService,
+    private readonly questionImportValidationService: QuestionImportValidationService,
   ) {}
 
   async createQuestion(
@@ -192,30 +206,60 @@ export class QuestionBankService {
     rawParishId: string,
     input: ListQuestionsInput,
   ): Promise<ListQuestionsResult> {
+    if (input.canonicalLessonKey !== undefined && input.curriculumId === undefined) {
+      throw new QuestionListFilterRequiresCurriculumIdError();
+    }
+
     const parishSnapshot = await this.parishService.getParishById(rawParishId);
 
     const queryBuilder = this.questionRepository
       .createQueryBuilder('question')
       .where('question.parishId = :parishId', { parishId: parishSnapshot.id });
 
-    this.applyQuestionListFilters(queryBuilder, input);
+    const needsDistinct = this.applyQuestionListFilters(queryBuilder, input, parishSnapshot.id);
+
+    if (needsDistinct) {
+      queryBuilder.distinct(true);
+    }
+
+    const countQueryBuilder = queryBuilder.clone();
+    const total = needsDistinct
+      ? Number(
+          (
+            await countQueryBuilder
+              .select('COUNT(DISTINCT question.id)', 'count')
+              .getRawOne<{ count: string | number }>()
+          )?.count ?? 0,
+        )
+      : await countQueryBuilder.getCount();
 
     const sortColumn = this.resolveQuestionSortColumn(input.sortBy);
-    queryBuilder.orderBy(sortColumn, input.sort);
-
-    const total = await queryBuilder.getCount();
     const entities = await queryBuilder
+      .orderBy(sortColumn, input.sort)
       .skip((input.page - 1) * input.limit)
       .take(input.limit)
       .getMany();
 
+    const items = await this.buildQuestionListItems(entities);
+
     return {
-      items: entities.map(toQuestionSnapshot),
+      items,
       page: input.page,
       limit: input.limit,
       total,
       totalPages: total === 0 ? 0 : Math.ceil(total / input.limit),
     };
+  }
+
+  async exportQuestionVersion(rawVersionId: string): Promise<QuestionExportPackageV1Snapshot> {
+    return this.questionExportService.buildExportPackage(rawVersionId);
+  }
+
+  async validateQuestionImport(
+    rawParishId: string,
+    input: QuestionExportPackageV1Snapshot,
+  ): Promise<QuestionImportValidationResult> {
+    return this.questionImportValidationService.validate(rawParishId, input);
   }
 
   async updateQuestion(
@@ -943,7 +987,10 @@ export class QuestionBankService {
   private applyQuestionListFilters(
     queryBuilder: SelectQueryBuilder<QuestionEntity>,
     input: ListQuestionsInput,
-  ): void {
+    parishId: string,
+  ): boolean {
+    let needsDistinct = false;
+
     if (input.status !== undefined) {
       queryBuilder.andWhere('question.status = :status', { status: input.status });
     }
@@ -954,20 +1001,254 @@ export class QuestionBankService {
       });
     }
 
+    if (input.code !== undefined && input.code.trim().length > 0) {
+      queryBuilder.andWhere('question.code = :code', {
+        code: parseQuestionCode(input.code),
+      });
+    }
+
+    const needsEffectiveVersionJoin =
+      input.questionType !== undefined ||
+      input.difficulty !== undefined ||
+      input.versionStatus !== undefined ||
+      (input.search !== undefined && input.search.trim().length > 0);
+
+    if (needsEffectiveVersionJoin) {
+      this.joinEffectiveVersions(queryBuilder);
+    }
+
+    if (input.questionType !== undefined) {
+      queryBuilder.andWhere(
+        'COALESCE(draftVersion.questionType, publishedVersion.questionType) = :questionType',
+        { questionType: input.questionType },
+      );
+    }
+
+    if (input.difficulty !== undefined) {
+      queryBuilder.andWhere(
+        'COALESCE(draftVersion.difficulty, publishedVersion.difficulty) = :difficulty',
+        { difficulty: input.difficulty },
+      );
+    }
+
+    if (input.versionStatus !== undefined) {
+      queryBuilder.andWhere(
+        'COALESCE(draftVersion.status, publishedVersion.status) = :versionStatus',
+        { versionStatus: input.versionStatus },
+      );
+    }
+
     if (input.search !== undefined && input.search.trim().length > 0) {
       const searchPattern = `%${this.escapeLikePattern(input.search.trim())}%`;
       queryBuilder.andWhere(
         new Brackets((expressionBuilder) => {
-          expressionBuilder.where("question.code LIKE :searchPattern ESCAPE '\\'");
+          expressionBuilder
+            .where("question.code LIKE :searchPattern ESCAPE '\\'")
+            .orWhere("draftVersion.prompt LIKE :searchPattern ESCAPE '\\'")
+            .orWhere("publishedVersion.prompt LIKE :searchPattern ESCAPE '\\'");
         }),
         { searchPattern },
       );
     }
+
+    if (input.hasDraft === true) {
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM question_versions hasDraftVersion
+          WHERE hasDraftVersion.question_id = question.id
+            AND hasDraftVersion.status = :hasDraftStatus
+        )`,
+        { hasDraftStatus: QuestionVersionStatus.Draft },
+      );
+    } else if (input.hasDraft === false) {
+      queryBuilder.andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM question_versions hasDraftVersion
+          WHERE hasDraftVersion.question_id = question.id
+            AND hasDraftVersion.status = :hasDraftStatus
+        )`,
+        { hasDraftStatus: QuestionVersionStatus.Draft },
+      );
+    }
+
+    if (input.hasPublished === true) {
+      queryBuilder.andWhere('question.currentPublishedVersionId IS NOT NULL');
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM question_versions hasPublishedVersion
+          WHERE hasPublishedVersion.id = question.current_published_version_id
+            AND hasPublishedVersion.status = :hasPublishedStatus
+        )`,
+        { hasPublishedStatus: QuestionVersionStatus.Published },
+      );
+    } else if (input.hasPublished === false) {
+      queryBuilder.andWhere(
+        new Brackets((expressionBuilder) => {
+          expressionBuilder.where('question.currentPublishedVersionId IS NULL').orWhere(
+            `NOT EXISTS (
+                SELECT 1 FROM question_versions hasPublishedVersion
+                WHERE hasPublishedVersion.id = question.current_published_version_id
+                  AND hasPublishedVersion.status = :hasPublishedStatus
+              )`,
+          );
+        }),
+        { hasPublishedStatus: QuestionVersionStatus.Published },
+      );
+    }
+
+    if (input.tagId !== undefined || input.tagCode !== undefined) {
+      needsDistinct = true;
+      queryBuilder
+        .innerJoin(QuestionTagLinkEntity, 'tagLink', 'tagLink.questionId = question.id')
+        .innerJoin(
+          QuestionTagEntity,
+          'tag',
+          'tag.id = tagLink.tagId AND tag.parishId = :tagParishId',
+          { tagParishId: parishId },
+        );
+
+      if (input.tagId !== undefined) {
+        queryBuilder.andWhere('tagLink.tagId = :tagId', {
+          tagId: normalizeUuid(input.tagId),
+        });
+      }
+
+      if (input.tagCode !== undefined) {
+        queryBuilder.andWhere('tag.code = :tagCode', {
+          tagCode: parseQuestionTagCode(input.tagCode),
+        });
+      }
+    }
+
+    if (input.curriculumId !== undefined) {
+      needsDistinct = true;
+      queryBuilder.innerJoin(
+        QuestionCurriculumLinkEntity,
+        'curriculumLink',
+        'curriculumLink.questionId = question.id',
+      );
+      queryBuilder.andWhere('curriculumLink.curriculumId = :curriculumId', {
+        curriculumId: normalizeUuid(input.curriculumId),
+      });
+
+      if (input.canonicalLessonKey !== undefined) {
+        queryBuilder.andWhere('curriculumLink.canonicalLessonKey = :canonicalLessonKey', {
+          canonicalLessonKey: normalizeUuid(input.canonicalLessonKey),
+        });
+      }
+    }
+
+    if (needsEffectiveVersionJoin) {
+      needsDistinct = true;
+    }
+
+    return needsDistinct;
+  }
+
+  private joinEffectiveVersions(queryBuilder: SelectQueryBuilder<QuestionEntity>): void {
+    queryBuilder
+      .leftJoin(
+        QuestionVersionEntity,
+        'draftVersion',
+        'draftVersion.questionId = question.id AND draftVersion.status = :draftVersionStatus',
+        { draftVersionStatus: QuestionVersionStatus.Draft },
+      )
+      .leftJoin(
+        QuestionVersionEntity,
+        'publishedVersion',
+        'publishedVersion.id = question.currentPublishedVersionId',
+      );
+  }
+
+  private async buildQuestionListItems(
+    entities: QuestionEntity[],
+  ): Promise<QuestionListItemSnapshot[]> {
+    if (entities.length === 0) {
+      return [];
+    }
+
+    const questionIds = entities.map((entity) => entity.id);
+    const publishedVersionIds = entities
+      .map((entity) => entity.currentPublishedVersionId)
+      .filter((versionId): versionId is string => versionId !== null);
+
+    const draftVersions =
+      questionIds.length === 0
+        ? []
+        : await this.questionVersionRepository
+            .createQueryBuilder('version')
+            .where('version.questionId IN (:...questionIds)', { questionIds })
+            .andWhere('version.status = :draftStatus', {
+              draftStatus: QuestionVersionStatus.Draft,
+            })
+            .getMany();
+
+    const publishedVersions =
+      publishedVersionIds.length === 0
+        ? []
+        : await this.questionVersionRepository.find({
+            where: { id: In(publishedVersionIds) },
+          });
+
+    const draftByQuestionId = new Map(
+      draftVersions.map((version) => [normalizeUuid(version.questionId), version]),
+    );
+    const publishedById = new Map(
+      publishedVersions.map((version) => [normalizeUuid(version.id), version]),
+    );
+
+    return entities.map((entity) => {
+      const draftVersion = draftByQuestionId.get(normalizeUuid(entity.id)) ?? null;
+      const publishedVersion =
+        entity.currentPublishedVersionId === null
+          ? null
+          : (publishedById.get(normalizeUuid(entity.currentPublishedVersionId)) ?? null);
+
+      const hasDraft = draftVersion !== null;
+      const hasPublished =
+        publishedVersion !== null && publishedVersion.status === QuestionVersionStatus.Published;
+
+      return {
+        id: entity.id,
+        parishId: entity.parishId,
+        code: entity.code,
+        status: entity.status,
+        sourceLocale: entity.sourceLocale,
+        currentPublishedVersionId: entity.currentPublishedVersionId,
+        createdByUserId: entity.createdByUserId,
+        createdAt: entity.createdAt,
+        updatedAt: entity.updatedAt,
+        currentDraftVersion:
+          draftVersion === null ? null : this.toQuestionListVersionSummary(draftVersion),
+        currentPublishedVersion:
+          publishedVersion === null || publishedVersion.status !== QuestionVersionStatus.Published
+            ? null
+            : this.toQuestionListVersionSummary(publishedVersion),
+        hasDraft,
+        hasPublished,
+      };
+    });
+  }
+
+  private toQuestionListVersionSummary(version: QuestionVersionEntity): QuestionListVersionSummary {
+    return {
+      id: version.id,
+      versionNumber: version.versionNumber,
+      questionType: version.questionType,
+      difficulty: version.difficulty,
+      status: version.status,
+      publishedAt: version.publishedAt,
+    };
   }
 
   private resolveQuestionSortColumn(
     sortBy: ListQuestionsInput['sortBy'],
-  ): 'question.code' | 'question.status' | 'question.sourceLocale' | 'question.createdAt' {
+  ):
+    | 'question.code'
+    | 'question.status'
+    | 'question.sourceLocale'
+    | 'question.createdAt'
+    | 'question.updatedAt' {
     switch (sortBy) {
       case 'code':
         return 'question.code';
@@ -975,6 +1256,8 @@ export class QuestionBankService {
         return 'question.status';
       case 'sourceLocale':
         return 'question.sourceLocale';
+      case 'updatedAt':
+        return 'question.updatedAt';
       case 'createdAt':
       default:
         return 'question.createdAt';

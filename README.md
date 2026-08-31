@@ -275,6 +275,26 @@ Learner lesson content responses enrich `image_ref` / `video_ref` blocks with a 
 
 Postman collection: `docs/postman/Acutis-Education-Media.postman_collection.json`
 
+## Question Bank API
+
+Authenticated question bank endpoints (require JWT + RBAC + parish scope for parish-scoped routes):
+
+| Method | Route | Permission |
+|--------|-------|------------|
+| `GET` | `/api/v1/parishes/:parishId/questions` | `questions.read` |
+| `GET` | `/api/v1/question-versions/:versionId/export` | `questions.read` |
+| `POST` | `/api/v1/parishes/:parishId/question-imports/validate` | `questions.manage` |
+
+List query parameters: `page`, `limit`, `sortBy` (`updatedAt` default), `sort`, optional `status`, `sourceLocale`, `code`, `search`, `questionType`, `difficulty`, `versionStatus`, `hasDraft`, `hasPublished`, `tagId`, `tagCode`, `curriculumId`, `canonicalLessonKey` (requires `curriculumId`).
+
+**Effective-version semantics:** filters on type, difficulty, and prompt `search` use the DRAFT version when present, otherwise the current PUBLISHED version.
+
+**Export V1:** read-only JSON (`schemaVersion: 1`) with export-local option keys, tag codes, and curriculum links. Media `assetId` values are environment-local.
+
+**Import:** validate-only endpoint (no database writes). Import commit is deferred.
+
+MVP question types: `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`. No generic learner question-bank routes; Practice/Exam modules consume published version snapshots via internal contracts.
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.
