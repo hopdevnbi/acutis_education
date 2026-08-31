@@ -2,6 +2,10 @@ import { type INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import AppDataSource from '../src/database/data-source';
 import { AccessControlService } from '../src/modules/access-control/services/access-control.service';
+import {
+  PermissionCodeAlreadyExistsError,
+  RoleCodeAlreadyExistsError,
+} from '../src/modules/access-control/errors/access-control.errors';
 import { ParishStatus } from '../src/modules/parish/enums/parish-status.enum';
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
 import { createDatabaseTestApplication } from './create-database-test-application';
@@ -69,10 +73,6 @@ describe('Parish API (db e2e)', () => {
       WHERE user_id IN (SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%')
     `);
     await AppDataSource.query(`
-      DELETE FROM permissions
-      WHERE code IN ('parishes.read', 'parishes.manage')
-    `);
-    await AppDataSource.query(`
       DELETE FROM roles
       WHERE code = '${TEST_ROLE_CODE}'
     `);
@@ -104,18 +104,38 @@ describe('Parish API (db e2e)', () => {
   }
 
   async function seedPermissionsAndRole(): Promise<void> {
-    await accessControlService.createPermission({
-      code: 'parishes.read',
-      name: 'Read parishes',
-    });
-    await accessControlService.createPermission({
-      code: 'parishes.manage',
-      name: 'Manage parishes',
-    });
-    await accessControlService.createRole({
-      code: TEST_ROLE_CODE,
-      name: 'Parish API Tester',
-    });
+    try {
+      await accessControlService.createPermission({
+        code: 'parishes.read',
+        name: 'Read parishes',
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof PermissionCodeAlreadyExistsError)) {
+        throw error;
+      }
+    }
+
+    try {
+      await accessControlService.createPermission({
+        code: 'parishes.manage',
+        name: 'Manage parishes',
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof PermissionCodeAlreadyExistsError)) {
+        throw error;
+      }
+    }
+
+    try {
+      await accessControlService.createRole({
+        code: TEST_ROLE_CODE,
+        name: 'Parish API Tester',
+      });
+    } catch (error: unknown) {
+      if (!(error instanceof RoleCodeAlreadyExistsError)) {
+        throw error;
+      }
+    }
   }
 
   it('returns 401 for unauthenticated parish list requests', async () => {

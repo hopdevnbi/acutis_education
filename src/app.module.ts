@@ -17,6 +17,7 @@ import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
 import { MediaModule } from './modules/media/media.module';
+import { QuestionBankModule } from './modules/question-bank/question-bank.module';
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
 import { UsersModule } from './modules/users/users.module';
@@ -51,6 +52,7 @@ export class AppModule {
         CurriculumOrchestrationModule,
         CurriculumDeliveryModule,
         MediaModule,
+        QuestionBankModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],
