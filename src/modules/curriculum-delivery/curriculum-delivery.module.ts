@@ -5,6 +5,7 @@ import { ClassModule } from '../class/class.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
 import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { LearningContentModule } from '../learning-content/learning-content.module';
+import { MediaModule } from '../media/media.module';
 import { CurriculumDeliveryController } from './controllers/curriculum-delivery.controller';
 import { CurriculumDeliveryService } from './services/curriculum-delivery.service';
 
@@ -12,6 +13,7 @@ import { CurriculumDeliveryService } from './services/curriculum-delivery.servic
   imports: [
     CurriculumModule,
     LearningContentModule,
+    MediaModule,
     ClassModule,
     EnrollmentModule,
     AuthModule,

@@ -68,6 +68,12 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
       WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
     `);
     await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE parish_id IN (
+        SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
       DELETE FROM parishes
       WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
     `);
@@ -101,6 +107,12 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
     await AppDataSource.query(`
       DELETE FROM academic_years
       WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE parish_id IN (
+        SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
     `);
     await AppDataSource.query(`
       DELETE FROM parishes
@@ -165,6 +177,12 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
     await AppDataSource.query(`
       DELETE FROM academic_years
       WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE parish_id IN (
+        SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
     `);
     await AppDataSource.query(`
       DELETE FROM parishes

@@ -1,3 +1,4 @@
+import { normalizeUuid } from '../../../database/uuid-v4.util';
 import type { ContentBlock, ContentDocumentV1 } from '../interfaces/learning-content.interface';
 import { MediaCategory } from '../../media/enums/media-category.enum';
 import {
@@ -91,4 +92,19 @@ export function blockReferencesMediaAsset(block: ContentBlock): block is Content
   assetId: string;
 } {
   return block.type === 'image_ref' || block.type === 'video_ref';
+}
+
+export function documentReferencesMediaAsset(
+  document: ContentDocumentV1,
+  rawAssetId: string,
+): boolean {
+  const normalizedAssetId = normalizeUuid(rawAssetId);
+
+  return document.blocks.some((block) => {
+    if (block.type !== 'image_ref' && block.type !== 'video_ref') {
+      return false;
+    }
+
+    return normalizeUuid(block.assetId) === normalizedAssetId;
+  });
 }

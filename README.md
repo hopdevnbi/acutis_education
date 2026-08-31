@@ -244,6 +244,37 @@ See Swagger at `/api/docs` when enabled.
 - `docker compose down` preserves the MSSQL volume
 - `docker compose down -v` destroys project volumes — use only when intentional
 
+## Media storage (local-first)
+
+Default provider is **local filesystem** — no AWS credentials required for Compose.
+
+| Setting | Purpose |
+|---------|---------|
+| `MEDIA_STORAGE_PROVIDER` | `local` (default), `s3`, or `auto` (non-production only) |
+| `MEDIA_LOCAL_ROOT` | Upload directory (`./storage/uploads` locally; `/app/storage/uploads` in Docker) |
+| `MEDIA_MAX_IMAGE_BYTES` | 10 MiB default |
+| `MEDIA_MAX_DOCUMENT_BYTES` | 25 MiB default |
+
+**Enabled upload types (MVP):** JPEG, PNG, WebP, PDF. **AUDIO/VIDEO upload disabled** until streaming upload and HTTP Range support exist.
+
+**Docker volume:** Compose mounts `media-uploads:/app/storage/uploads` so uploads survive container recreation.
+
+**Switching to S3:** set `MEDIA_STORAGE_PROVIDER=s3` and configure `MEDIA_S3_BUCKET`, `MEDIA_S3_REGION`, and optional credentials. Production rejects `auto` and `MEDIA_STORAGE_ALLOW_LOCAL_FALLBACK=true`. Existing assets keep their per-row `storage_provider`; reads never fall back S3→local per request.
+
+### Media HTTP routes
+
+| Audience | Route | Permission |
+|----------|-------|------------|
+| Admin | `POST /api/v1/media/assets` | `media.upload` |
+| Admin | `GET /api/v1/media/assets/:id` | `media.read` |
+| Admin | `GET /api/v1/media/assets/:id/content` | `media.read` |
+| Learner (class) | `GET /api/v1/classes/:classId/lessons/:lessonId/media/:assetId/content` | `lesson-content.read` + scope |
+| Learner (enrollment) | `GET /api/v1/enrollments/:enrollmentId/lessons/:lessonId/media/:assetId/content` | `lesson-content.read` + scope |
+
+Learner lesson content responses enrich `image_ref` / `video_ref` blocks with a derived `mediaContentPath` (not stored in lesson JSON).
+
+Postman collection: `docs/postman/Acutis-Education-Media.postman_collection.json`
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

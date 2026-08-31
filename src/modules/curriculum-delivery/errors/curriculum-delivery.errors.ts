@@ -25,3 +25,10 @@ export class DraftCurriculumDeliveryDeniedError extends Error {
     this.name = 'DraftCurriculumDeliveryDeniedError';
   }
 }
+
+export class ContextualMediaAssetNotReferencedError extends Error {
+  constructor() {
+    super('Media asset is not referenced by the requested lesson content.');
+    this.name = 'ContextualMediaAssetNotReferencedError';
+  }
+}

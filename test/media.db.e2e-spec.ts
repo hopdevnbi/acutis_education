@@ -8,6 +8,7 @@ import {
   AUTH_RBAC_SAMPLE_DOMAIN,
   AUTH_RBAC_SAMPLE_PASSWORD,
 } from '../src/database/seeds/auth-rbac.seed.constants';
+import { MULTIPART_UPLOAD_MAX_BYTES } from '../src/modules/media/constants/media-upload.constants';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
 
@@ -146,5 +147,17 @@ describe('Media API (db e2e)', () => {
       .attach('file', svgBuffer, 'evil.svg')
       .field('intendedCategory', 'IMAGE')
       .expect(415);
+  });
+
+  it('rejects multipart payloads above the enabled-category memory cap', async () => {
+    const accessToken = await login(adminEmail);
+    const oversizedBuffer = Buffer.alloc(MULTIPART_UPLOAD_MAX_BYTES + 1, 0xff);
+
+    await request(getTestHttpServer(application))
+      .post('/api/v1/media/assets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .attach('file', oversizedBuffer, 'too-large.jpg')
+      .field('intendedCategory', 'IMAGE')
+      .expect(413);
   });
 });

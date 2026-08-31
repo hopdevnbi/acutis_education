@@ -1,4 +1,13 @@
-import { Controller, Get, Headers, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -8,6 +17,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { RequirePermissions } from '../../access-control/decorators/require-permissions.decorator';
@@ -25,7 +35,12 @@ import {
   toLearnerLessonContentResponseDto,
 } from '../mappers/curriculum-delivery-response.mapper';
 import { CurriculumDeliveryService } from '../services/curriculum-delivery.service';
+import { buildContextualMediaContentHeaders } from '../utils/contextual-media-response.util';
 import { rethrowCurriculumDeliveryServiceError } from '../utils/curriculum-delivery-http.util';
+import {
+  buildClassLessonMediaContentPath,
+  buildEnrollmentLessonMediaContentPath,
+} from '../utils/learner-media-content-path.util';
 
 @ApiTags('curriculum-delivery')
 @Controller()
@@ -99,7 +114,10 @@ export class CurriculumDeliveryController {
         parseRequestedLocale(acceptLanguage),
       );
 
-      return toLearnerLessonContentResponseDto(content);
+      return toLearnerLessonContentResponseDto(content, {
+        buildMediaContentPath: (assetId) =>
+          buildClassLessonMediaContentPath(classId, lessonId, assetId),
+      });
     } catch (error: unknown) {
       rethrowCurriculumDeliveryServiceError(error);
     }
@@ -130,7 +148,88 @@ export class CurriculumDeliveryController {
         parseRequestedLocale(acceptLanguage),
       );
 
-      return toLearnerLessonContentResponseDto(content);
+      return toLearnerLessonContentResponseDto(content, {
+        buildMediaContentPath: (assetId) =>
+          buildEnrollmentLessonMediaContentPath(enrollmentId, lessonId, assetId),
+      });
+    } catch (error: unknown) {
+      rethrowCurriculumDeliveryServiceError(error);
+    }
+  }
+
+  @Get('classes/:classId/lessons/:lessonId/media/:assetId/content')
+  @RequirePermissions(LESSON_CONTENT_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Stream lesson-referenced media in class context (contextual learner delivery)',
+  })
+  @ApiOkResponse({ description: 'Binary media content stream for a referenced lesson asset' })
+  @ApiForbiddenResponse({ description: 'Missing scope, permission, or asset not referenced' })
+  @ApiNotFoundResponse({ description: 'Media asset or lesson content not found' })
+  async getClassLessonMediaContent(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('classId', ParseUUIDPipe) classId: string,
+    @Param('lessonId', ParseUUIDPipe) lessonId: string,
+    @Param('assetId', ParseUUIDPipe) assetId: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    try {
+      const content = await this.curriculumDeliveryService.getClassLessonMediaContent(
+        authenticatedUser.userId,
+        classId,
+        lessonId,
+        assetId,
+      );
+
+      const headers = buildContextualMediaContentHeaders(
+        content.snapshot.originalFileName,
+        content.snapshot.mimeType,
+        content.contentLength,
+      );
+
+      for (const [headerName, headerValue] of Object.entries(headers)) {
+        response.setHeader(headerName, headerValue);
+      }
+
+      return new StreamableFile(content.body);
+    } catch (error: unknown) {
+      rethrowCurriculumDeliveryServiceError(error);
+    }
+  }
+
+  @Get('enrollments/:enrollmentId/lessons/:lessonId/media/:assetId/content')
+  @RequirePermissions(LESSON_CONTENT_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Stream lesson-referenced media in enrollment context (contextual learner delivery)',
+  })
+  @ApiOkResponse({ description: 'Binary media content stream for a referenced lesson asset' })
+  @ApiForbiddenResponse({ description: 'Missing scope, permission, or asset not referenced' })
+  @ApiNotFoundResponse({ description: 'Media asset or lesson content not found' })
+  async getEnrollmentLessonMediaContent(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('enrollmentId', ParseUUIDPipe) enrollmentId: string,
+    @Param('lessonId', ParseUUIDPipe) lessonId: string,
+    @Param('assetId', ParseUUIDPipe) assetId: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    try {
+      const content = await this.curriculumDeliveryService.getEnrollmentLessonMediaContent(
+        authenticatedUser.userId,
+        enrollmentId,
+        lessonId,
+        assetId,
+      );
+
+      const headers = buildContextualMediaContentHeaders(
+        content.snapshot.originalFileName,
+        content.snapshot.mimeType,
+        content.contentLength,
+      );
+
+      for (const [headerName, headerValue] of Object.entries(headers)) {
+        response.setHeader(headerName, headerValue);
+      }
+
+      return new StreamableFile(content.body);
     } catch (error: unknown) {
       rethrowCurriculumDeliveryServiceError(error);
     }

@@ -18,6 +18,9 @@ RUN npm ci
 
 COPY . .
 
+RUN mkdir -p /app/storage/uploads \
+  && chown -R node:node /app/storage/uploads
+
 RUN chown -R node:node /app
 
 USER node
@@ -51,6 +54,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
+
+RUN mkdir -p /app/storage/uploads \
+  && chown -R catechism:catechism /app/storage/uploads
 
 RUN chown -R catechism:catechism /app
 

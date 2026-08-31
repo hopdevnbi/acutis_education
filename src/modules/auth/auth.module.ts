@@ -3,6 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import {
+  MEDIA_UPLOAD_THROTTLE_LIMIT,
+  MEDIA_UPLOAD_THROTTLE_TTL_MS,
+} from '../media/constants/media-upload.constants';
 import { UsersModule } from '../users/users.module';
 import authConfiguration from './config/auth.configuration';
 import { AUTH_CONFIGURATION_NAMESPACE, type AuthConfiguration } from './config/auth.config.types';
@@ -40,6 +44,11 @@ import { AuthService } from './services/auth.service';
             name: 'auth-refresh',
             ttl: authConfigurationValue.refreshThrottleTtlMs,
             limit: authConfigurationValue.refreshThrottleLimit,
+          },
+          {
+            name: 'media-upload',
+            ttl: MEDIA_UPLOAD_THROTTLE_TTL_MS,
+            limit: MEDIA_UPLOAD_THROTTLE_LIMIT,
           },
         ];
       },

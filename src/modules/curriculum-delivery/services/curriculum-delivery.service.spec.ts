@@ -13,8 +13,10 @@ import {
   type ContentDocumentV1,
 } from '../../learning-content/interfaces/learning-content.interface';
 import { LearningContentService } from '../../learning-content/services/learning-content.service';
+import { MediaAssetService } from '../../media/services/media-asset.service';
 import { StudentAccessDeniedError } from '../../student/errors/student-access.errors';
 import {
+  ContextualMediaAssetNotReferencedError,
   DraftCurriculumDeliveryDeniedError,
   LessonNotInAssignedCurriculumError,
 } from '../errors/curriculum-delivery.errors';
@@ -39,6 +41,9 @@ describe('CurriculumDeliveryService', () => {
     >
   >;
   let learningContentService: jest.Mocked<Pick<LearningContentService, 'getLessonContent'>>;
+  let mediaAssetService: jest.Mocked<
+    Pick<MediaAssetService, 'assertAssetReady' | 'openAssetContent'>
+  >;
 
   const parishId = '11111111-1111-4111-8111-111111111111';
   const academicYearId = '22222222-2222-4222-8222-222222222222';
@@ -53,6 +58,7 @@ describe('CurriculumDeliveryService', () => {
   const assignedVersionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const otherVersionId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
   const lessonId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const assetId = '13131313-1313-4131-8131-131313131313';
   const draftLessonId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
   const canonicalLessonKey = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
@@ -182,6 +188,39 @@ describe('CurriculumDeliveryService', () => {
       getLessonContent: jest.fn().mockResolvedValue(learningContentSnapshot),
     };
 
+    mediaAssetService = {
+      assertAssetReady: jest.fn().mockResolvedValue({
+        id: assetId,
+        originalFileName: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        mediaCategory: 'IMAGE',
+        sizeBytes: 100,
+        checksumSha256: 'abc',
+        status: 'READY',
+        visibility: 'PRIVATE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      openAssetContent: jest.fn().mockResolvedValue({
+        snapshot: {
+          id: assetId,
+          originalFileName: 'photo.jpg',
+          mimeType: 'image/jpeg',
+          mediaCategory: 'IMAGE',
+          sizeBytes: 100,
+          checksumSha256: 'abc',
+          status: 'READY',
+          visibility: 'PRIVATE',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        contentLength: 100,
+        body: (function* () {
+          yield Buffer.from([0xff, 0xd8, 0xff]);
+        })(),
+      }),
+    };
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         CurriculumDeliveryService,
@@ -191,6 +230,7 @@ describe('CurriculumDeliveryService', () => {
         { provide: EnrollmentAccessService, useValue: enrollmentAccessService },
         { provide: CurriculumService, useValue: curriculumService },
         { provide: LearningContentService, useValue: learningContentService },
+        { provide: MediaAssetService, useValue: mediaAssetService },
       ],
     }).compile();
 
@@ -363,6 +403,56 @@ describe('CurriculumDeliveryService', () => {
           null,
         ),
       ).rejects.toBeInstanceOf(StudentAccessDeniedError);
+    });
+  });
+
+  describe('getClassLessonMediaContent', () => {
+    it('streams media when asset is referenced in lesson content', async () => {
+      learningContentService.getLessonContent.mockResolvedValue({
+        ...learningContentSnapshot,
+        document: {
+          schemaVersion: CONTENT_DOCUMENT_SCHEMA_VERSION,
+          blocks: [{ type: 'image_ref', assetId, alt: 'Lesson image' }],
+        },
+      });
+
+      const content = await curriculumDeliveryService.getClassLessonMediaContent(
+        catechistUserId,
+        classId,
+        lessonId,
+        assetId,
+      );
+
+      expect(mediaAssetService.assertAssetReady).toHaveBeenCalledWith(assetId);
+      expect(content.snapshot.id).toBe(assetId);
+    });
+
+    it('denies assets not referenced by the lesson document', async () => {
+      await expect(
+        curriculumDeliveryService.getClassLessonMediaContent(
+          catechistUserId,
+          classId,
+          lessonId,
+          assetId,
+        ),
+      ).rejects.toBeInstanceOf(ContextualMediaAssetNotReferencedError);
+
+      expect(mediaAssetService.openAssetContent).not.toHaveBeenCalled();
+    });
+
+    it('denies unassigned catechists before media checks', async () => {
+      classScopeService.assertCanReadClass.mockRejectedValue(new ClassScopeAccessDeniedError());
+
+      await expect(
+        curriculumDeliveryService.getClassLessonMediaContent(
+          catechistUserId,
+          classId,
+          lessonId,
+          assetId,
+        ),
+      ).rejects.toBeInstanceOf(ClassScopeAccessDeniedError);
+
+      expect(mediaAssetService.assertAssetReady).not.toHaveBeenCalled();
     });
   });
 });

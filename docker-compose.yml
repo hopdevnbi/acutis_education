@@ -50,11 +50,13 @@ services:
     environment:
       DB_HOST: mssql
       DB_PORT: 1433
+      MEDIA_LOCAL_ROOT: /app/storage/uploads
     ports:
       - '${PORT:-3000}:3000'
     volumes:
       - .:/app
       - api-node-modules:/app/node_modules
+      - media-uploads:/app/storage/uploads
     healthcheck:
       test:
         [
@@ -72,3 +74,4 @@ services:
 volumes:
   mssql-data:
   api-node-modules:
+  media-uploads:

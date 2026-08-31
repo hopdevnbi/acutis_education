@@ -4,9 +4,15 @@ import {
   CurriculumAssignmentNotFoundError,
   CurriculumVersionNotPublishedError,
 } from '../../curriculum/errors/curriculum.errors';
+import {
+  MediaAssetNotFoundError,
+  MediaAssetNotReadyError,
+} from '../../media/errors/media-asset.errors';
+import { rethrowMediaServiceError } from '../../media/utils/media-http.util';
 import { StudentAccessDeniedError } from '../../student/errors/student-access.errors';
 import { LessonContentNotFoundError } from '../../learning-content/errors/learning-content.errors';
 import {
+  ContextualMediaAssetNotReferencedError,
   DraftCurriculumDeliveryDeniedError,
   LessonNotInAssignedCurriculumError,
   PublishedLessonContentNotFoundError,
@@ -37,12 +43,20 @@ export function rethrowCurriculumDeliveryServiceError(error: unknown): never {
     throw new ForbiddenException(error.message);
   }
 
+  if (error instanceof ContextualMediaAssetNotReferencedError) {
+    throw new ForbiddenException(error.message);
+  }
+
   if (error instanceof LessonContentNotFoundError) {
     throw new NotFoundException(error.message);
   }
 
   if (error instanceof PublishedLessonContentNotFoundError) {
     throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof MediaAssetNotFoundError || error instanceof MediaAssetNotReadyError) {
+    rethrowMediaServiceError(error);
   }
 
   throw error;

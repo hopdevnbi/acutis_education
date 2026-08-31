@@ -14,6 +14,7 @@ import { CurriculumVersionStatus } from '../src/modules/curriculum/enums/curricu
 import { EnrollmentStatus } from '../src/modules/enrollment/enums/enrollment-status.enum';
 import { GuardianRelationshipType } from '../src/modules/student/enums/guardian-relationship-type.enum';
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
+import type { ContentDocumentV1 } from '../src/modules/learning-content/interfaces/learning-content.interface';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
 import { ensureTestParishMembership } from './scoped-e2e-fixture';
@@ -96,7 +97,7 @@ interface VersionTreeResponseBody {
   }>;
 }
 
-const sampleContentDocument = {
+const sampleContentDocument: ContentDocumentV1 = {
   schemaVersion: 1,
   blocks: [
     { type: 'heading', level: 1, text: 'Giáo lý Khai Tâm' },
@@ -233,6 +234,11 @@ describe('Curriculum delivery API (db e2e)', () => {
     `);
 
     await AppDataSource.query(`
+      DELETE FROM media_assets
+      WHERE created_by_user_id IN (SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%')
+    `);
+
+    await AppDataSource.query(`
       DELETE FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
     `);
   });
@@ -311,6 +317,7 @@ describe('Curriculum delivery API (db e2e)', () => {
     await ensurePermission('curricula.publish', 'Publish curricula');
     await ensurePermission('lesson-content.read', 'Read lesson content');
     await ensurePermission('lesson-content.manage', 'Manage lesson content');
+    await ensurePermission('media.upload', 'Upload media assets');
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'parishes.manage');
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'academic-years.manage');
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'catechism-levels.manage');
@@ -324,6 +331,7 @@ describe('Curriculum delivery API (db e2e)', () => {
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'curricula.publish');
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'lesson-content.read');
     await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'lesson-content.manage');
+    await accessControlService.assignPermissionToRole(TEST_ROLE_CODE, 'media.upload');
   }
 
   async function setupManageUser(
@@ -352,6 +360,7 @@ describe('Curriculum delivery API (db e2e)', () => {
   async function seedPublishedDeliveryFixture(
     setupToken: string,
     setupUserId: string,
+    contentDocument: ContentDocumentV1 = sampleContentDocument,
   ): Promise<{
     parishId: string;
     classAId: string;
@@ -473,7 +482,7 @@ describe('Curriculum delivery API (db e2e)', () => {
     await request(getTestHttpServer(application))
       .put(`/api/v1/lessons/${lesson.id}/content`)
       .set('Authorization', `Bearer ${setupToken}`)
-      .send({ document: sampleContentDocument })
+      .send({ document: contentDocument })
       .expect(200);
 
     const publishResponse = await request(getTestHttpServer(application))
@@ -663,5 +672,137 @@ describe('Curriculum delivery API (db e2e)', () => {
 
     const content = contentResponse.body as LearnerLessonContentResponseBody;
     expect(content.contentHash).toBeTruthy();
+  });
+
+  it('allows contextual lesson media for assigned catechist and denies generic media access', async () => {
+    const { accessToken: setupToken, userId: setupUserId } = await setupManageUser(
+      'contextual-media-catechist-setup',
+    );
+    const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0xff, 0xd9]);
+
+    const uploadResponse = await request(getTestHttpServer(application))
+      .post('/api/v1/media/assets')
+      .set('Authorization', `Bearer ${setupToken}`)
+      .attach('file', jpegBuffer, 'lesson-photo.jpg')
+      .field('intendedCategory', 'IMAGE')
+      .expect(201);
+
+    const assetId = (uploadResponse.body as { id: string }).id;
+
+    const fixture = await seedPublishedDeliveryFixture(setupToken, setupUserId, {
+      schemaVersion: 1,
+      blocks: [
+        { type: 'paragraph', text: 'Lesson with image.' },
+        { type: 'image_ref', assetId, alt: 'Lesson photo' },
+      ],
+    });
+
+    const assignedCatechist = await createRoleUser('contextual-media-catechist', 'CATECHIST');
+
+    await request(getTestHttpServer(application))
+      .post(`/api/v1/classes/${fixture.classAId}/catechists`)
+      .set('Authorization', `Bearer ${setupToken}`)
+      .send({
+        catechistUserId: assignedCatechist.userId,
+        assignmentRole: CatechistAssignmentRole.Lead,
+      })
+      .expect(201);
+
+    const contentResponse = await request(getTestHttpServer(application))
+      .get(
+        `/api/v1/classes/${fixture.classAId}/lessons/${fixture.lessonId}/media/${assetId}/content`,
+      )
+      .set('Authorization', `Bearer ${assignedCatechist.accessToken}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+
+        response.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+        response.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+
+    expect(contentResponse.body).toEqual(jpegBuffer);
+
+    await request(getTestHttpServer(application))
+      .get(`/api/v1/media/assets/${assetId}/content`)
+      .set('Authorization', `Bearer ${assignedCatechist.accessToken}`)
+      .expect(403);
+
+    await request(getTestHttpServer(application))
+      .get(
+        `/api/v1/classes/${fixture.classAId}/lessons/${fixture.lessonId}/media/11111111-1111-4111-8111-111111111111/content`,
+      )
+      .set('Authorization', `Bearer ${assignedCatechist.accessToken}`)
+      .expect(403);
+  });
+
+  it('allows contextual lesson media for linked parent enrollment context', async () => {
+    const { accessToken: setupToken, userId: setupUserId } = await setupManageUser(
+      'contextual-media-parent-setup',
+    );
+    const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0x00, 0xff, 0xd9]);
+
+    const uploadResponse = await request(getTestHttpServer(application))
+      .post('/api/v1/media/assets')
+      .set('Authorization', `Bearer ${setupToken}`)
+      .attach('file', jpegBuffer, 'parent-lesson-photo.jpg')
+      .field('intendedCategory', 'IMAGE')
+      .expect(201);
+
+    const assetId = (uploadResponse.body as { id: string }).id;
+
+    const fixture = await seedPublishedDeliveryFixture(setupToken, setupUserId, {
+      schemaVersion: 1,
+      blocks: [{ type: 'image_ref', assetId, alt: 'Parent lesson photo' }],
+    });
+
+    const linkedParent = await createRoleUser('contextual-media-parent', 'PARENT');
+
+    await request(getTestHttpServer(application))
+      .post(`/api/v1/students/${fixture.studentId}/guardians`)
+      .set('Authorization', `Bearer ${setupToken}`)
+      .send({
+        guardianUserId: linkedParent.userId,
+        relationshipType: GuardianRelationshipType.Parent,
+        isPrimary: true,
+      })
+      .expect(201);
+
+    const lessonContentResponse = await request(getTestHttpServer(application))
+      .get(`/api/v1/enrollments/${fixture.enrollmentId}/lessons/${fixture.lessonId}/content`)
+      .set('Authorization', `Bearer ${linkedParent.accessToken}`)
+      .expect(200);
+
+    const lessonContent = lessonContentResponse.body as {
+      document: { blocks: Array<{ mediaContentPath?: string }> };
+    };
+    expect(lessonContent.document.blocks[0]?.mediaContentPath?.toLowerCase()).toBe(
+      `/api/v1/enrollments/${fixture.enrollmentId}/lessons/${fixture.lessonId}/media/${assetId}/content`.toLowerCase(),
+    );
+
+    const mediaResponse = await request(getTestHttpServer(application))
+      .get(
+        `/api/v1/enrollments/${fixture.enrollmentId}/lessons/${fixture.lessonId}/media/${assetId}/content`,
+      )
+      .set('Authorization', `Bearer ${linkedParent.accessToken}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+
+        response.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+        response.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      })
+      .expect(200);
+
+    expect(mediaResponse.body).toEqual(jpegBuffer);
   });
 });

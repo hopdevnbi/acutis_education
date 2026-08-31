@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -40,6 +41,11 @@ import {
   MEDIA_READ_PERMISSION,
   MEDIA_UPLOAD_PERMISSION,
 } from '../constants/media-permissions.constants';
+import {
+  MEDIA_UPLOAD_THROTTLE_LIMIT,
+  MEDIA_UPLOAD_THROTTLE_TTL_MS,
+  MULTIPART_UPLOAD_MAX_BYTES,
+} from '../constants/media-upload.constants';
 import { MediaConfigService } from '../config/media-config.service';
 import { MediaAssetResponseDto } from '../dto/media-asset-response.dto';
 import { UploadMediaAssetRequestDto } from '../dto/upload-media-asset-request.dto';
@@ -69,12 +75,19 @@ export class MediaAssetController {
 
   @Post()
   @RequirePermissions(MEDIA_UPLOAD_PERMISSION)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    'media-upload': {
+      limit: MEDIA_UPLOAD_THROTTLE_LIMIT,
+      ttl: MEDIA_UPLOAD_THROTTLE_TTL_MS,
+    },
+  })
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: {
-        fileSize: 104_857_600,
+        fileSize: MULTIPART_UPLOAD_MAX_BYTES,
       },
     }),
   )
