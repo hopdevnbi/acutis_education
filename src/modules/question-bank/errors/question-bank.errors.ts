@@ -117,6 +117,20 @@ export class QuestionVersionNotGradableError extends Error {
   }
 }
 
+export class QuestionVersionNotDeliverableError extends Error {
+  constructor() {
+    super('Question version is not deliverable to learners.');
+    this.name = 'QuestionVersionNotDeliverableError';
+  }
+}
+
+export class QuestionNoPublishedVersionError extends Error {
+  constructor() {
+    super('Question has no published version available for selection.');
+    this.name = 'QuestionNoPublishedVersionError';
+  }
+}
+
 export class InvalidGradeAnswerInputError extends Error {
   constructor() {
     super('Invalid grade answer input.');

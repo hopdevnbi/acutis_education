@@ -20,6 +20,7 @@ import {
   QuestionCodeAlreadyExistsError,
   QuestionDraftAlreadyExistsError,
   QuestionInactiveError,
+  QuestionNoPublishedVersionError,
   QuestionNotFoundError,
   QuestionSourceLocaleImmutableError,
   QuestionTypeChangeNotAllowedError,
@@ -70,7 +71,10 @@ describe('QuestionBankService', () => {
   let questionGradingService: jest.Mocked<
     Pick<
       QuestionGradingService,
-      'getLearnerQuestionProjection' | 'gradeAnswer' | 'getImmutableAssessmentSnapshot'
+      | 'getLearnerQuestionProjection'
+      | 'getQuestionVersionPreview'
+      | 'gradeAnswer'
+      | 'getImmutableAssessmentSnapshot'
     >
   >;
   let mediaAssetService: jest.Mocked<Pick<MediaAssetService, 'assertAssetCategory'>>;
@@ -143,6 +147,7 @@ describe('QuestionBankService', () => {
 
     questionGradingService = {
       getLearnerQuestionProjection: jest.fn(),
+      getQuestionVersionPreview: jest.fn(),
       gradeAnswer: jest.fn(),
       getImmutableAssessmentSnapshot: jest.fn(),
     };
@@ -737,5 +742,90 @@ describe('QuestionBankService', () => {
     await expect(questionBankService.cloneVersionToDraft(versionId, userId)).rejects.toBeInstanceOf(
       QuestionDraftAlreadyExistsError,
     );
+  });
+
+  it('returns current published question selection snapshot', async () => {
+    questionRepository.findOne.mockResolvedValue({
+      ...activeQuestion,
+      currentPublishedVersionId: versionId,
+    });
+    questionVersionRepository.findOne.mockResolvedValue({
+      id: versionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Published,
+      questionType: QuestionType.SingleChoice,
+      prompt: 'Published',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: QuestionDifficulty.Easy,
+      sourceContentHash: 'hash-123',
+      createdByUserId: userId,
+      publishedByUserId: userId,
+      publishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const snapshot = await questionBankService.getCurrentPublishedQuestionForSelection(questionId);
+
+    expect(snapshot.questionId).toBe(questionId);
+    expect(snapshot.questionVersionId).toBe(versionId);
+    expect(snapshot.questionType).toBe(QuestionType.SingleChoice);
+    expect(snapshot.sourceLocale).toBe('vi-VN');
+    expect(snapshot.sourceContentHash).toBe('hash-123');
+  });
+
+  it('rejects current published selection when question is inactive', async () => {
+    questionRepository.findOne.mockResolvedValue({
+      ...activeQuestion,
+      status: QuestionStatus.Inactive,
+    });
+
+    await expect(
+      questionBankService.getCurrentPublishedQuestionForSelection(questionId),
+    ).rejects.toBeInstanceOf(QuestionInactiveError);
+  });
+
+  it('rejects current published selection when no published version exists', async () => {
+    questionRepository.findOne.mockResolvedValue(activeQuestion);
+
+    await expect(
+      questionBankService.getCurrentPublishedQuestionForSelection(questionId),
+    ).rejects.toBeInstanceOf(QuestionNoPublishedVersionError);
+  });
+
+  it('rejects current published selection when current pointer is not published', async () => {
+    questionRepository.findOne.mockResolvedValue({
+      ...activeQuestion,
+      currentPublishedVersionId: versionId,
+    });
+    questionVersionRepository.findOne.mockResolvedValue({
+      id: versionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Archived,
+      questionType: QuestionType.SingleChoice,
+      prompt: 'Archived',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: QuestionDifficulty.Easy,
+      sourceContentHash: 'hash-123',
+      createdByUserId: userId,
+      publishedByUserId: userId,
+      publishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await expect(
+      questionBankService.getCurrentPublishedQuestionForSelection(questionId),
+    ).rejects.toBeInstanceOf(QuestionNoPublishedVersionError);
   });
 });

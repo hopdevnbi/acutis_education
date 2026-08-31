@@ -33,6 +33,7 @@ import {
 import { QuestionAuthoringResponseDto } from '../dto/question-authoring-response.dto';
 import { QuestionOptionListResponseDto } from '../dto/question-option-response.dto';
 import { QuestionPublishValidationErrorDto } from '../dto/publish-validation-error.dto';
+import { QuestionVersionPreviewResponseDto } from '../dto/question-version-preview-response.dto';
 import { QuestionVersionResponseDto } from '../dto/question-version-response.dto';
 import { ReplaceQuestionOptionsRequestDto } from '../dto/replace-question-options-request.dto';
 import { SetCorrectOptionsRequestDto } from '../dto/set-correct-options-request.dto';
@@ -40,6 +41,7 @@ import { UpdateQuestionVersionRequestDto } from '../dto/update-question-version-
 import {
   toQuestionAuthoringResponse,
   toQuestionOptionListResponse,
+  toQuestionVersionPreviewResponse,
   toQuestionVersionResponse,
 } from '../mappers/question-bank-response.mapper';
 import { QuestionBankService } from '../services/question-bank.service';
@@ -74,6 +76,32 @@ export class QuestionVersionController {
       const snapshot = await this.questionBankService.getVersionById(versionId);
 
       return toQuestionVersionResponse(snapshot);
+    } catch (error: unknown) {
+      rethrowQuestionBankServiceError(error);
+    }
+  }
+
+  @Get('question-versions/:versionId/preview')
+  @RequirePermissions(QUESTION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Preview a question version with learner-safe fields (author/admin)',
+    description:
+      'Returns learner-safe projection without correct answers, explanation, or option codes. Allows DRAFT for editor preview.',
+  })
+  @ApiOkResponse({ type: QuestionVersionPreviewResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Missing questions.read permission or parish scope' })
+  async getVersionPreview(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('versionId') versionId: string,
+  ): Promise<QuestionVersionPreviewResponseDto> {
+    try {
+      const parishId = await this.questionBankService.getVersionQuestionParishId(versionId);
+      await this.parishScopeService.assertCanReadParishAsAdmin(authenticatedUser.userId, parishId);
+
+      const preview = await this.questionBankService.getQuestionVersionPreview(versionId);
+
+      return toQuestionVersionPreviewResponse(preview);
     } catch (error: unknown) {
       rethrowQuestionBankServiceError(error);
     }

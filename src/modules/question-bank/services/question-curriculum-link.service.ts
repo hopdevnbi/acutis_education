@@ -51,6 +51,8 @@ export class QuestionCurriculumLinkService {
       throw new QuestionCurriculumParishMismatchError();
     }
 
+    await this.curriculumService.assertCurriculumActiveById(curriculumId);
+
     const canonicalLessonKey = this.parseCanonicalLessonKey(input.canonicalLessonKey);
 
     if (canonicalLessonKey !== null) {

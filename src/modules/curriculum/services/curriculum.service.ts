@@ -137,6 +137,12 @@ export class CurriculumService {
     return toCurriculumSnapshot(curriculum);
   }
 
+  async assertCurriculumActiveById(rawCurriculumId: string): Promise<void> {
+    const curriculum = await this.findCurriculumEntity(rawCurriculumId);
+
+    this.assertCurriculumActive(curriculum);
+  }
+
   async listCurriculaByParish(
     rawParishId: string,
     input: ListCurriculaInput,

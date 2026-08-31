@@ -38,6 +38,7 @@ import {
   QuestionCodeAlreadyExistsError,
   QuestionDraftAlreadyExistsError,
   QuestionInactiveError,
+  QuestionNoPublishedVersionError,
   QuestionNotFoundError,
   QuestionPublishValidationError,
   QuestionSourceLocaleImmutableError,
@@ -62,8 +63,10 @@ import type {
   ListQuestionVersionsInput,
   ListQuestionsInput,
   ListQuestionsResult,
+  PublishedQuestionSelectionSnapshot,
   QuestionAuthoringSnapshot,
   QuestionSnapshot,
+  QuestionVersionPreview,
   QuestionVersionSnapshot,
   UpdateQuestionInput,
   UpdateQuestionVersionInput,
@@ -637,6 +640,40 @@ export class QuestionBankService {
 
   async getLearnerQuestionProjection(rawVersionId: string): Promise<LearnerQuestionProjection> {
     return this.questionGradingService.getLearnerQuestionProjection(rawVersionId);
+  }
+
+  async getQuestionVersionPreview(rawVersionId: string): Promise<QuestionVersionPreview> {
+    return this.questionGradingService.getQuestionVersionPreview(rawVersionId);
+  }
+
+  async getCurrentPublishedQuestionForSelection(
+    rawQuestionId: string,
+  ): Promise<PublishedQuestionSelectionSnapshot> {
+    const question = await this.findQuestionEntity(rawQuestionId);
+
+    if (question.status !== QuestionStatus.Active) {
+      throw new QuestionInactiveError();
+    }
+
+    if (question.currentPublishedVersionId === null) {
+      throw new QuestionNoPublishedVersionError();
+    }
+
+    const version = await this.questionVersionRepository.findOne({
+      where: { id: question.currentPublishedVersionId },
+    });
+
+    if (version === null || version.status !== QuestionVersionStatus.Published) {
+      throw new QuestionNoPublishedVersionError();
+    }
+
+    return {
+      questionId: question.id,
+      questionVersionId: version.id,
+      questionType: version.questionType,
+      sourceLocale: question.sourceLocale,
+      sourceContentHash: version.sourceContentHash,
+    };
   }
 
   async gradeAnswer(input: GradeAnswerInput): Promise<GradeAnswerResult> {

@@ -2,6 +2,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError, type Repository } from 'typeorm';
 import { CurriculumStatus } from '../../curriculum/enums/curriculum-status.enum';
+import { CurriculumInactiveError } from '../../curriculum/errors/curriculum.errors';
 import { CurriculumService } from '../../curriculum/services/curriculum.service';
 import { QuestionCurriculumLinkEntity } from '../entities/question-curriculum-link.entity';
 import { QuestionEntity } from '../entities/question.entity';
@@ -26,6 +27,7 @@ describe('QuestionCurriculumLinkService', () => {
     Pick<
       CurriculumService,
       | 'getCurriculumById'
+      | 'assertCurriculumActiveById'
       | 'assertCanonicalLessonKeyBelongsToCurriculum'
       | 'assertVersionBelongsToCurriculum'
     >
@@ -76,6 +78,7 @@ describe('QuestionCurriculumLinkService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+      assertCurriculumActiveById: jest.fn().mockResolvedValue(undefined),
       assertCanonicalLessonKeyBelongsToCurriculum: jest.fn().mockResolvedValue(undefined),
       assertVersionBelongsToCurriculum: jest.fn().mockResolvedValue(undefined),
     };
@@ -118,6 +121,37 @@ describe('QuestionCurriculumLinkService', () => {
 
     expect(snapshot.curriculumId).toBe(curriculumId);
     expect(snapshot.questionId).toBe(questionId);
+    expect(curriculumService.assertCurriculumActiveById).toHaveBeenCalledWith(curriculumId);
+  });
+
+  it('rejects new curriculum links when curriculum is inactive', async () => {
+    questionRepository.findOne.mockResolvedValue(activeQuestion);
+    curriculumService.assertCurriculumActiveById.mockRejectedValue(new CurriculumInactiveError());
+
+    await expect(
+      questionCurriculumLinkService.createLink(questionId, { curriculumId }),
+    ).rejects.toBeInstanceOf(CurriculumInactiveError);
+  });
+
+  it('lists historical curriculum links even when curriculum becomes inactive', async () => {
+    questionRepository.findOne.mockResolvedValue(activeQuestion);
+    questionCurriculumLinkRepository.find.mockResolvedValue([
+      {
+        id: linkId,
+        questionId,
+        parishId,
+        curriculumId,
+        canonicalLessonKey: null,
+        authoringCurriculumVersionId: null,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const links = await questionCurriculumLinkService.listLinksByQuestion(questionId);
+
+    expect(links).toHaveLength(1);
+    expect(links[0]?.curriculumId).toBe(curriculumId);
+    expect(curriculumService.assertCurriculumActiveById).not.toHaveBeenCalled();
   });
 
   it('rejects curriculum links when parishes do not match', async () => {

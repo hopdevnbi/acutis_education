@@ -58,6 +58,7 @@ import {
   QuestionCurriculumParishMismatchError,
   QuestionDraftAlreadyExistsError,
   QuestionInactiveError,
+  QuestionNoPublishedVersionError,
   QuestionNotFoundError,
   QuestionParishImmutableError,
   QuestionPublishValidationError,
@@ -71,6 +72,7 @@ import {
   QuestionTagParishMismatchError,
   QuestionUpdateRequiresFieldsError,
   QuestionVersionNotCloneableError,
+  QuestionVersionNotDeliverableError,
   QuestionVersionNotDraftError,
   QuestionVersionNotFoundError,
   QuestionVersionNotGradableError,
@@ -265,6 +267,14 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
   }
 
   if (error instanceof QuestionVersionNotGradableError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof QuestionVersionNotDeliverableError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof QuestionNoPublishedVersionError) {
     throw new ConflictException(error.message);
   }
 

@@ -77,6 +77,16 @@ export interface LearnerQuestionProjection {
   readonly options: readonly LearnerQuestionOptionProjection[];
 }
 
+export type QuestionVersionPreview = LearnerQuestionProjection;
+
+export interface PublishedQuestionSelectionSnapshot {
+  readonly questionId: string;
+  readonly questionVersionId: string;
+  readonly questionType: QuestionType;
+  readonly sourceLocale: string;
+  readonly sourceContentHash: string | null;
+}
+
 export interface GradeAnswerInput {
   readonly questionVersionId: string;
   readonly selectedOptionIds: readonly string[];

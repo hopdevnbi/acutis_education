@@ -10,6 +10,7 @@ import { QuestionType } from '../enums/question-type.enum';
 import { QuestionVersionStatus } from '../enums/question-version-status.enum';
 import {
   InvalidGradeAnswerInputError,
+  QuestionVersionNotDeliverableError,
   QuestionVersionNotGradableError,
 } from '../errors/question-bank.errors';
 import { QuestionGradingService } from './question-grading.service';
@@ -127,6 +128,32 @@ describe('QuestionGradingService', () => {
     expect(projection).not.toHaveProperty('explanation');
     expect(projection).not.toHaveProperty('createdByUserId');
     expect(projection).not.toHaveProperty('publishedByUserId');
+    expect(projection).not.toHaveProperty('explanationMediaJson');
+  });
+
+  it('rejects learner projection for draft versions', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      ...publishedVersion,
+      status: QuestionVersionStatus.Draft,
+    });
+
+    await expect(
+      questionGradingService.getLearnerQuestionProjection(versionId),
+    ).rejects.toBeInstanceOf(QuestionVersionNotDeliverableError);
+  });
+
+  it('allows author preview for draft versions without answer leakage', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      ...publishedVersion,
+      status: QuestionVersionStatus.Draft,
+    });
+
+    const preview = await questionGradingService.getQuestionVersionPreview(versionId);
+
+    expect(preview.questionVersionId).toBe(versionId);
+    expect(preview).not.toHaveProperty('correctOptionIds');
+    expect(preview).not.toHaveProperty('explanation');
+    expect(preview.options[0]).not.toHaveProperty('code');
   });
 
   it('grades single-choice answers as correct or incorrect', async () => {

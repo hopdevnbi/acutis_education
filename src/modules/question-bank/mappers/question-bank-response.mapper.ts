@@ -20,9 +20,11 @@ import type {
   QuestionTagResponse,
   QuestionTagSnapshot,
   QuestionVersionListResponse,
+  QuestionVersionPreview,
   QuestionVersionResponse,
   QuestionVersionSnapshot,
 } from '../interfaces/question-bank.interface';
+import type { QuestionVersionPreviewResponseDto } from '../dto/question-version-preview-response.dto';
 
 export function toQuestionResponse(snapshot: QuestionSnapshot): QuestionResponse {
   return {
@@ -169,5 +171,24 @@ export function toQuestionAuthoringResponse(
     version: toQuestionVersionResponse(snapshot.version),
     options: snapshot.options.map(toQuestionOptionResponse),
     correctOptionIds: [...snapshot.correctOptionIds],
+  };
+}
+
+export function toQuestionVersionPreviewResponse(
+  preview: QuestionVersionPreview,
+): QuestionVersionPreviewResponseDto {
+  return {
+    questionVersionId: preview.questionVersionId,
+    questionType: preview.questionType,
+    prompt: preview.prompt,
+    instruction: preview.instruction,
+    difficulty: preview.difficulty,
+    promptMediaJson: preview.promptMediaJson,
+    options: preview.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      mediaAssetId: option.mediaAssetId,
+      sortOrder: option.sortOrder,
+    })),
   };
 }

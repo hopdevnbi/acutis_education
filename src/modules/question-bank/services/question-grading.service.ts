@@ -13,6 +13,7 @@ import {
   InvalidQuestionOptionIdError,
   InvalidQuestionVersionIdError,
   QuestionNotFoundError,
+  QuestionVersionNotDeliverableError,
   QuestionVersionNotFoundError,
   QuestionVersionNotGradableError,
 } from '../errors/question-bank.errors';
@@ -21,6 +22,7 @@ import type {
   GradeAnswerResult,
   ImmutableAssessmentSnapshot,
   LearnerQuestionProjection,
+  QuestionVersionPreview,
 } from '../interfaces/question-bank.interface';
 
 @Injectable()
@@ -37,26 +39,15 @@ export class QuestionGradingService {
   ) {}
 
   async getLearnerQuestionProjection(rawVersionId: string): Promise<LearnerQuestionProjection> {
-    const version = await this.findVersionEntity(rawVersionId);
-    const options = await this.questionOptionRepository.find({
-      where: { questionVersionId: version.id },
-      order: { sortOrder: 'ASC' },
-    });
+    const version = await this.findDeliverableVersionEntity(rawVersionId);
 
-    return {
-      questionVersionId: version.id,
-      questionType: version.questionType,
-      prompt: version.prompt,
-      instruction: version.instruction,
-      difficulty: version.difficulty,
-      promptMediaJson: version.promptMediaJson,
-      options: options.map((option) => ({
-        id: option.id,
-        text: option.text,
-        mediaAssetId: option.mediaAssetId,
-        sortOrder: option.sortOrder,
-      })),
-    };
+    return this.buildLearnerSafeProjection(version);
+  }
+
+  async getQuestionVersionPreview(rawVersionId: string): Promise<QuestionVersionPreview> {
+    const version = await this.findVersionEntity(rawVersionId);
+
+    return this.buildLearnerSafeProjection(version);
   }
 
   async gradeAnswer(input: GradeAnswerInput): Promise<GradeAnswerResult> {
@@ -141,6 +132,42 @@ export class QuestionGradingService {
     return version;
   }
 
+  private async findDeliverableVersionEntity(rawVersionId: string): Promise<QuestionVersionEntity> {
+    const version = await this.findVersionEntity(rawVersionId);
+
+    if (
+      version.status !== QuestionVersionStatus.Published &&
+      version.status !== QuestionVersionStatus.Archived
+    ) {
+      throw new QuestionVersionNotDeliverableError();
+    }
+
+    return version;
+  }
+
+  private async buildLearnerSafeProjection(
+    version: QuestionVersionEntity,
+  ): Promise<LearnerQuestionProjection> {
+    const options = await this.questionOptionRepository.find({
+      where: { questionVersionId: version.id },
+      order: { sortOrder: 'ASC' },
+    });
+
+    return {
+      questionVersionId: version.id,
+      questionType: version.questionType,
+      prompt: version.prompt,
+      instruction: version.instruction,
+      difficulty: version.difficulty,
+      promptMediaJson: version.promptMediaJson,
+      options: options.map((option) => ({
+        id: option.id,
+        text: option.text,
+        mediaAssetId: option.mediaAssetId,
+        sortOrder: option.sortOrder,
+      })),
+    };
+  }
   private async findGradableVersionEntity(rawVersionId: string): Promise<QuestionVersionEntity> {
     const version = await this.findVersionEntity(rawVersionId);
 
