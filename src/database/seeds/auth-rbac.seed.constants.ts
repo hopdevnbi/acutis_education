@@ -198,6 +198,16 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Publish questions',
     description: 'Local sample permission to publish question versions.',
   },
+  {
+    code: 'practice.read',
+    name: 'Read practice sessions',
+    description: 'Local sample permission to read practice sessions and progress.',
+  },
+  {
+    code: 'practice.manage',
+    name: 'Manage practice sessions',
+    description: 'Local sample permission to start sessions and submit answers.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -234,6 +244,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'questions.read',
     'questions.manage',
     'questions.publish',
+    'practice.read',
   ],
   CATECHIST: [
     'classes.read',
@@ -249,6 +260,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'curricula.read',
     'lesson-content.read',
     'questions.read',
+    'practice.read',
   ],
   PARENT: [
     'classes.read',
@@ -260,6 +272,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'enrollments.read',
     'curricula.read',
     'lesson-content.read',
+    'practice.read',
+    'practice.manage',
   ],
 };
 

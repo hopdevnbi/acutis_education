@@ -227,7 +227,7 @@ describe('QuestionBankDemoSeedService integration (MSSQL)', () => {
     expect(firstSummary.questionsPublished).toBe(
       QUESTION_BANK_DEMO_QUESTIONS.filter((question) => question.publish).length,
     );
-    expect(firstSummary.curriculumLinksCreated).toBe(1);
+    expect(firstSummary.curriculumLinksCreated).toBe(3);
 
     const listResult = await questionBankService.listQuestionsByParish(parishId, {
       page: 1,

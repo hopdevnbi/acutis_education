@@ -51,6 +51,9 @@ export class PracticeSessionEntity {
   @Column({ type: 'uniqueidentifier', nullable: true })
   clientRequestId!: string | null;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  generationRequestHash!: string | null;
+
   @Column({ type: 'uniqueidentifier' })
   createdByUserId!: string;
 

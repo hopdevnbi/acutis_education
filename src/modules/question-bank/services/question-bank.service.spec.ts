@@ -35,6 +35,7 @@ import { QuestionExportService } from './question-export.service';
 import { QuestionGradingService } from './question-grading.service';
 import { QuestionImportValidationService } from './question-import-validation.service';
 import { QuestionOptionService } from './question-option.service';
+import { QuestionPracticeSelectionService } from './question-practice-selection.service';
 
 function mockDataSourceTransaction(
   dataSource: jest.Mocked<Pick<DataSource, 'transaction'>>,
@@ -78,6 +79,7 @@ describe('QuestionBankService', () => {
     Pick<
       QuestionGradingService,
       | 'getLearnerQuestionProjection'
+      | 'getLearnerQuestionProjections'
       | 'getQuestionVersionPreview'
       | 'gradeAnswer'
       | 'getImmutableAssessmentSnapshot'
@@ -185,6 +187,7 @@ describe('QuestionBankService', () => {
 
     questionGradingService = {
       getLearnerQuestionProjection: jest.fn(),
+      getLearnerQuestionProjections: jest.fn(),
       getQuestionVersionPreview: jest.fn(),
       gradeAnswer: jest.fn(),
       getImmutableAssessmentSnapshot: jest.fn(),
@@ -223,6 +226,10 @@ describe('QuestionBankService', () => {
         {
           provide: QuestionImportValidationService,
           useValue: { validate: jest.fn() },
+        },
+        {
+          provide: QuestionPracticeSelectionService,
+          useValue: { selectCurrentPublishedQuestionsForPractice: jest.fn() },
         },
       ],
     }).compile();

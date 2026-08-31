@@ -84,7 +84,7 @@ export const QUESTION_BANK_DEMO_QUESTIONS: readonly QuestionBankDemoSeedQuestion
     correctOptionSortOrders: [1, 2, 3],
     publish: true,
     tagCodes: ['demo-creation'],
-    linkCurriculum: false,
+    linkCurriculum: true,
   },
   {
     code: 'qb-demo-tf-001',
@@ -97,7 +97,7 @@ export const QUESTION_BANK_DEMO_QUESTIONS: readonly QuestionBankDemoSeedQuestion
     correctOptionSortOrders: [1],
     publish: true,
     tagCodes: ['demo-faith'],
-    linkCurriculum: false,
+    linkCurriculum: true,
   },
   {
     code: 'qb-demo-draft-001',

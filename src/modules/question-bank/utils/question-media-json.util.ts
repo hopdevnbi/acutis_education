@@ -201,3 +201,30 @@ export function toPublishValidationIssues(
     path: issue.path,
   }));
 }
+
+export function learnerProjectionReferencesMediaAsset(
+  projection: {
+    readonly promptMediaJson: string | null;
+    readonly options: readonly { readonly mediaAssetId: string | null }[];
+  },
+  rawAssetId: string,
+): boolean {
+  const normalizedAssetId = normalizeUuid(rawAssetId);
+
+  if (projection.promptMediaJson !== null && projection.promptMediaJson.trim().length > 0) {
+    try {
+      const document = parseQuestionMediaJsonDocument(projection.promptMediaJson);
+
+      if (document.items.some((item) => normalizeUuid(item.assetId) === normalizedAssetId)) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return projection.options.some(
+    (option) =>
+      option.mediaAssetId !== null && normalizeUuid(option.mediaAssetId) === normalizedAssetId,
+  );
+}

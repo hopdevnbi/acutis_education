@@ -43,6 +43,7 @@ describe('Practice foundation entities', () => {
         'randomizeQuestions',
         'randomizeOptions',
         'clientRequestId',
+        'generationRequestHash',
         'createdByUserId',
         'startedAt',
         'completedAt',

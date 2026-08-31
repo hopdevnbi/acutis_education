@@ -17,6 +17,7 @@ import { QuestionExportService } from '../../modules/question-bank/services/ques
 import { QuestionGradingService } from '../../modules/question-bank/services/question-grading.service';
 import { QuestionImportValidationService } from '../../modules/question-bank/services/question-import-validation.service';
 import { QuestionOptionService } from '../../modules/question-bank/services/question-option.service';
+import { QuestionPracticeSelectionService } from '../../modules/question-bank/services/question-practice-selection.service';
 import { QuestionTagService } from '../../modules/question-bank/services/question-tag.service';
 import { UsersModule } from '../../modules/users/users.module';
 import { DatabaseModule } from '../database.module';
@@ -48,6 +49,7 @@ import { QuestionBankDemoSeedService } from './question-bank-demo.seed.service';
     QuestionCurriculumLinkService,
     QuestionExportService,
     QuestionImportValidationService,
+    QuestionPracticeSelectionService,
     QuestionBankDemoSeedService,
   ],
   exports: [QuestionBankDemoSeedService],

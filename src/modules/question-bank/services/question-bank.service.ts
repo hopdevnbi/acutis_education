@@ -70,6 +70,7 @@ import type {
   ListQuestionsInput,
   ListQuestionsResult,
   PublishedQuestionSelectionSnapshot,
+  SelectCurrentPublishedQuestionsForPracticeInput,
   QuestionAuthoringSnapshot,
   QuestionExportPackageV1Snapshot,
   QuestionListItemSnapshot,
@@ -100,6 +101,8 @@ import {
 } from '../utils/question-text.util';
 import { QuestionGradingService } from './question-grading.service';
 import { QuestionOptionService } from './question-option.service';
+import { QuestionPracticeSelectionService } from './question-practice-selection.service';
+import { learnerProjectionReferencesMediaAsset } from '../utils/question-media-json.util';
 import { QuestionExportService } from './question-export.service';
 import { QuestionImportValidationService } from './question-import-validation.service';
 
@@ -113,6 +116,7 @@ export class QuestionBankService {
     private readonly parishService: ParishService,
     private readonly questionOptionService: QuestionOptionService,
     private readonly questionGradingService: QuestionGradingService,
+    private readonly questionPracticeSelectionService: QuestionPracticeSelectionService,
     private readonly mediaAssetService: MediaAssetService,
     private readonly dataSource: DataSource,
     private readonly questionExportService: QuestionExportService,
@@ -684,6 +688,25 @@ export class QuestionBankService {
 
   async getLearnerQuestionProjection(rawVersionId: string): Promise<LearnerQuestionProjection> {
     return this.questionGradingService.getLearnerQuestionProjection(rawVersionId);
+  }
+
+  async getLearnerQuestionProjections(
+    rawVersionIds: readonly string[],
+  ): Promise<readonly LearnerQuestionProjection[]> {
+    return this.questionGradingService.getLearnerQuestionProjections(rawVersionIds);
+  }
+
+  learnerProjectionReferencesMediaAsset(
+    projection: LearnerQuestionProjection,
+    rawAssetId: string,
+  ): boolean {
+    return learnerProjectionReferencesMediaAsset(projection, rawAssetId);
+  }
+
+  async selectCurrentPublishedQuestionsForPractice(
+    input: SelectCurrentPublishedQuestionsForPracticeInput,
+  ): Promise<readonly PublishedQuestionSelectionSnapshot[]> {
+    return this.questionPracticeSelectionService.selectCurrentPublishedQuestionsForPractice(input);
   }
 
   async getQuestionVersionPreview(rawVersionId: string): Promise<QuestionVersionPreview> {

@@ -16,6 +16,7 @@ import { QuestionTagLinkEntity } from './entities/question-tag-link.entity';
 import { QuestionTagEntity } from './entities/question-tag.entity';
 import { QuestionVersionEntity } from './entities/question-version.entity';
 import { QuestionEntity } from './entities/question.entity';
+import { QuestionPracticeSelectionService } from './services/question-practice-selection.service';
 import { QuestionBankService } from './services/question-bank.service';
 import { QuestionCurriculumLinkService } from './services/question-curriculum-link.service';
 import { QuestionExportService } from './services/question-export.service';
@@ -55,6 +56,7 @@ import { QuestionTagService } from './services/question-tag.service';
     QuestionCurriculumLinkService,
     QuestionExportService,
     QuestionImportValidationService,
+    QuestionPracticeSelectionService,
   ],
   exports: [QuestionBankService],
 })

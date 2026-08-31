@@ -87,6 +87,18 @@ export interface PublishedQuestionSelectionSnapshot {
   readonly sourceContentHash: string | null;
 }
 
+export interface SelectCurrentPublishedQuestionsForPracticeInput {
+  readonly parishId: string;
+  readonly questionCount: number;
+  readonly curriculumId?: string;
+  readonly canonicalLessonKey?: string;
+  readonly tagIds?: readonly string[];
+  readonly tagCodes?: readonly string[];
+  readonly questionTypes?: readonly QuestionType[];
+  readonly difficulty?: QuestionDifficulty;
+  readonly excludeQuestionVersionIds?: readonly string[];
+}
+
 export interface GradeAnswerInput {
   readonly questionVersionId: string;
   readonly selectedOptionIds: readonly string[];

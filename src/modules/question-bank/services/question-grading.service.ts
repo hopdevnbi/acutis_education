@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { QuestionCorrectOptionEntity } from '../entities/question-correct-option.entity';
 import { QuestionOptionEntity } from '../entities/question-option.entity';
@@ -42,6 +42,76 @@ export class QuestionGradingService {
     const version = await this.findDeliverableVersionEntity(rawVersionId);
 
     return this.buildLearnerSafeProjection(version);
+  }
+
+  async getLearnerQuestionProjections(
+    rawVersionIds: readonly string[],
+  ): Promise<readonly LearnerQuestionProjection[]> {
+    if (rawVersionIds.length === 0) {
+      return [];
+    }
+
+    const normalizedIds = rawVersionIds.map((rawVersionId) => this.parseVersionId(rawVersionId));
+    const uniqueIds = [...new Set(normalizedIds)];
+    const versions = await this.questionVersionRepository.find({
+      where: { id: In(uniqueIds) },
+    });
+    const versionMap = new Map(
+      versions.map((version) => [normalizeUuid(version.id), version] as const),
+    );
+
+    for (const versionId of uniqueIds) {
+      const version = versionMap.get(versionId);
+
+      if (version === undefined) {
+        throw new QuestionVersionNotFoundError();
+      }
+
+      if (
+        version.status !== QuestionVersionStatus.Published &&
+        version.status !== QuestionVersionStatus.Archived
+      ) {
+        throw new QuestionVersionNotDeliverableError();
+      }
+    }
+
+    const options = await this.questionOptionRepository.find({
+      where: { questionVersionId: In(uniqueIds) },
+      order: { sortOrder: 'ASC' },
+    });
+    const optionsByVersionId = new Map<string, QuestionOptionEntity[]>();
+
+    for (const option of options) {
+      const versionId = normalizeUuid(option.questionVersionId);
+      const existing = optionsByVersionId.get(versionId) ?? [];
+      existing.push(option);
+      optionsByVersionId.set(versionId, existing);
+    }
+
+    return normalizedIds.map((versionId) => {
+      const version = versionMap.get(versionId);
+
+      if (version === undefined) {
+        throw new QuestionVersionNotFoundError();
+      }
+
+      const versionOptions = optionsByVersionId.get(versionId) ?? [];
+
+      return {
+        questionVersionId: version.id,
+        questionType: version.questionType,
+        prompt: version.prompt,
+        instruction: version.instruction,
+        difficulty: version.difficulty,
+        promptMediaJson: version.promptMediaJson,
+        options: versionOptions.map((option) => ({
+          id: option.id,
+          text: option.text,
+          mediaAssetId: option.mediaAssetId,
+          sortOrder: option.sortOrder,
+        })),
+      };
+    });
   }
 
   async getQuestionVersionPreview(rawVersionId: string): Promise<QuestionVersionPreview> {
