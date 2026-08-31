@@ -4,8 +4,15 @@ import { EntityManager, In, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { CurriculumService } from '../../curriculum/services/curriculum.service';
 import { CurriculumVersionStatus } from '../../curriculum/enums/curriculum-version-status.enum';
+import {
+  MediaAssetCategoryMismatchError,
+  MediaAssetNotFoundError,
+  MediaAssetNotReadyError,
+} from '../../media/errors/media-asset.errors';
+import { MediaAssetService } from '../../media/services/media-asset.service';
 import { LessonContentEntity } from '../entities/lesson-content.entity';
 import {
+  ContentAssetValidationError,
   ContentNotFoundForPublishError,
   LessonContentDraftOnlyError,
   LessonContentNotFoundError,
@@ -21,6 +28,10 @@ import {
   isNonEmptyContentDocument,
   validateContentDocumentV1,
 } from '../utils/content-document-v1.validator';
+import {
+  collectDocumentMediaValidationIssues,
+  validateDocumentMediaReferences,
+} from '../utils/content-media-reference.util';
 import { computeContentHash } from '../utils/content-hash.util';
 
 @Injectable()
@@ -29,6 +40,7 @@ export class LearningContentService {
     @InjectRepository(LessonContentEntity)
     private readonly lessonContentRepository: Repository<LessonContentEntity>,
     private readonly curriculumService: CurriculumService,
+    private readonly mediaAssetService: MediaAssetService,
   ) {}
 
   async upsertLessonContent(
@@ -42,6 +54,21 @@ export class LearningContentService {
     }
 
     const document = validateContentDocumentV1(input.document);
+
+    try {
+      await validateDocumentMediaReferences(document, this.mediaAssetService);
+    } catch (error: unknown) {
+      if (
+        error instanceof MediaAssetNotFoundError ||
+        error instanceof MediaAssetNotReadyError ||
+        error instanceof MediaAssetCategoryMismatchError
+      ) {
+        throw new ContentAssetValidationError(error.message);
+      }
+
+      throw error;
+    }
+
     const contentHash = computeContentHash(document);
     const contentJson = JSON.stringify(document);
     const normalizedLessonId = normalizeUuid(lessonId);
@@ -162,6 +189,22 @@ export class LearningContentService {
             lessonTitle: lesson.title,
             code: 'CONTENT_EMPTY',
             message: 'Lesson content is empty.',
+          });
+          continue;
+        }
+
+        const mediaIssues = await collectDocumentMediaValidationIssues(
+          document,
+          this.mediaAssetService,
+        );
+
+        for (const mediaIssue of mediaIssues) {
+          issues.push({
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+            code: mediaIssue.code,
+            message: mediaIssue.message,
+            assetId: mediaIssue.assetId,
           });
         }
       }

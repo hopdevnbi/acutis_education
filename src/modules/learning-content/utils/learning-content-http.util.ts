@@ -11,6 +11,7 @@ import {
 import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
   ContentBlockLimitExceededError,
+  ContentAssetValidationError,
   ContentDocumentTooLargeError,
   ContentNotFoundForPublishError,
   InvalidContentAssetIdError,
@@ -37,6 +38,10 @@ export function rethrowLearningContentServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidContentAssetIdError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ContentAssetValidationError) {
     throw new BadRequestException(error.message);
   }
 

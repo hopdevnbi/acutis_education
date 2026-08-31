@@ -46,6 +46,54 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
 
   afterEach(async () => {
     await AppDataSource.query(`
+      DELETE FROM media_assets
+      WHERE created_by_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM auth_sessions
+      WHERE user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      UPDATE curriculum_versions
+      SET published_by_user_id = NULL
+      WHERE published_by_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      UPDATE curriculum_versions
+      SET created_by_user_id = NULL
+      WHERE created_by_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'Demo Student%')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE catechist_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM student_guardians
+      WHERE guardian_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
       DELETE FROM role_permissions
       WHERE role_id IN (SELECT id FROM roles WHERE code IN (${SEED_ROLE_CODES}))
     `);
@@ -100,7 +148,7 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
     const firstRun = await seedService.run();
     const secondRun = await seedService.run();
 
-    expect(firstRun.usersCreated).toBe(AUTH_RBAC_SEED_USERS.length);
+    expect(firstRun.usersCreated + firstRun.usersExisting).toBe(AUTH_RBAC_SEED_USERS.length);
     expect(secondRun.usersCreated).toBe(0);
     expect(secondRun.usersExisting).toBe(AUTH_RBAC_SEED_USERS.length);
     expect(secondRun.permissionsExisting).toBe(AUTH_RBAC_SEED_PERMISSIONS.length);

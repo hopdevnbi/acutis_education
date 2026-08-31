@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { MediaConfigService } from '../config/media-config.service';
 import { MediaAssetEntity } from '../entities/media-asset.entity';
 import { MediaAssetStatus } from '../enums/media-asset-status.enum';
 import { MediaCategory } from '../enums/media-category.enum';
@@ -68,6 +69,20 @@ describe('MediaAssetService', () => {
         {
           provide: StorageProviderRegistry,
           useValue: storageProviderRegistry,
+        },
+        {
+          provide: MediaConfigService,
+          useValue: {
+            getConfiguration: () => ({
+              sizeLimits: {
+                maxImageBytes: 10_485_760,
+                maxDocumentBytes: 26_214_400,
+                maxAudioBytes: 26_214_400,
+                maxVideoBytes: 104_857_600,
+                globalMaxBytes: 104_857_600,
+              },
+            }),
+          },
         },
       ],
     }).compile();

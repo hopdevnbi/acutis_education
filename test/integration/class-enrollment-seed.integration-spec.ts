@@ -131,6 +131,52 @@ describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
   });
 
   it('refuses to run when parish-academic prerequisites are missing', async () => {
+    await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE student_id IN (
+        SELECT id FROM students
+        WHERE full_name IN ('${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}', '${CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME}')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE class_id IN (
+        SELECT id FROM classes
+        WHERE code IN ('${CLASS_ENROLLMENT_DEMO_CLASS_A_CODE}', '${CLASS_ENROLLMENT_DEMO_CLASS_B_CODE}')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM student_guardians
+      WHERE student_id IN (
+        SELECT id FROM students
+        WHERE full_name IN ('${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}', '${CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME}')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parish_memberships
+      WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM classes
+      WHERE code IN ('${CLASS_ENROLLMENT_DEMO_CLASS_A_CODE}', '${CLASS_ENROLLMENT_DEMO_CLASS_B_CODE}')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM students
+      WHERE full_name IN ('${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}', '${CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME}')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM catechism_levels
+      WHERE code LIKE 'demo-level-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM academic_years
+      WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parishes
+      WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+    `);
+
     await expect(classEnrollmentSeedService.run()).rejects.toBeInstanceOf(
       ClassEnrollmentSeedPrerequisiteError,
     );

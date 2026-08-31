@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthModule } from '../auth/auth.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
+import { MediaModule } from '../media/media.module';
 import { ParishModule } from '../parish/parish.module';
 import { LearningContentController } from './controllers/learning-content.controller';
 import { LessonContentEntity } from './entities/lesson-content.entity';
@@ -12,6 +13,7 @@ import { LearningContentService } from './services/learning-content.service';
   imports: [
     TypeOrmModule.forFeature([LessonContentEntity]),
     CurriculumModule,
+    MediaModule,
     AuthModule,
     AccessControlModule,
     ParishModule,

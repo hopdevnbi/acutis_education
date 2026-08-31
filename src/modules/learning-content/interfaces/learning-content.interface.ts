@@ -93,6 +93,12 @@ export interface UpsertLessonContentInput {
 export interface ContentPublishValidationIssue {
   readonly lessonId: string;
   readonly lessonTitle: string;
-  readonly code: 'CONTENT_MISSING' | 'CONTENT_EMPTY';
+  readonly code:
+    | 'CONTENT_MISSING'
+    | 'CONTENT_EMPTY'
+    | 'ASSET_NOT_FOUND'
+    | 'ASSET_NOT_READY'
+    | 'ASSET_CATEGORY_MISMATCH';
   readonly message: string;
+  readonly assetId?: string;
 }

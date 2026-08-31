@@ -91,6 +91,9 @@ function buildValidAssetInput(
 }
 
 describe('Media foundation integration (MSSQL)', () => {
+  const createdUserIds: string[] = [];
+  const createdAssetIds: string[] = [];
+
   beforeAll(async () => {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
@@ -103,6 +106,23 @@ describe('Media foundation integration (MSSQL)', () => {
     }
   });
 
+  afterEach(async () => {
+    if (createdAssetIds.length > 0) {
+      const assetIdList = createdAssetIds.map((id) => `'${id}'`).join(', ');
+      await AppDataSource.query(`DELETE FROM media_assets WHERE id IN (${assetIdList})`);
+      createdAssetIds.length = 0;
+    }
+
+    if (createdUserIds.length > 0) {
+      const userIdList = createdUserIds.map((id) => `'${id}'`).join(', ');
+      await AppDataSource.query(
+        `DELETE FROM media_assets WHERE created_by_user_id IN (${userIdList})`,
+      );
+      await AppDataSource.query(`DELETE FROM users WHERE id IN (${userIdList})`);
+      createdUserIds.length = 0;
+    }
+  });
+
   afterAll(async () => {
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy();
@@ -111,6 +131,7 @@ describe('Media foundation integration (MSSQL)', () => {
 
   it('persists media asset metadata with Unicode file names', async () => {
     const assetId = generateUuidV4();
+    createdAssetIds.push(assetId);
 
     await insertMediaAsset(
       buildValidAssetInput({
@@ -130,6 +151,7 @@ describe('Media foundation integration (MSSQL)', () => {
 
   it('enforces unique storage provider and storage key pairs', async () => {
     const assetId = generateUuidV4();
+    createdAssetIds.push(assetId);
     const duplicateKey = `assets/2026/08/${TEST_CODE_PREFIX}duplicate`;
 
     await insertMediaAsset(
@@ -221,8 +243,10 @@ describe('Media foundation integration (MSSQL)', () => {
   });
 
   it('accepts optional created_by_user_id foreign key to users', async () => {
-    const userId = await insertUser(`${TEST_CODE_PREFIX}owner@example.com`);
+    const userId = await insertUser(`${TEST_CODE_PREFIX}${generateUuidV4()}@example.com`);
+    createdUserIds.push(userId);
     const assetId = generateUuidV4();
+    createdAssetIds.push(assetId);
 
     await insertMediaAsset(
       buildValidAssetInput({

@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import type { MediaAssetStatus } from '../enums/media-asset-status.enum';
 import type { MediaCategory } from '../enums/media-category.enum';
 import type { MediaStorageProvider } from '../enums/media-storage-provider.enum';
@@ -14,6 +15,17 @@ export interface MediaAssetSnapshot {
   readonly visibility: MediaVisibility;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+export interface MediaAssetAccessRecord {
+  readonly snapshot: MediaAssetSnapshot;
+  readonly createdByUserId: string | null;
+}
+
+export interface MediaAssetContent {
+  readonly snapshot: MediaAssetSnapshot;
+  readonly body: Readable;
+  readonly contentLength: number;
 }
 
 export interface CreatePendingMediaAssetInput {
@@ -34,4 +46,12 @@ export interface MediaAssetStorageRecord {
   readonly storageProvider: MediaStorageProvider;
   readonly storageKey: string;
   readonly status: MediaAssetStatus;
+}
+
+export interface CreateMediaUploadInput {
+  readonly fileBuffer: Buffer;
+  readonly originalFileName: string;
+  readonly intendedCategory: MediaCategory;
+  readonly visibility: MediaVisibility;
+  readonly createdByUserId: string;
 }

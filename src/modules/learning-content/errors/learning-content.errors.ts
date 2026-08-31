@@ -46,3 +46,10 @@ export class ContentNotFoundForPublishError extends Error {
     this.name = 'ContentNotFoundForPublishError';
   }
 }
+
+export class ContentAssetValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ContentAssetValidationError';
+  }
+}

@@ -4,6 +4,7 @@ import { type EntityManager } from 'typeorm';
 import { CurriculumVersionStatus } from '../../curriculum/enums/curriculum-version-status.enum';
 import { CurriculumStatus } from '../../curriculum/enums/curriculum-status.enum';
 import { CurriculumService } from '../../curriculum/services/curriculum.service';
+import { MediaAssetService } from '../../media/services/media-asset.service';
 import { LessonContentEntity } from '../entities/lesson-content.entity';
 import {
   ContentBlockLimitExceededError,
@@ -38,6 +39,9 @@ describe('LearningContentService', () => {
   };
   let curriculumService: jest.Mocked<
     Pick<CurriculumService, 'getLessonCurriculumContext' | 'getLessonById' | 'getVersionTree'>
+  >;
+  let mediaAssetService: jest.Mocked<
+    Pick<MediaAssetService, 'assertAssetCategory' | 'assertAssetReady' | 'getAssetSnapshot'>
   >;
 
   const draftContext = {
@@ -87,6 +91,16 @@ describe('LearningContentService', () => {
       getVersionTree: jest.fn(),
     };
 
+    mediaAssetService = {
+      assertAssetCategory: jest.fn().mockResolvedValue({
+        id: assetId,
+        status: 'READY',
+        mediaCategory: 'IMAGE',
+      }),
+      assertAssetReady: jest.fn(),
+      getAssetSnapshot: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LearningContentService,
@@ -97,6 +111,10 @@ describe('LearningContentService', () => {
         {
           provide: CurriculumService,
           useValue: curriculumService,
+        },
+        {
+          provide: MediaAssetService,
+          useValue: mediaAssetService,
         },
       ],
     }).compile();

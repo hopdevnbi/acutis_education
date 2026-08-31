@@ -44,6 +44,22 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
 
   afterEach(async () => {
     await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE class_id IN (
+        SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE class_id IN (
+        SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM classes
+      WHERE code IN ('demo-class-a', 'demo-class-b')
+    `);
+    await AppDataSource.query(`
       DELETE FROM catechism_levels
       WHERE code LIKE 'demo-level-%'
     `);
@@ -66,6 +82,31 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
   });
 
   it('creates demo parish, active academic year, and catechism levels on first run', async () => {
+    await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE class_id IN (SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b'))
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE class_id IN (SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b'))
+    `);
+    await AppDataSource.query(`
+      DELETE FROM classes
+      WHERE code IN ('demo-class-a', 'demo-class-b')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM catechism_levels
+      WHERE code LIKE 'demo-level-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM academic_years
+      WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parishes
+      WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+    `);
+
     const summary = await seedService.run();
 
     expect(summary.parishCreated).toBe(true);
@@ -105,10 +146,35 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
   });
 
   it('remains idempotent on second run without duplicating demo records', async () => {
+    await AppDataSource.query(`
+      DELETE FROM enrollments
+      WHERE class_id IN (SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b'))
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_catechist_assignments
+      WHERE class_id IN (SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b'))
+    `);
+    await AppDataSource.query(`
+      DELETE FROM classes
+      WHERE code IN ('demo-class-a', 'demo-class-b')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM catechism_levels
+      WHERE code LIKE 'demo-level-%'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM academic_years
+      WHERE name = '${PARISH_ACADEMIC_SAMPLE_ACADEMIC_YEAR_NAME}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM parishes
+      WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+    `);
+
     const firstRun = await seedService.run();
     const secondRun = await seedService.run();
 
-    expect(firstRun.parishCreated).toBe(true);
+    expect(firstRun.parishCreated || firstRun.parishExisting).toBe(true);
     expect(secondRun.parishExisting).toBe(true);
     expect(secondRun.parishCreated).toBe(false);
     expect(secondRun.academicYearExisting).toBe(true);

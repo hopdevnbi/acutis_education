@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { normalizeUuid } from '../../../database/uuid-v4.util';
+import { generateUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import { MediaConfigService } from '../config/media-config.service';
 import { MediaAssetEntity } from '../entities/media-asset.entity';
 import { MediaAssetStatus } from '../enums/media-asset-status.enum';
 import { MediaCategory } from '../enums/media-category.enum';
@@ -11,17 +12,31 @@ import {
   MediaAssetCategoryMismatchError,
   MediaAssetNotFoundError,
   MediaAssetNotReadyError,
+  MediaStorageUnavailableError,
+  MediaUploadCategoryNotAllowedError,
+  MediaUploadTooLargeError,
+  UnsupportedMediaTypeError,
 } from '../errors/media-asset.errors';
 import type {
+  CreateMediaUploadInput,
   CreatePendingMediaAssetInput,
+  MediaAssetAccessRecord,
+  MediaAssetContent,
   MediaAssetSnapshot,
   MediaAssetStorageRecord,
 } from '../interfaces/media-asset.interface';
 import { toMediaAssetSnapshot, toMediaAssetStorageRecord } from '../mappers/media-asset.mapper';
 import { StorageProviderRegistry } from '../providers/storage-provider-registry.service';
 import type { StorageProvider } from '../providers/storage-provider.interface';
-import { assertValidSha256Hex } from '../utils/checksum.util';
+import { assertValidSha256Hex, computeSha256Hex } from '../utils/checksum.util';
+import {
+  isCategoryEnabledForPublicUpload,
+  isMimeAllowedForCategory,
+  resolveMaxBytesForCategory,
+} from '../utils/media-category-mime.util';
+import { detectMimeSignatureFromBuffer, isBlockedMimeType } from '../utils/mime-signature.util';
 import { sanitizeOriginalFileName } from '../utils/original-filename.util';
+import { buildMediaStorageKey } from '../utils/storage-key.util';
 
 @Injectable()
 export class MediaAssetService {
@@ -29,7 +44,77 @@ export class MediaAssetService {
     @InjectRepository(MediaAssetEntity)
     private readonly mediaAssetRepository: Repository<MediaAssetEntity>,
     private readonly storageProviderRegistry: StorageProviderRegistry,
+    private readonly mediaConfigService: MediaConfigService,
   ) {}
+
+  async createFromUpload(input: CreateMediaUploadInput): Promise<MediaAssetSnapshot> {
+    if (!isCategoryEnabledForPublicUpload(input.intendedCategory)) {
+      throw new MediaUploadCategoryNotAllowedError();
+    }
+
+    if (input.visibility !== MediaVisibility.Private) {
+      throw new InvalidMediaAssetInputError('Only PRIVATE visibility is allowed for uploads.');
+    }
+
+    if (input.fileBuffer.length === 0) {
+      throw new InvalidMediaAssetInputError('Upload file must not be empty.');
+    }
+
+    const sizeLimits = this.mediaConfigService.getConfiguration().sizeLimits;
+    const maxBytes = resolveMaxBytesForCategory(input.intendedCategory, sizeLimits);
+
+    if (input.fileBuffer.length > maxBytes) {
+      throw new MediaUploadTooLargeError();
+    }
+
+    const detectedSignature = detectMimeSignatureFromBuffer(input.fileBuffer);
+
+    if (detectedSignature === null || isBlockedMimeType(detectedSignature.mimeType)) {
+      throw new UnsupportedMediaTypeError('Uploaded file type is not supported.');
+    }
+
+    if (
+      detectedSignature.mediaCategory !== input.intendedCategory ||
+      !isMimeAllowedForCategory(detectedSignature.mimeType, input.intendedCategory)
+    ) {
+      throw new UnsupportedMediaTypeError(
+        'Uploaded file content does not match the declared media category.',
+      );
+    }
+
+    const assetId = generateUuidV4();
+    const createdAt = new Date();
+    const storageKey = buildMediaStorageKey(assetId, createdAt);
+    const checksumSha256 = computeSha256Hex(input.fileBuffer);
+    const writeProvider = this.getWriteStorageProvider();
+
+    await this.createPendingAssetMetadata({
+      assetId,
+      storageProvider: writeProvider.providerId,
+      storageKey,
+      originalFileName: input.originalFileName,
+      mimeType: detectedSignature.mimeType,
+      mediaCategory: input.intendedCategory,
+      sizeBytes: input.fileBuffer.length,
+      checksumSha256,
+      visibility: input.visibility,
+      createdByUserId: input.createdByUserId,
+    });
+
+    try {
+      await writeProvider.putObject({
+        storageKey,
+        body: input.fileBuffer,
+        contentType: detectedSignature.mimeType,
+        contentLength: input.fileBuffer.length,
+      });
+    } catch {
+      await this.markAssetFailed(assetId);
+      throw new MediaStorageUnavailableError();
+    }
+
+    return this.markAssetReady(assetId);
+  }
 
   async createPendingAssetMetadata(
     input: CreatePendingMediaAssetInput,
@@ -81,10 +166,32 @@ export class MediaAssetService {
     return toMediaAssetSnapshot(entity);
   }
 
+  async getAssetAccessRecord(assetId: string): Promise<MediaAssetAccessRecord> {
+    const entity = await this.findEntityOrThrow(assetId);
+
+    return {
+      snapshot: toMediaAssetSnapshot(entity),
+      createdByUserId: entity.createdByUserId,
+    };
+  }
+
   async getAssetStorageRecord(assetId: string): Promise<MediaAssetStorageRecord> {
     const entity = await this.findEntityOrThrow(assetId);
 
     return toMediaAssetStorageRecord(entity);
+  }
+
+  async openAssetContent(assetId: string): Promise<MediaAssetContent> {
+    const snapshot = await this.assertAssetReady(assetId);
+    const storageRecord = await this.getAssetStorageRecord(assetId);
+    const provider = this.resolveStorageProviderForAsset(storageRecord.storageProvider);
+    const objectResult = await provider.getObject(storageRecord.storageKey);
+
+    return {
+      snapshot,
+      body: objectResult.body,
+      contentLength: objectResult.contentLength,
+    };
   }
 
   async assertAssetReady(assetId: string): Promise<MediaAssetSnapshot> {
