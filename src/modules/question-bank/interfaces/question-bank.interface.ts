@@ -43,6 +43,23 @@ export interface QuestionVersionSnapshot {
   readonly updatedAt: Date;
 }
 
+export interface QuestionOptionSnapshot {
+  readonly id: string;
+  readonly questionVersionId: string;
+  readonly code: string | null;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+  readonly sortOrder: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface QuestionAuthoringSnapshot {
+  readonly version: QuestionVersionSnapshot;
+  readonly options: QuestionOptionSnapshot[];
+  readonly correctOptionIds: string[];
+}
+
 export interface QuestionTagSnapshot {
   readonly id: string;
   readonly parishId: string;
@@ -132,6 +149,17 @@ export interface UpdateQuestionVersionInput {
   readonly difficulty?: QuestionDifficulty | null;
   readonly promptMediaJson?: string | null;
   readonly explanationMediaJson?: string | null;
+}
+
+export interface ReplaceQuestionOptionInput {
+  readonly code?: string | null;
+  readonly text?: string | null;
+  readonly mediaAssetId?: string | null;
+  readonly sortOrder: number;
+}
+
+export interface SetCorrectOptionsInput {
+  readonly optionIds: readonly string[];
 }
 
 export interface CreateQuestionTagInput {
@@ -252,4 +280,25 @@ export interface QuestionCurriculumLinkResponse {
 
 export interface QuestionCurriculumLinkListResponse {
   readonly items: QuestionCurriculumLinkResponse[];
+}
+
+export interface QuestionOptionResponse {
+  readonly id: string;
+  readonly questionVersionId: string;
+  readonly code: string | null;
+  readonly text: string | null;
+  readonly mediaAssetId: string | null;
+  readonly sortOrder: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface QuestionOptionListResponse {
+  readonly items: QuestionOptionResponse[];
+}
+
+export interface QuestionAuthoringResponse {
+  readonly version: QuestionVersionResponse;
+  readonly options: QuestionOptionResponse[];
+  readonly correctOptionIds: string[];
 }

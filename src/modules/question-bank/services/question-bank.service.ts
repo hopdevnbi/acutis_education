@@ -1,11 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  QueryFailedError,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { isUniqueConstraintViolation } from '../../academic-structure/utils/unique-constraint.util';
 import { InvalidCurriculumSourceLocaleError } from '../../curriculum/errors/curriculum.errors';
 import { parseSourceLocale } from '../../curriculum/utils/curriculum-source-locale.util';
+import { MediaCategory } from '../../media/enums/media-category.enum';
+import {
+  MediaAssetCategoryMismatchError,
+  MediaAssetNotFoundError,
+  MediaAssetNotReadyError,
+} from '../../media/errors/media-asset.errors';
+import { MediaAssetService } from '../../media/services/media-asset.service';
 import { ParishService } from '../../parish/services/parish.service';
+import { MAX_OPTIONS, MIN_OPTIONS } from '../constants/question-option.constants';
 import { QuestionVersionEntity } from '../entities/question-version.entity';
 import { QuestionEntity } from '../entities/question.entity';
 import { QuestionDifficulty } from '../enums/question-difficulty.enum';
@@ -21,6 +36,7 @@ import {
   QuestionDraftAlreadyExistsError,
   QuestionInactiveError,
   QuestionNotFoundError,
+  QuestionPublishValidationError,
   QuestionSourceLocaleImmutableError,
   QuestionUpdateRequiresFieldsError,
   QuestionVersionNotDraftError,
@@ -28,6 +44,7 @@ import {
   QuestionVersionNumberConflictError,
   InvalidQuestionIdError,
   InvalidQuestionVersionIdError,
+  type QuestionPublishValidationIssue,
 } from '../errors/question-bank.errors';
 import type {
   CreateQuestionInput,
@@ -36,6 +53,7 @@ import type {
   ListQuestionVersionsInput,
   ListQuestionsInput,
   ListQuestionsResult,
+  QuestionAuthoringSnapshot,
   QuestionSnapshot,
   QuestionVersionSnapshot,
   UpdateQuestionInput,
@@ -44,10 +62,17 @@ import type {
 import { toQuestionSnapshot, toQuestionVersionSnapshot } from '../mappers/question-bank.mapper';
 import { parseQuestionCode } from '../utils/question-code.util';
 import {
+  collectQuestionMediaJsonValidationIssues,
+  parseOptionalQuestionMediaJson,
+  toPublishValidationIssues,
+  validateQuestionMediaJsonAssets,
+} from '../utils/question-media-json.util';
+import {
   parseQuestionExplanation,
   parseQuestionInstruction,
   parseQuestionPrompt,
 } from '../utils/question-text.util';
+import { QuestionOptionService } from './question-option.service';
 
 @Injectable()
 export class QuestionBankService {
@@ -57,6 +82,8 @@ export class QuestionBankService {
     @InjectRepository(QuestionVersionEntity)
     private readonly questionVersionRepository: Repository<QuestionVersionEntity>,
     private readonly parishService: ParishService,
+    private readonly questionOptionService: QuestionOptionService,
+    private readonly mediaAssetService: MediaAssetService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -115,9 +142,17 @@ export class QuestionBankService {
       try {
         const savedVersion = await entityManager.save(QuestionVersionEntity, version);
 
+        if (questionType === QuestionType.TrueFalse) {
+          await this.questionOptionService.ensureTrueFalseOptions(savedVersion.id, entityManager);
+        }
+
+        const refreshedVersion = await entityManager.findOne(QuestionVersionEntity, {
+          where: { id: savedVersion.id },
+        });
+
         return {
           question: toQuestionSnapshot(savedQuestion),
-          initialVersion: toQuestionVersionSnapshot(savedVersion),
+          initialVersion: toQuestionVersionSnapshot(refreshedVersion ?? savedVersion),
         };
       } catch (error: unknown) {
         if (isUniqueConstraintViolation(error)) {
@@ -320,7 +355,15 @@ export class QuestionBankService {
       try {
         const savedVersion = await entityManager.save(QuestionVersionEntity, version);
 
-        return toQuestionVersionSnapshot(savedVersion);
+        if (questionType === QuestionType.TrueFalse) {
+          await this.questionOptionService.ensureTrueFalseOptions(savedVersion.id, entityManager);
+        }
+
+        const refreshedVersion = await entityManager.findOne(QuestionVersionEntity, {
+          where: { id: savedVersion.id },
+        });
+
+        return toQuestionVersionSnapshot(refreshedVersion ?? savedVersion);
       } catch (error: unknown) {
         if (isUniqueConstraintViolation(error)) {
           throw this.mapVersionUniqueConstraintError(error);
@@ -365,16 +408,303 @@ export class QuestionBankService {
     }
 
     if (input.promptMediaJson !== undefined) {
-      version.promptMediaJson = input.promptMediaJson;
+      version.promptMediaJson = parseOptionalQuestionMediaJson(input.promptMediaJson);
+      await validateQuestionMediaJsonAssets(version.promptMediaJson, this.mediaAssetService);
     }
 
     if (input.explanationMediaJson !== undefined) {
-      version.explanationMediaJson = input.explanationMediaJson;
+      version.explanationMediaJson = parseOptionalQuestionMediaJson(input.explanationMediaJson);
+      await validateQuestionMediaJsonAssets(version.explanationMediaJson, this.mediaAssetService);
     }
 
     const savedVersion = await this.questionVersionRepository.save(version);
 
-    return toQuestionVersionSnapshot(savedVersion);
+    if (
+      input.questionType === QuestionType.TrueFalse ||
+      version.questionType === QuestionType.TrueFalse
+    ) {
+      await this.questionOptionService.ensureTrueFalseOptions(savedVersion.id);
+    }
+
+    await this.questionOptionService.recomputeSourceContentHash(
+      this.questionVersionRepository.manager,
+      savedVersion.id,
+    );
+
+    const refreshedVersion = await this.questionVersionRepository.findOne({
+      where: { id: savedVersion.id },
+    });
+
+    return toQuestionVersionSnapshot(refreshedVersion ?? savedVersion);
+  }
+
+  async getAuthoringSnapshot(rawVersionId: string): Promise<QuestionAuthoringSnapshot> {
+    const version = await this.getVersionById(rawVersionId);
+    const options = await this.questionOptionService.listOptionsByVersion(rawVersionId);
+    const correctOptionIds =
+      await this.questionOptionService.getCorrectOptionIdsByVersion(rawVersionId);
+
+    return {
+      version,
+      options,
+      correctOptionIds,
+    };
+  }
+
+  async collectPublishValidationIssues(
+    rawVersionId: string,
+  ): Promise<QuestionPublishValidationIssue[]> {
+    const version = await this.findVersionEntity(rawVersionId);
+    const options = await this.questionOptionService.listOptionsByVersion(rawVersionId);
+    const correctOptionIds =
+      await this.questionOptionService.getCorrectOptionIdsByVersion(rawVersionId);
+
+    const issues: QuestionPublishValidationIssue[] = [];
+
+    if (version.status !== QuestionVersionStatus.Draft) {
+      issues.push({
+        code: 'DRAFT_ONLY',
+        message: 'Only draft question versions can be published.',
+        resourceId: version.id,
+        path: 'status',
+      });
+
+      return issues;
+    }
+
+    if (version.prompt.trim().length === 0) {
+      issues.push({
+        code: 'PROMPT_REQUIRED',
+        message: 'Question prompt is required before publish.',
+        path: 'prompt',
+      });
+    }
+
+    if (version.difficulty === null) {
+      issues.push({
+        code: 'DIFFICULTY_REQUIRED',
+        message: 'Question difficulty is required before publish.',
+        path: 'difficulty',
+      });
+    }
+
+    if (version.answerDefinitionJson !== null && version.answerDefinitionJson.trim().length > 0) {
+      issues.push({
+        code: 'ANSWER_DEFINITION_NOT_ALLOWED',
+        message: 'Answer definition JSON is not allowed for objective question types.',
+        path: 'answerDefinitionJson',
+      });
+    }
+
+    if (options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) {
+      issues.push({
+        code: 'INVALID_OPTION_COUNT',
+        message: `Question must have between ${MIN_OPTIONS} and ${MAX_OPTIONS} options.`,
+        path: 'options',
+      });
+    }
+
+    const seenCodes = new Set<string>();
+
+    for (const option of options) {
+      if (option.text === null && option.mediaAssetId === null) {
+        issues.push({
+          code: 'OPTION_REPRESENTATION_REQUIRED',
+          message: 'Each option must have text or media representation.',
+          resourceId: option.id,
+          path: `options/${option.id}`,
+        });
+      }
+
+      if (option.code !== null) {
+        if (seenCodes.has(option.code)) {
+          issues.push({
+            code: 'DUPLICATE_OPTION_CODE',
+            message: `Duplicate option code "${option.code}".`,
+            resourceId: option.id,
+            path: `options/${option.id}/code`,
+          });
+        } else {
+          seenCodes.add(option.code);
+        }
+      }
+
+      if (option.mediaAssetId !== null) {
+        const assetIssues = await this.collectOptionMediaValidationIssues(
+          option.mediaAssetId,
+          `options/${option.id}/mediaAssetId`,
+        );
+        issues.push(...assetIssues);
+      }
+    }
+
+    const optionIdSet = new Set(options.map((option) => normalizeUuid(option.id)));
+
+    if (correctOptionIds.length === 0) {
+      issues.push({
+        code: 'CORRECT_ANSWER_REQUIRED',
+        message: 'At least one correct option must be defined before publish.',
+        path: 'correctOptionIds',
+      });
+    }
+
+    if (
+      (version.questionType === QuestionType.SingleChoice ||
+        version.questionType === QuestionType.TrueFalse) &&
+      correctOptionIds.length > 1
+    ) {
+      issues.push({
+        code: 'TOO_MANY_CORRECT_ANSWERS',
+        message: 'Single-choice and true/false questions must have exactly one correct option.',
+        path: 'correctOptionIds',
+      });
+    }
+
+    for (const optionId of correctOptionIds) {
+      if (!optionIdSet.has(normalizeUuid(optionId))) {
+        issues.push({
+          code: 'ANSWER_OPTION_NOT_FOUND',
+          message: 'Correct option id does not belong to this version.',
+          resourceId: optionId,
+          path: 'correctOptionIds',
+        });
+      }
+    }
+
+    const promptMediaIssues = await collectQuestionMediaJsonValidationIssues(
+      version.promptMediaJson,
+      this.mediaAssetService,
+      'promptMediaJson',
+    );
+    issues.push(...toPublishValidationIssues(promptMediaIssues));
+
+    const explanationMediaIssues = await collectQuestionMediaJsonValidationIssues(
+      version.explanationMediaJson,
+      this.mediaAssetService,
+      'explanationMediaJson',
+    );
+    issues.push(...toPublishValidationIssues(explanationMediaIssues));
+
+    return issues;
+  }
+
+  async publishDraftVersion(
+    rawVersionId: string,
+    publishedByUserId: string,
+  ): Promise<QuestionVersionSnapshot> {
+    const issues = await this.collectPublishValidationIssues(rawVersionId);
+
+    if (issues.length > 0) {
+      throw new QuestionPublishValidationError(issues);
+    }
+
+    return this.dataSource.transaction(async (entityManager) =>
+      this.publishDraftVersionTransaction(rawVersionId, publishedByUserId, entityManager),
+    );
+  }
+
+  async publishDraftVersionTransaction(
+    rawVersionId: string,
+    publishedByUserId: string,
+    entityManager: EntityManager,
+  ): Promise<QuestionVersionSnapshot> {
+    const versionId = this.parseVersionId(rawVersionId);
+    const version = await entityManager.findOne(QuestionVersionEntity, {
+      where: { id: versionId },
+    });
+
+    if (version === null) {
+      throw new QuestionVersionNotFoundError();
+    }
+
+    if (version.status !== QuestionVersionStatus.Draft) {
+      throw new QuestionVersionNotDraftError();
+    }
+
+    const question = await entityManager.findOne(QuestionEntity, {
+      where: { id: version.questionId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (question === null) {
+      throw new QuestionNotFoundError();
+    }
+
+    this.assertQuestionActive(question);
+
+    if (question.currentPublishedVersionId !== null) {
+      const previousPublishedVersion = await entityManager.findOne(QuestionVersionEntity, {
+        where: { id: question.currentPublishedVersionId },
+      });
+
+      if (previousPublishedVersion !== null) {
+        previousPublishedVersion.status = QuestionVersionStatus.Archived;
+        await entityManager.save(QuestionVersionEntity, previousPublishedVersion);
+      }
+    }
+
+    const sourceContentHash = await this.questionOptionService.recomputeSourceContentHash(
+      entityManager,
+      version.id,
+    );
+
+    const publishedAt = new Date();
+    version.status = QuestionVersionStatus.Published;
+    version.publishedAt = publishedAt;
+    version.publishedByUserId = normalizeUuid(publishedByUserId);
+    version.sourceContentHash = sourceContentHash;
+
+    question.currentPublishedVersionId = version.id;
+
+    await entityManager.save(QuestionVersionEntity, version);
+    await entityManager.save(QuestionEntity, question);
+
+    return toQuestionVersionSnapshot(version);
+  }
+
+  private async collectOptionMediaValidationIssues(
+    assetId: string,
+    path: string,
+  ): Promise<QuestionPublishValidationIssue[]> {
+    try {
+      await this.mediaAssetService.assertAssetCategory(assetId, MediaCategory.Image);
+      return [];
+    } catch (error: unknown) {
+      if (error instanceof MediaAssetNotFoundError) {
+        return [
+          {
+            code: 'ASSET_NOT_FOUND',
+            message: 'Referenced media asset was not found.',
+            resourceId: assetId,
+            path,
+          },
+        ];
+      }
+
+      if (error instanceof MediaAssetNotReadyError) {
+        return [
+          {
+            code: 'ASSET_NOT_READY',
+            message: 'Referenced media asset is not ready.',
+            resourceId: assetId,
+            path,
+          },
+        ];
+      }
+
+      if (error instanceof MediaAssetCategoryMismatchError) {
+        return [
+          {
+            code: 'ASSET_CATEGORY_MISMATCH',
+            message: 'Referenced media asset category does not match the expected image type.',
+            resourceId: assetId,
+            path,
+          },
+        ];
+      }
+
+      throw error;
+    }
   }
 
   private applyQuestionListFilters(

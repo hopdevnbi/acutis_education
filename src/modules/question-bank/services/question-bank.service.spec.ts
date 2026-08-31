@@ -8,8 +8,10 @@ import {
   type SelectQueryBuilder,
 } from 'typeorm';
 import { ParishService } from '../../parish/services/parish.service';
+import { MediaAssetService } from '../../media/services/media-asset.service';
 import { QuestionVersionEntity } from '../entities/question-version.entity';
 import { QuestionEntity } from '../entities/question.entity';
+import { QuestionDifficulty } from '../enums/question-difficulty.enum';
 import { QuestionStatus } from '../enums/question-status.enum';
 import { QuestionType } from '../enums/question-type.enum';
 import { QuestionVersionStatus } from '../enums/question-version-status.enum';
@@ -21,8 +23,10 @@ import {
   QuestionSourceLocaleImmutableError,
   QuestionUpdateRequiresFieldsError,
   QuestionVersionNotDraftError,
+  QuestionPublishValidationError,
 } from '../errors/question-bank.errors';
 import { QuestionBankService } from './question-bank.service';
+import { QuestionOptionService } from './question-option.service';
 
 function mockDataSourceTransaction(
   dataSource: jest.Mocked<Pick<DataSource, 'transaction'>>,
@@ -47,9 +51,19 @@ describe('QuestionBankService', () => {
     Pick<Repository<QuestionEntity>, 'create' | 'save' | 'findOne' | 'createQueryBuilder' | 'count'>
   >;
   let questionVersionRepository: jest.Mocked<
-    Pick<Repository<QuestionVersionEntity>, 'findOne' | 'count' | 'save'>
+    Pick<Repository<QuestionVersionEntity>, 'findOne' | 'count' | 'save' | 'manager'>
   >;
   let parishService: jest.Mocked<Pick<ParishService, 'assertParishActive' | 'getParishById'>>;
+  let questionOptionService: jest.Mocked<
+    Pick<
+      QuestionOptionService,
+      | 'ensureTrueFalseOptions'
+      | 'recomputeSourceContentHash'
+      | 'listOptionsByVersion'
+      | 'getCorrectOptionIdsByVersion'
+    >
+  >;
+  let mediaAssetService: jest.Mocked<Pick<MediaAssetService, 'assertAssetCategory'>>;
   let dataSource: jest.Mocked<Pick<DataSource, 'transaction'>>;
   let queryBuilder: jest.Mocked<
     Pick<
@@ -107,6 +121,21 @@ describe('QuestionBankService', () => {
       findOne: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
       save: jest.fn(),
+      manager: {} as EntityManager,
+    };
+
+    questionOptionService = {
+      ensureTrueFalseOptions: jest.fn().mockResolvedValue(undefined),
+      recomputeSourceContentHash: jest.fn().mockResolvedValue('hash'),
+      listOptionsByVersion: jest.fn().mockResolvedValue([]),
+      getCorrectOptionIdsByVersion: jest.fn().mockResolvedValue([]),
+    };
+
+    mediaAssetService = {
+      assertAssetCategory: jest.fn().mockResolvedValue({
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        mediaCategory: 'IMAGE',
+      }),
     };
 
     parishService = {
@@ -124,6 +153,8 @@ describe('QuestionBankService', () => {
         { provide: getRepositoryToken(QuestionEntity), useValue: questionRepository },
         { provide: getRepositoryToken(QuestionVersionEntity), useValue: questionVersionRepository },
         { provide: ParishService, useValue: parishService },
+        { provide: QuestionOptionService, useValue: questionOptionService },
+        { provide: MediaAssetService, useValue: mediaAssetService },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -157,6 +188,7 @@ describe('QuestionBankService', () => {
     const entityManager = {
       create: jest.fn().mockReturnValueOnce(savedQuestion).mockReturnValueOnce(savedVersion),
       save: jest.fn().mockResolvedValueOnce(savedQuestion).mockResolvedValueOnce(savedVersion),
+      findOne: jest.fn().mockResolvedValue(savedVersion),
     } as unknown as EntityManager;
 
     mockDataSourceTransaction(dataSource, entityManager);
@@ -323,5 +355,206 @@ describe('QuestionBankService', () => {
     expect(result.total).toBe(1);
     expect(result.totalPages).toBe(1);
     expect(parishService.getParishById).toHaveBeenCalledWith(parishId);
+  });
+
+  it('collects publish validation issues for incomplete draft versions', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      id: versionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Draft,
+      questionType: QuestionType.SingleChoice,
+      prompt: '',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: null,
+      sourceContentHash: null,
+      createdByUserId: userId,
+      publishedByUserId: null,
+      publishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    questionOptionService.listOptionsByVersion.mockResolvedValue([]);
+    questionOptionService.getCorrectOptionIdsByVersion.mockResolvedValue([]);
+
+    const issues = await questionBankService.collectPublishValidationIssues(versionId);
+
+    expect(issues.some((issue) => issue.code === 'PROMPT_REQUIRED')).toBe(true);
+    expect(issues.some((issue) => issue.code === 'DIFFICULTY_REQUIRED')).toBe(true);
+    expect(issues.some((issue) => issue.code === 'INVALID_OPTION_COUNT')).toBe(true);
+    expect(issues.some((issue) => issue.code === 'CORRECT_ANSWER_REQUIRED')).toBe(true);
+  });
+
+  it('publishes a valid draft version and archives the previous published version', async () => {
+    const optionId = '66666666-6666-4666-8666-666666666666';
+    const previousPublishedVersionId = '77777777-7777-4777-8777-777777777777';
+
+    questionOptionService.listOptionsByVersion.mockResolvedValue([
+      {
+        id: optionId,
+        questionVersionId: versionId,
+        code: 'a',
+        text: 'Option A',
+        mediaAssetId: null,
+        sortOrder: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        questionVersionId: versionId,
+        code: 'b',
+        text: 'Option B',
+        mediaAssetId: null,
+        sortOrder: 2,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    questionOptionService.getCorrectOptionIdsByVersion.mockResolvedValue([optionId]);
+
+    questionVersionRepository.findOne
+      .mockResolvedValueOnce({
+        id: versionId,
+        questionId,
+        versionNumber: 2,
+        status: QuestionVersionStatus.Draft,
+        questionType: QuestionType.SingleChoice,
+        prompt: 'Ready prompt',
+        instruction: null,
+        explanation: null,
+        promptMediaJson: null,
+        explanationMediaJson: null,
+        answerDefinitionJson: null,
+        difficulty: QuestionDifficulty.Easy,
+        sourceContentHash: null,
+        createdByUserId: userId,
+        publishedByUserId: null,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .mockResolvedValueOnce({
+        id: versionId,
+        questionId,
+        versionNumber: 2,
+        status: QuestionVersionStatus.Published,
+        questionType: QuestionType.SingleChoice,
+        prompt: 'Ready prompt',
+        instruction: null,
+        explanation: null,
+        promptMediaJson: null,
+        explanationMediaJson: null,
+        answerDefinitionJson: null,
+        difficulty: QuestionDifficulty.Easy,
+        sourceContentHash: 'hash',
+        createdByUserId: userId,
+        publishedByUserId: userId,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    const previousPublishedVersion = {
+      id: previousPublishedVersionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Published,
+      questionType: QuestionType.SingleChoice,
+      prompt: 'Old',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: QuestionDifficulty.Easy,
+      sourceContentHash: 'old-hash',
+      createdByUserId: userId,
+      publishedByUserId: userId,
+      publishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const draftVersion = {
+      id: versionId,
+      questionId,
+      versionNumber: 2,
+      status: QuestionVersionStatus.Draft,
+      questionType: QuestionType.SingleChoice,
+      prompt: 'Ready prompt',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: QuestionDifficulty.Easy,
+      sourceContentHash: null,
+      createdByUserId: userId,
+      publishedByUserId: null,
+      publishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const question = {
+      ...activeQuestion,
+      currentPublishedVersionId: previousPublishedVersionId,
+    };
+
+    const saveMock = jest.fn().mockImplementation((value: unknown) => Promise.resolve(value));
+
+    const entityManager = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(draftVersion)
+        .mockResolvedValueOnce(question)
+        .mockResolvedValueOnce(previousPublishedVersion),
+      save: saveMock,
+    } as unknown as EntityManager;
+
+    mockDataSourceTransaction(dataSource, entityManager);
+    questionOptionService.recomputeSourceContentHash.mockResolvedValue('hash');
+
+    const snapshot = await questionBankService.publishDraftVersion(versionId, userId);
+
+    expect(snapshot.status).toBe(QuestionVersionStatus.Published);
+    expect(snapshot.sourceContentHash).toBe('hash');
+    expect(saveMock).toHaveBeenCalled();
+  });
+
+  it('rejects publish when validation issues remain', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      id: versionId,
+      questionId,
+      versionNumber: 1,
+      status: QuestionVersionStatus.Draft,
+      questionType: QuestionType.SingleChoice,
+      prompt: '',
+      instruction: null,
+      explanation: null,
+      promptMediaJson: null,
+      explanationMediaJson: null,
+      answerDefinitionJson: null,
+      difficulty: null,
+      sourceContentHash: null,
+      createdByUserId: userId,
+      publishedByUserId: null,
+      publishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    questionOptionService.listOptionsByVersion.mockResolvedValue([]);
+    questionOptionService.getCorrectOptionIdsByVersion.mockResolvedValue([]);
+
+    await expect(questionBankService.publishDraftVersion(versionId, userId)).rejects.toBeInstanceOf(
+      QuestionPublishValidationError,
+    );
   });
 });

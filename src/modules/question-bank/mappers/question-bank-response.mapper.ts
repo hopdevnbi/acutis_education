@@ -3,10 +3,15 @@ import type {
   CreateQuestionResult,
   ListQuestionTagsResult,
   ListQuestionsResult,
+  QuestionAuthoringResponse,
+  QuestionAuthoringSnapshot,
   QuestionCurriculumLinkListResponse,
   QuestionCurriculumLinkResponse,
   QuestionCurriculumLinkSnapshot,
   QuestionListResponse,
+  QuestionOptionListResponse,
+  QuestionOptionResponse,
+  QuestionOptionSnapshot,
   QuestionResponse,
   QuestionSnapshot,
   QuestionTagLinkResponse,
@@ -133,5 +138,36 @@ export function toQuestionCurriculumLinkListResponse(
 ): QuestionCurriculumLinkListResponse {
   return {
     items: snapshots.map(toQuestionCurriculumLinkResponse),
+  };
+}
+
+export function toQuestionOptionResponse(snapshot: QuestionOptionSnapshot): QuestionOptionResponse {
+  return {
+    id: snapshot.id,
+    questionVersionId: snapshot.questionVersionId,
+    code: snapshot.code,
+    text: snapshot.text,
+    mediaAssetId: snapshot.mediaAssetId,
+    sortOrder: snapshot.sortOrder,
+    createdAt: snapshot.createdAt.toISOString(),
+    updatedAt: snapshot.updatedAt.toISOString(),
+  };
+}
+
+export function toQuestionOptionListResponse(
+  snapshots: QuestionOptionSnapshot[],
+): QuestionOptionListResponse {
+  return {
+    items: snapshots.map(toQuestionOptionResponse),
+  };
+}
+
+export function toQuestionAuthoringResponse(
+  snapshot: QuestionAuthoringSnapshot,
+): QuestionAuthoringResponse {
+  return {
+    version: toQuestionVersionResponse(snapshot.version),
+    options: snapshot.options.map(toQuestionOptionResponse),
+    correctOptionIds: [...snapshot.correctOptionIds],
   };
 }

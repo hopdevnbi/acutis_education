@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { AuthModule } from '../auth/auth.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
+import { MediaModule } from '../media/media.module';
 import { ParishModule } from '../parish/parish.module';
 import { QuestionController } from './controllers/question.controller';
 import { QuestionTagController } from './controllers/question-tag.controller';
@@ -16,6 +17,7 @@ import { QuestionVersionEntity } from './entities/question-version.entity';
 import { QuestionEntity } from './entities/question.entity';
 import { QuestionBankService } from './services/question-bank.service';
 import { QuestionCurriculumLinkService } from './services/question-curriculum-link.service';
+import { QuestionOptionService } from './services/question-option.service';
 import { QuestionTagService } from './services/question-tag.service';
 
 @Module({
@@ -31,11 +33,17 @@ import { QuestionTagService } from './services/question-tag.service';
     ]),
     ParishModule,
     CurriculumModule,
+    MediaModule,
     AuthModule,
     AccessControlModule,
   ],
   controllers: [QuestionController, QuestionVersionController, QuestionTagController],
-  providers: [QuestionBankService, QuestionTagService, QuestionCurriculumLinkService],
+  providers: [
+    QuestionBankService,
+    QuestionOptionService,
+    QuestionTagService,
+    QuestionCurriculumLinkService,
+  ],
   exports: [QuestionBankService],
 })
 export class QuestionBankModule {}

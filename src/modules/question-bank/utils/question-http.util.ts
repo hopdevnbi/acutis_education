@@ -21,6 +21,11 @@ import {
 } from '../../parish/errors/parish.errors';
 import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
+  MediaAssetCategoryMismatchError,
+  MediaAssetNotFoundError,
+  MediaAssetNotReadyError,
+} from '../../media/errors/media-asset.errors';
+import {
   InvalidQuestionCodeError,
   InvalidQuestionCurriculumLinkIdError,
   InvalidQuestionCurriculumLinkInputError,
@@ -28,6 +33,15 @@ import {
   InvalidQuestionExplanationError,
   InvalidQuestionIdError,
   InvalidQuestionInstructionError,
+  InvalidQuestionMediaJsonError,
+  InvalidQuestionOptionCodeError,
+  InvalidQuestionOptionCountError,
+  InvalidQuestionOptionIdError,
+  InvalidQuestionOptionRepresentationError,
+  InvalidQuestionOptionSortOrderError,
+  InvalidQuestionOptionTextError,
+  InvalidCorrectOptionIdsError,
+  DuplicateQuestionOptionCodeError,
   InvalidQuestionPromptError,
   InvalidQuestionSourceLocaleError,
   InvalidQuestionTagCodeError,
@@ -58,6 +72,7 @@ import {
   QuestionVersionNotFoundError,
   QuestionVersionNotPublishedError,
   QuestionVersionNumberConflictError,
+  QuestionOptionNotFoundError,
 } from '../errors/question-bank.errors';
 
 export function rethrowQuestionBankServiceError(error: unknown): never {
@@ -118,6 +133,50 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidQuestionDifficultyError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionMediaJsonError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionCodeError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionTextError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionRepresentationError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionCountError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionSortOrderError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidQuestionOptionIdError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidCorrectOptionIdsError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof DuplicateQuestionOptionCodeError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (
+    error instanceof MediaAssetNotFoundError ||
+    error instanceof MediaAssetNotReadyError ||
+    error instanceof MediaAssetCategoryMismatchError
+  ) {
     throw new BadRequestException(error.message);
   }
 
@@ -201,6 +260,10 @@ export function rethrowQuestionBankServiceError(error: unknown): never {
   }
 
   if (error instanceof QuestionVersionNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof QuestionOptionNotFoundError) {
     throw new NotFoundException(error.message);
   }
 

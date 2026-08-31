@@ -1,10 +1,12 @@
 import type { QuestionCurriculumLinkEntity } from '../entities/question-curriculum-link.entity';
+import type { QuestionOptionEntity } from '../entities/question-option.entity';
 import type { QuestionTagLinkEntity } from '../entities/question-tag-link.entity';
 import type { QuestionTagEntity } from '../entities/question-tag.entity';
 import type { QuestionVersionEntity } from '../entities/question-version.entity';
 import type { QuestionEntity } from '../entities/question.entity';
 import type {
   QuestionCurriculumLinkSnapshot,
+  QuestionOptionSnapshot,
   QuestionSnapshot,
   QuestionTagLinkSnapshot,
   QuestionTagSnapshot,
@@ -64,6 +66,19 @@ export function toQuestionTagLinkSnapshot(entity: QuestionTagLinkEntity): Questi
   return {
     questionId: entity.questionId,
     tagId: entity.tagId,
+  };
+}
+
+export function toQuestionOptionSnapshot(entity: QuestionOptionEntity): QuestionOptionSnapshot {
+  return {
+    id: entity.id,
+    questionVersionId: entity.questionVersionId,
+    code: entity.code,
+    text: entity.text,
+    mediaAssetId: entity.mediaAssetId,
+    sortOrder: entity.sortOrder,
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
   };
 }
 

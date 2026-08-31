@@ -152,6 +152,83 @@ export class InvalidQuestionDifficultyError extends Error {
   }
 }
 
+export class InvalidQuestionOptionCodeError extends Error {
+  constructor() {
+    super('Invalid question option code.');
+    this.name = 'InvalidQuestionOptionCodeError';
+  }
+}
+
+export class InvalidQuestionOptionTextError extends Error {
+  constructor() {
+    super('Invalid question option text.');
+    this.name = 'InvalidQuestionOptionTextError';
+  }
+}
+
+export class InvalidQuestionOptionRepresentationError extends Error {
+  constructor() {
+    super('Question option requires text or media representation.');
+    this.name = 'InvalidQuestionOptionRepresentationError';
+  }
+}
+
+export class DuplicateQuestionOptionCodeError extends Error {
+  constructor() {
+    super('Duplicate question option code within version.');
+    this.name = 'DuplicateQuestionOptionCodeError';
+  }
+}
+
+export class InvalidQuestionOptionCountError extends Error {
+  constructor() {
+    super('Invalid question option count.');
+    this.name = 'InvalidQuestionOptionCountError';
+  }
+}
+
+export class InvalidQuestionOptionSortOrderError extends Error {
+  constructor() {
+    super('Invalid question option sort order.');
+    this.name = 'InvalidQuestionOptionSortOrderError';
+  }
+}
+
+export class InvalidQuestionOptionIdError extends Error {
+  constructor() {
+    super('Invalid question option id.');
+    this.name = 'InvalidQuestionOptionIdError';
+  }
+}
+
+export class QuestionOptionNotFoundError extends Error {
+  constructor() {
+    super('Question option not found for this version.');
+    this.name = 'QuestionOptionNotFoundError';
+  }
+}
+
+export class InvalidCorrectOptionIdsError extends Error {
+  constructor() {
+    super('One or more correct option ids are invalid for this version.');
+    this.name = 'InvalidCorrectOptionIdsError';
+  }
+}
+
+export class InvalidQuestionMediaJsonError extends Error {
+  constructor() {
+    super('Invalid question media JSON.');
+    this.name = 'InvalidQuestionMediaJsonError';
+  }
+}
+
+export class InvalidAnswerDefinitionJsonError extends Error {
+  constructor() {
+    super('Answer definition JSON is not allowed for objective question types.');
+    this.name = 'InvalidAnswerDefinitionJsonError';
+  }
+}
+
 export interface QuestionPublishValidationIssue {
   readonly code: string;
   readonly message: string;
