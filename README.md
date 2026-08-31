@@ -277,6 +277,71 @@ Postman collection: `docs/postman/Acutis-Education-Media.postman_collection.json
 
 ## Question Bank API
 
+Bounded context for parish-scoped assessment content: question roots, immutable published versions, options/correct answers, tags, and curriculum links. Internal grading and assessment snapshots are service-only (no public HTTP). Practice and Exam modules will consume published version projections — there is no generic learner question-bank browse API.
+
+### MVP question types
+
+`SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE` only. Deferred types (short text, ordering, matching, etc.) are not active.
+
+### Version lifecycle
+
+- One question root per stable `code` (optional) with `ACTIVE` / `INACTIVE` status and `sourceLocale`.
+- At most one `DRAFT` version per question; monotonic `versionNumber`.
+- `DRAFT` is mutable; `PUBLISHED` and `ARCHIVED` are immutable.
+- Publishing archives the previous `PUBLISHED` version and updates `currentPublishedVersionId`.
+- Clone from `PUBLISHED` / `ARCHIVED` creates a new `DRAFT` with new option UUIDs and remapped correct answers.
+
+### RBAC matrix
+
+| Role | Read | Manage | Publish |
+|------|------|--------|---------|
+| `SUPER_ADMIN` | all parishes | all parishes | all parishes |
+| `PARISH_ADMIN` | own parish | own parish | own parish |
+| `CATECHIST` | own parish | denied | denied |
+| `PARENT` | denied | denied | denied |
+
+All by-id routes resolve parish scope server-side.
+
+### Authoring flow (admin HTTP)
+
+1. Create question + initial draft
+2. Update draft metadata (prompt, difficulty, media refs)
+3. Replace options / set correct options
+4. Link tags and curriculum (`canonicalLessonKey`, not direct lesson/topic FK)
+5. Preview (learner-safe projection, allows `DRAFT`)
+6. Publish (validates prompt, difficulty, options, correct answers, media)
+7. Export V1 / import validate-only
+8. Clone to draft → edit → publish v2
+
+### Search / filter
+
+`GET /api/v1/parishes/:parishId/questions` — effective-version semantics: `DRAFT` when present, else current `PUBLISHED`. Supports Unicode prompt search, tag/curriculum filters, pagination, whitelist sort. List rows never include correct answers.
+
+### Curriculum / Media integration
+
+- Curriculum links require same parish, active curriculum for new links, and valid `canonicalLessonKey` / `authoringCurriculumVersionId`.
+- Media references store `assetId` only (no bucket/key/path/URL persistence). Publish revalidates `READY` `IMAGE` assets.
+
+### Practice / Exam / Mobile boundary
+
+Question Bank provides immutable published versions, learner-safe projections, grading contracts, and selection metadata. Mobile and learners consume questions through future Practice/Exam contextual routes — not direct generic Question Bank learner APIs.
+
+### Multilingual foundation
+
+`sourceLocale` and semantic `sourceContentHash` on each version; correctness is independent of display strings. No runtime translation in this module.
+
+### Demo seed
+
+```bash
+npm run seed:auth-rbac
+npm run seed:parish-academic
+npm run seed:class-enrollment
+npm run seed:curriculum-demo
+npm run seed:question-bank-demo
+```
+
+Creates stable demo codes: `qb-demo-single-001`, `qb-demo-multi-001`, `qb-demo-tf-001` (published), and `qb-demo-draft-001` (draft).
+
 Authenticated question bank endpoints (require JWT + RBAC + parish scope for parish-scoped routes):
 
 | Method | Route | Permission |
@@ -292,6 +357,8 @@ List query parameters: `page`, `limit`, `sortBy` (`updatedAt` default), `sort`, 
 **Export V1:** read-only JSON (`schemaVersion: 1`) with export-local option keys, tag codes, and curriculum links. Media `assetId` values are environment-local.
 
 **Import:** validate-only endpoint (no database writes). Import commit is deferred.
+
+Postman collection: `docs/postman/Acutis-Education-Question-Bank.postman_collection.json`
 
 MVP question types: `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`. No generic learner question-bank routes; Practice/Exam modules consume published version snapshots via internal contracts.
 
