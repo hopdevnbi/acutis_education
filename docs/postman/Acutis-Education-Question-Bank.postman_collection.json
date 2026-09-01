@@ -1,0 +1,662 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-question-bank-collection",
+    "name": "Acutis Education — Question Bank",
+    "description": "Local manual flow for question bank admin authoring, search, export, import validate, and RBAC checks. Run seeds first: auth-rbac → parish-academic → class-enrollment → curriculum-demo → question-bank-demo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "adminEmail", "value": "admin@local.catechism.test" },
+    { "key": "adminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "catechistPassword", "value": "LocalDev!Sample2026" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "parentPassword", "value": "LocalDev!Sample2026" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "catechistAccessToken", "value": "" },
+    { "key": "parentAccessToken", "value": "" },
+    { "key": "parishId", "value": "" },
+    { "key": "curriculumId", "value": "" },
+    { "key": "canonicalLessonKey", "value": "" },
+    { "key": "questionId", "value": "" },
+    { "key": "versionId", "value": "" },
+    { "key": "draftVersionId", "value": "" },
+    { "key": "tagId", "value": "" },
+    { "key": "optionId", "value": "" },
+    { "key": "exportPackageJson", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "1 Admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.accessToken).to.be.a('string');",
+                  "pm.collectionVariables.set('adminAccessToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "17 Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('catechistAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{catechistPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "19 Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('parentAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{parentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Setup — resolve parish/curriculum",
+      "item": [
+        {
+          "name": "Resolve demo parishId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const parish = (pm.response.json().items || []).find((p) => p.code === 'demo-parish');",
+                  "pm.expect(parish).to.exist;",
+                  "pm.collectionVariables.set('parishId', parish.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes?search=demo-parish&limit=5"
+          }
+        },
+        {
+          "name": "Resolve demo curriculumId + canonicalLessonKey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const curriculum = (pm.response.json().items || []).find((c) => c.code === 'demo-curriculum-level-1');",
+                  "pm.expect(curriculum).to.exist;",
+                  "pm.collectionVariables.set('curriculumId', curriculum.id);",
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/curriculum-versions/' + curriculum.currentPublishedVersionId + '/tree',",
+                  "  method: 'GET',",
+                  "  header: { Authorization: 'Bearer ' + pm.collectionVariables.get('adminAccessToken') }",
+                  "}, (err, res) => {",
+                  "  pm.expect(err).to.be.null;",
+                  "  const lesson = res.json().topics?.[0]?.lessons?.[0];",
+                  "  if (lesson) pm.collectionVariables.set('canonicalLessonKey', lesson.canonicalLessonKey);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/curricula?search=demo-curriculum-level-1&limit=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Admin — authoring lifecycle",
+      "item": [
+        {
+          "name": "2 List/search questions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array');",
+                  "const seeded = (body.items || []).find((q) => q.code === 'qb-demo-single-001');",
+                  "if (seeded) {",
+                  "  pm.collectionVariables.set('questionId', seeded.id);",
+                  "  if (seeded.currentPublishedVersion) pm.collectionVariables.set('versionId', seeded.currentPublishedVersion.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions?limit=20&search=Chúa"
+          }
+        },
+        {
+          "name": "3 Create question + initial draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('questionId', body.question.id);",
+                  "pm.collectionVariables.set('draftVersionId', body.initialVersion.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"postman-qb-flow-001\",\n  \"sourceLocale\": \"vi-VN\",\n  \"draft\": {\n    \"questionType\": \"SINGLE_CHOICE\",\n    \"prompt\": \"Ai là Đấng Sáng Tạo? (Postman flow)\",\n    \"instruction\": \"Chọn một đáp án.\",\n    \"difficulty\": \"EASY\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions"
+          }
+        },
+        {
+          "name": "4 Update draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().prompt).to.include('Postman flow');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Ai là Đấng Sáng Tạo? (Postman flow — updated)\",\n  \"explanation\": \"Synthetic demo explanation.\"\n}"
+            },
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}"
+          }
+        },
+        {
+          "name": "5 Set options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items || [];",
+                  "pm.expect(items.length).to.eql(3);",
+                  "pm.collectionVariables.set('optionId', items[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"text\": \"Thiên Chúa\", \"sortOrder\": 1 },\n    { \"text\": \"Con người\", \"sortOrder\": 2 },\n    { \"text\": \"Thiên nhiên\", \"sortOrder\": 3 }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}/options"
+          }
+        },
+        {
+          "name": "6 Set correct options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().optionIds).to.be.an('array').with.lengthOf(1);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"optionIds\": [\"{{optionId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}/correct-options"
+          }
+        },
+        {
+          "name": "7 Create tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201 or 409', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('tagId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"postman-demo-tag\",\n  \"name\": \"Postman Demo Tag\"\n}"
+            },
+            "url": "{{baseUrl}}/parishes/{{parishId}}/question-tags"
+          }
+        },
+        {
+          "name": "7b Link tag to question",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.collectionVariables.get('tagId')) {",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/parishes/' + pm.collectionVariables.get('parishId') + '/question-tags?search=postman-demo-tag',",
+                  "    method: 'GET',",
+                  "    header: { Authorization: 'Bearer ' + pm.collectionVariables.get('adminAccessToken') }",
+                  "  }, (err, res) => {",
+                  "    const tag = (res.json().items || []).find((t) => t.code === 'postman-demo-tag');",
+                  "    if (tag) pm.collectionVariables.set('tagId', tag.id);",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201 or 409', () => pm.expect([201, 409]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/questions/{{questionId}}/tags/{{tagId}}"
+          }
+        },
+        {
+          "name": "8 Curriculum link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().canonicalLessonKey).to.eql(pm.collectionVariables.get('canonicalLessonKey'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"curriculumId\": \"{{curriculumId}}\",\n  \"canonicalLessonKey\": \"{{canonicalLessonKey}}\"\n}"
+            },
+            "url": "{{baseUrl}}/questions/{{questionId}}/curriculum-links"
+          }
+        },
+        {
+          "name": "9 Learner-safe preview",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.not.have.property('correctOptionIds');",
+                  "pm.expect(body).to.not.have.property('explanation');",
+                  "if (body.options && body.options.length) pm.expect(body.options[0]).to.not.have.property('code');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}/preview"
+          }
+        },
+        {
+          "name": "10 Publish",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().status).to.eql('PUBLISHED');",
+                  "pm.collectionVariables.set('versionId', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}/publish"
+          }
+        },
+        {
+          "name": "11 Export V1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.schemaVersion).to.eql(1);",
+                  "pm.expect(body.correctAnswers).to.be.an('array');",
+                  "pm.collectionVariables.set('exportPackageJson', JSON.stringify(body));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/question-versions/{{versionId}}/export"
+          }
+        },
+        {
+          "name": "12 Clone to draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().version.status).to.eql('DRAFT');",
+                  "pm.collectionVariables.set('draftVersionId', pm.response.json().version.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/question-versions/{{versionId}}/clone-to-draft"
+          }
+        },
+        {
+          "name": "13 Edit clone draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().prompt).to.include('v2');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Ai là Đấng Sáng Tạo? (Postman flow v2)\"\n}"
+            },
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}"
+          }
+        },
+        {
+          "name": "14 Publish v2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().versionNumber).to.be.at.least(2);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/question-versions/{{draftVersionId}}/publish"
+          }
+        },
+        {
+          "name": "15 Search/filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items.length).to.be.at.least(1);",
+                  "body.items.forEach((item) => pm.expect(item).to.not.have.property('correctOptionIds'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions?questionType=SINGLE_CHOICE&hasPublished=true&tagCode=postman-demo-tag&limit=20"
+          }
+        },
+        {
+          "name": "16 Import validate-only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.have.property('valid');",
+                  "pm.expect(body).to.have.property('issues');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{exportPackageJson}}"
+            },
+            "url": "{{baseUrl}}/parishes/{{parishId}}/question-imports/validate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 RBAC checks",
+      "item": [
+        {
+          "name": "17 Catechist read allowed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions?limit=5"
+          }
+        },
+        {
+          "name": "18 Catechist manage denied",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"catechist-denied\",\n  \"sourceLocale\": \"vi-VN\",\n  \"draft\": { \"questionType\": \"SINGLE_CHOICE\", \"prompt\": \"denied\" }\n}"
+            },
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions"
+          }
+        },
+        {
+          "name": "19 Parent denied",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/questions?limit=5"
+          }
+        }
+      ]
+    }
+  ]
+}

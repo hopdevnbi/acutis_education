@@ -1,0 +1,172 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-parish-academic",
+    "name": "Acutis Education - Parish Academic",
+    "description": "Local/dev verification flow for parish, academic year, and catechism level APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('accessToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Parish",
+      "item": [
+        {
+          "name": "List Parishes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/parishes"
+          }
+        },
+        {
+          "name": "Create Demo Parish",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"demo-parish\",\n  \"name\": \"Giáo xứ Demo (Local Sample)\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/parishes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.environment.set('parishId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Academic Years",
+      "item": [
+        {
+          "name": "Create Academic Year",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"2026-2027 (Demo)\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2027-06-30\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/parishes/{{parishId}}/academic-years"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set('academicYearId', body.id);",
+                  "  pm.test('dates are YYYY-MM-DD', function () {",
+                  "    pm.expect(body.startDate).to.eql('2026-09-01');",
+                  "    pm.expect(body.endDate).to.eql('2027-06-30');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate Academic Year",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/academic-years/{{academicYearId}}/status"
+          }
+        },
+        {
+          "name": "List Academic Years",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/parishes/{{parishId}}/academic-years"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catechism Levels",
+      "item": [
+        {
+          "name": "Create Level 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"demo-level-1\",\n  \"name\": \"Cấp Demo 1\",\n  \"sortOrder\": 1\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/parishes/{{parishId}}/catechism-levels"
+          }
+        },
+        {
+          "name": "List Catechism Levels",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/v1/parishes/{{parishId}}/catechism-levels?sortBy=sortOrder&sort=ASC"
+          }
+        }
+      ]
+    }
+  ]
+}

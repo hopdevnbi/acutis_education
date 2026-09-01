@@ -1,0 +1,587 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-practice-collection",
+    "name": "Acutis Education — Practice Engine",
+    "description": "Local manual verification for the full Practice Engine flow (STANDARD session, answer grading/retry, REVIEW_WRONG, progress, scoped access).\n\nPrerequisites (run in order on dev DB):\n1. npm run migration:run\n2. npm run seed:auth-rbac\n3. npm run seed:parish-academic\n4. npm run seed:class-enrollment\n5. npm run seed:curriculum-demo\n6. npm run seed:question-bank-demo\n7. npm run start:dev\n\nSample passwords use {{parentPassword}} placeholders — never commit real secrets.\n\nDemo actors: parent@local.catechism.test (linked guardian), catechist@local.catechism.test, admin@local.catechism.test.\nDemo student: Demo Student Alpha. Demo class code: demo-class-a.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "parentPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "catechistPassword", "value": "LocalDev!Sample2026" },
+    { "key": "adminEmail", "value": "admin@local.catechism.test" },
+    { "key": "adminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "parentAccessToken", "value": "" },
+    { "key": "catechistAccessToken", "value": "" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "parishId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "curriculumId", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "sessionQuestionId", "value": "" },
+    { "key": "wrongOptionId", "value": "" },
+    { "key": "correctOptionId", "value": "" },
+    { "key": "reviewSourceSessionId", "value": "" },
+    { "key": "reviewSessionId", "value": "" },
+    { "key": "reviewSessionQuestionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('parentAccessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{parentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('catechistAccessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{catechistPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parish admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminAccessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Setup — resolve demo ids",
+      "item": [
+        {
+          "name": "Resolve demo parishId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const parish = (pm.response.json().items || []).find((p) => p.code === 'demo-parish');",
+                  "pm.expect(parish, 'demo-parish seed missing').to.exist;",
+                  "pm.collectionVariables.set('parishId', parish.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes?search=demo-parish&limit=5"
+          }
+        },
+        {
+          "name": "Resolve demo classId (demo-class-a)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const demoClass = (pm.response.json().items || []).find((c) => c.code === 'demo-class-a');",
+                  "pm.expect(demoClass, 'demo-class-a seed missing').to.exist;",
+                  "pm.collectionVariables.set('classId', demoClass.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/classes?search=demo-class-a&limit=5"
+          }
+        },
+        {
+          "name": "Resolve Demo Student Alpha + enrollmentId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const student = (pm.response.json().items || []).find((s) => s.fullName === 'Demo Student Alpha');",
+                  "pm.expect(student, 'Demo Student Alpha seed missing').to.exist;",
+                  "pm.collectionVariables.set('studentId', student.id);",
+                  "const token = pm.collectionVariables.get('parentAccessToken');",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "pm.sendRequest({",
+                  "  url: baseUrl + '/students/' + student.id + '/enrollments?limit=5',",
+                  "  method: 'GET',",
+                  "  header: { Authorization: 'Bearer ' + token }",
+                  "}, (err, res) => {",
+                  "  pm.expect(err).to.be.null;",
+                  "  pm.expect(res.code).to.eql(200);",
+                  "  const enrollment = (res.json().items || [])[0];",
+                  "  pm.expect(enrollment, 'active enrollment missing').to.exist;",
+                  "  pm.collectionVariables.set('enrollmentId', enrollment.id);",
+                  "  pm.collectionVariables.set('classId', enrollment.classId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/students?search=Demo%20Student%20Alpha&limit=5"
+          }
+        },
+        {
+          "name": "Resolve demo curriculumId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const curriculum = (pm.response.json().items || []).find((c) => c.code === 'demo-curriculum-level-1');",
+                  "pm.expect(curriculum, 'demo curriculum missing').to.exist;",
+                  "pm.collectionVariables.set('curriculumId', curriculum.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/curricula?search=demo-curriculum-level-1&limit=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Standard session flow",
+      "item": [
+        {
+          "name": "Create STANDARD practice session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.questions).to.be.an('array').that.is.not.empty;",
+                  "const question = body.questions[0];",
+                  "pm.collectionVariables.set('sessionId', body.id);",
+                  "pm.collectionVariables.set('sessionQuestionId', question.sessionQuestionId);",
+                  "pm.expect(question.attemptState.feedbackRevealed).to.eql(false);",
+                  "pm.expect(question.attemptState.feedback).to.be.null;",
+                  "const options = question.options || [];",
+                  "pm.expect(options.length).to.be.at.least(2);",
+                  "pm.collectionVariables.set('correctOptionId', options[0].id);",
+                  "pm.collectionVariables.set('wrongOptionId', options[1].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientRequestId\": \"{{$guid}}\",\n  \"questionCount\": 1,\n  \"questionTypes\": [\"SINGLE_CHOICE\"],\n  \"randomizeQuestions\": false,\n  \"randomizeOptions\": false\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice-sessions"
+          }
+        },
+        {
+          "name": "Get practice session snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const q = pm.response.json().questions[0];",
+                  "pm.expect(q.attemptState.feedbackRevealed).to.eql(false);",
+                  "pm.expect(q.attemptState.feedback).to.be.null;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/practice-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "Submit wrong answer (retry allowed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.isCorrect).to.eql(false);",
+                  "pm.expect(body.canRetry).to.eql(true);",
+                  "pm.expect(body.feedback).to.be.null;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientAnswerId\": \"{{$guid}}\",\n  \"selectedOptionIds\": [\"{{wrongOptionId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/practice-sessions/{{sessionId}}/questions/{{sessionQuestionId}}/answers"
+          }
+        },
+        {
+          "name": "Submit correct answer (finalize question)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.isCorrect).to.eql(true);",
+                  "pm.expect(body.questionFinalized).to.eql(true);",
+                  "pm.expect(body.sessionCompleted).to.eql(true);",
+                  "pm.expect(body.feedback).to.be.an('object');",
+                  "pm.expect(body.feedback.correctOptionIds).to.be.an('array').that.is.not.empty;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientAnswerId\": \"{{$guid}}\",\n  \"selectedOptionIds\": [\"{{correctOptionId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/practice-sessions/{{sessionId}}/questions/{{sessionQuestionId}}/answers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Review wrong flow",
+      "item": [
+        {
+          "name": "Create source session for review (all wrong attempts)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('reviewSourceSessionId', body.id);",
+                  "pm.collectionVariables.set('reviewSessionQuestionId', body.questions[0].sessionQuestionId);",
+                  "pm.collectionVariables.set('wrongOptionId', body.questions[0].options[1].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientRequestId\": \"{{$guid}}\",\n  \"questionCount\": 1,\n  \"questionTypes\": [\"SINGLE_CHOICE\"],\n  \"randomizeQuestions\": false,\n  \"randomizeOptions\": false\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice-sessions"
+          }
+        },
+        {
+          "name": "Exhaust attempts with wrong answers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.questionFinalized).to.eql(true);",
+                  "pm.expect(body.isCorrect).to.eql(false);",
+                  "pm.expect(body.sessionCompleted).to.eql(true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientAnswerId\": \"{{$guid}}\",\n  \"selectedOptionIds\": [\"{{wrongOptionId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/practice-sessions/{{reviewSourceSessionId}}/questions/{{reviewSessionQuestionId}}/answers"
+          },
+          "description": "Run this request up to 3 times if the session is not yet completed (maxAttemptsPerQuestion = 3). Postman does not loop automatically; repeat until sessionCompleted is true."
+        },
+        {
+          "name": "Create REVIEW_WRONG session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.sessionType).to.eql('REVIEW_WRONG');",
+                  "pm.collectionVariables.set('reviewSessionId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentAccessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientRequestId\": \"{{$guid}}\"\n}"
+            },
+            "url": "{{baseUrl}}/practice-sessions/{{reviewSourceSessionId}}/review-wrong"
+          }
+        },
+        {
+          "name": "Get REVIEW_WRONG session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().sessionType).to.eql('REVIEW_WRONG');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/practice-sessions/{{reviewSessionId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Progress reads",
+      "item": [
+        {
+          "name": "Get enrollment progress (linked parent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.enrollmentId).to.eql(pm.collectionVariables.get('enrollmentId'));",
+                  "pm.expect(body.standard).to.be.an('object');",
+                  "pm.expect(body.review).to.be.an('object');",
+                  "const serialized = JSON.stringify(body);",
+                  "pm.expect(serialized).to.not.include('correctOptionIds');",
+                  "pm.expect(serialized).to.not.include('selectedOptionIds');",
+                  "pm.expect(serialized).to.not.include('explanation');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice/progress"
+          }
+        },
+        {
+          "name": "Get enrollment progress with curriculum filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice/progress?curriculumId={{curriculumId}}"
+          }
+        },
+        {
+          "name": "Get class progress (assigned catechist)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.classId).to.eql(pm.collectionVariables.get('classId'));",
+                  "pm.expect(body.summary).to.be.an('object');",
+                  "pm.expect(body.learners.items).to.be.an('array');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistAccessToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/practice/progress?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Get class progress (parish admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/practice/progress?page=1&limit=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Access regression",
+      "item": [
+        {
+          "name": "Parent denied class progress (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 403', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/practice/progress"
+          }
+        },
+        {
+          "name": "Reject progress filter canonicalLessonKey without curriculumId (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice/progress?canonicalLessonKey={{$guid}}"
+          }
+        }
+      ]
+    }
+  ]
+}

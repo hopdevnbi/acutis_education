@@ -362,6 +362,29 @@ Postman collection: `docs/postman/Acutis-Education-Question-Bank.postman_collect
 
 MVP question types: `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `TRUE_FALSE`. No generic learner question-bank routes; Practice/Exam modules consume published version snapshots via internal contracts.
 
+## Practice API
+
+Learner practice sessions for linked enrollments. Question selection uses published Question Bank versions; grading feedback is revealed only after allowed attempt semantics (finalized question or completed session).
+
+**Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → `seed:question-bank-demo`.
+
+| Method | Route | Permission | Notes |
+|--------|-------|------------|-------|
+| `POST` | `/api/v1/enrollments/:enrollmentId/practice-sessions` | `practice.manage` | Create STANDARD session |
+| `GET` | `/api/v1/practice-sessions/:sessionId` | `practice.read` | Resume snapshot |
+| `POST` | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/answers` | `practice.manage` | Submit attempt; idempotent `clientAnswerId` |
+| `POST` | `/api/v1/practice-sessions/:sessionId/review-wrong` | `practice.manage` | Create REVIEW_WRONG from completed source |
+| `PATCH` | `/api/v1/practice-sessions/:sessionId/abandon` | `practice.manage` | Abandon in-progress session |
+| `GET` | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/media/:assetId/content` | `practice.read` | Contextual media stream |
+| `GET` | `/api/v1/enrollments/:enrollmentId/practice/progress` | `practice.read` | Derived metrics (no answer leakage) |
+| `GET` | `/api/v1/classes/:classId/practice/progress` | `practice.read` | Class summary + paginated learners |
+
+**Scoped access:** linked parent/guardian may manage learner sessions and read enrollment progress. Parish admin and assigned catechist may read enrollment progress and class progress. **Parent is denied class progress** even when linked to a learner in the class. Permissions alone are insufficient — server-side relationship scope is enforced.
+
+Progress query filters: `curriculumId`, `canonicalLessonKey` (requires `curriculumId`), `from`, `to` (session `startedAt` window). Class route also supports `page`, `limit`.
+
+Postman collection: `docs/postman/Acutis-Education-Practice.postman_collection.json`
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

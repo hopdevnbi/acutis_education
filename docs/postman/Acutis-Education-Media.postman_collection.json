@@ -1,0 +1,99 @@
+{
+  "info": {
+    "name": "Acutis Education — Media",
+    "description": "Local media upload/read and contextual learner delivery flows. Uses seeded sample accounts from auth-rbac seed when available.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "parentAccessToken", "value": "" },
+    { "key": "catechistAccessToken", "value": "" },
+    { "key": "uploadedAssetId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "lessonId", "value": "" },
+    { "key": "enrollmentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 Admin login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@local.catechism.test\",\n  \"password\": \"ChangeMe_LocalDev123!\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "2 Upload image",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": "" },
+            { "key": "intendedCategory", "value": "IMAGE", "type": "text" },
+            { "key": "visibility", "value": "PRIVATE", "type": "text" }
+          ]
+        },
+        "url": "{{baseUrl}}/media/assets"
+      }
+    },
+    {
+      "name": "3 Get metadata",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+        "url": "{{baseUrl}}/media/assets/{{uploadedAssetId}}"
+      }
+    },
+    {
+      "name": "4 Get admin content",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+        "url": "{{baseUrl}}/media/assets/{{uploadedAssetId}}/content"
+      }
+    },
+    {
+      "name": "5 Parent login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"parent@local.catechism.test\",\n  \"password\": \"ChangeMe_LocalDev123!\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "6 Parent generic media denied",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+        "url": "{{baseUrl}}/media/assets/{{uploadedAssetId}}/content"
+      }
+    },
+    {
+      "name": "7 Class contextual media",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{catechistAccessToken}}" }],
+        "url": "{{baseUrl}}/classes/{{classId}}/lessons/{{lessonId}}/media/{{uploadedAssetId}}/content"
+      }
+    },
+    {
+      "name": "8 Enrollment contextual media",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{parentAccessToken}}" }],
+        "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{lessonId}}/media/{{uploadedAssetId}}/content"
+      }
+    }
+  ]
+}
