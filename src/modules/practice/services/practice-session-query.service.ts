@@ -177,9 +177,9 @@ export class PracticeSessionQueryService {
         derived.latestAttempt === null
           ? null
           : {
-              attemptId: derived.latestAttempt.id,
+              attemptId: normalizeUuid(derived.latestAttempt.id),
               attemptNumber: derived.latestAttempt.attemptNumber,
-              clientAnswerId: derived.latestAttempt.clientAnswerId,
+              clientAnswerId: normalizeUuid(derived.latestAttempt.clientAnswerId),
               selectedOptionIds: derived.latestAttempt.selectedOptionIds,
               isCorrect: derived.latestAttempt.isCorrect,
               score: derived.latestAttempt.score,

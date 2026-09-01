@@ -18,6 +18,7 @@ import {
 import { QuestionBankDemoSeedModule } from '../../src/database/seeds/question-bank-demo-seed.module';
 import { QuestionBankDemoSeedService } from '../../src/database/seeds/question-bank-demo.seed.service';
 import { generateUuidV4 } from '../../src/database/uuid-v4.util';
+import { QuestionType } from '../../src/modules/question-bank/enums/question-type.enum';
 import { PracticeModule } from '../../src/modules/practice/practice.module';
 import { PracticeSessionStatus } from '../../src/modules/practice/enums/practice-session-status.enum';
 import { PracticeSessionType } from '../../src/modules/practice/enums/practice-session-type.enum';
@@ -134,6 +135,7 @@ describe('Practice answer and review integration (MSSQL)', () => {
       enrollmentId,
       actorUserId: parentUserId,
       questionCount: 1,
+      questionTypes: [QuestionType.SingleChoice],
       randomizeQuestions: false,
       randomizeOptions: false,
     });
@@ -192,6 +194,7 @@ describe('Practice answer and review integration (MSSQL)', () => {
       enrollmentId,
       actorUserId: parentUserId,
       questionCount: 1,
+      questionTypes: [QuestionType.SingleChoice],
       randomizeQuestions: false,
       randomizeOptions: false,
     });
@@ -242,6 +245,7 @@ describe('Practice answer and review integration (MSSQL)', () => {
       enrollmentId,
       actorUserId: parentUserId,
       questionCount: 1,
+      questionTypes: [QuestionType.SingleChoice],
       randomizeQuestions: false,
       randomizeOptions: false,
     });

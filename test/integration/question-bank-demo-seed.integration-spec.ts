@@ -66,7 +66,7 @@ describe('QuestionBankDemoSeedService integration (MSSQL)', () => {
     await authRbacSeedService.run();
   });
 
-  afterEach(async () => {
+  async function cleanupQuestionBankDemoState(): Promise<void> {
     await AppDataSource.query(`
       DELETE FROM question_correct_options
       WHERE question_version_id IN (
@@ -140,6 +140,14 @@ describe('QuestionBankDemoSeedService integration (MSSQL)', () => {
       WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
     `);
     await AppDataSource.query(`
+      DELETE FROM question_curriculum_links
+      WHERE authoring_curriculum_version_id IN (
+        SELECT cv.id FROM curriculum_versions cv
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
       DELETE FROM lesson_contents
       WHERE lesson_id IN (
         SELECT l.id FROM lessons l
@@ -176,6 +184,10 @@ describe('QuestionBankDemoSeedService integration (MSSQL)', () => {
       DELETE FROM curriculums
       WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
     `);
+  }
+
+  afterEach(async () => {
+    await cleanupQuestionBankDemoState();
   });
 
   afterAll(async () => {
@@ -210,6 +222,7 @@ describe('QuestionBankDemoSeedService integration (MSSQL)', () => {
   }
 
   it('refuses to run when curriculum-demo prerequisites are missing', async () => {
+    await cleanupQuestionBankDemoState();
     await parishAcademicSeedService.run();
 
     await expect(questionBankDemoSeedService.run()).rejects.toBeInstanceOf(

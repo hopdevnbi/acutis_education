@@ -20,6 +20,7 @@ import { QuestionBankDemoSeedModule } from '../src/database/seeds/question-bank-
 import { QuestionBankDemoSeedService } from '../src/database/seeds/question-bank-demo.seed.service';
 import { generateUuidV4 } from '../src/database/uuid-v4.util';
 import { AccessControlService } from '../src/modules/access-control/services/access-control.service';
+import { QuestionType } from '../src/modules/question-bank/enums/question-type.enum';
 import { PracticeSessionStatus } from '../src/modules/practice/enums/practice-session-status.enum';
 import { UserEmailAlreadyExistsError } from '../src/modules/users/errors/user-account.errors';
 import { UserAccountService } from '../src/modules/users/services/user-account.service';
@@ -27,6 +28,13 @@ import { createDatabaseTestApplication } from './create-database-test-applicatio
 import { getTestHttpServer } from './get-test-http-server';
 
 const UNLINKED_PARENT_EMAIL = `practice-unlinked@${AUTH_RBAC_SAMPLE_DOMAIN}`;
+
+const SINGLE_CHOICE_SESSION_REQUEST = {
+  questionCount: 1,
+  questionTypes: [QuestionType.SingleChoice],
+  randomizeQuestions: false,
+  randomizeOptions: false,
+} as const;
 
 interface LoginResponseBody {
   accessToken: string;
@@ -285,7 +293,7 @@ describe('Practice API (db e2e)', () => {
     const createResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .send(SINGLE_CHOICE_SESSION_REQUEST)
       .expect(201);
     const created = createResponse.body as PracticeSessionResponseBody;
     const sessionQuestionId = created.questions[0]?.sessionQuestionId ?? generateUuidV4();
@@ -303,7 +311,7 @@ describe('Practice API (db e2e)', () => {
     const createResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .send(SINGLE_CHOICE_SESSION_REQUEST)
       .expect(201);
     const created = createResponse.body as PracticeSessionResponseBody;
     const question = created.questions[0];
@@ -398,7 +406,7 @@ describe('Practice API (db e2e)', () => {
     const createResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .send(SINGLE_CHOICE_SESSION_REQUEST)
       .expect(201);
     const created = createResponse.body as PracticeSessionResponseBody;
     const question = created.questions[0];
@@ -446,7 +454,7 @@ describe('Practice API (db e2e)', () => {
     const createResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .send(SINGLE_CHOICE_SESSION_REQUEST)
       .expect(201);
     const created = createResponse.body as PracticeSessionResponseBody;
     const question = created.questions[0];

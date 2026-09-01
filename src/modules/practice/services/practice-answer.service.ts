@@ -61,8 +61,6 @@ export class PracticeAnswerService {
       enrollment.studentId,
     );
 
-    this.assertSessionAcceptsAnswers(session.status);
-
     const normalizedSelectedOptionIds = this.normalizeAnswerSelection(input.selectedOptionIds);
     const existingReplay = await this.findExistingAttemptByClientAnswerId(
       input.sessionQuestionId,
@@ -78,6 +76,8 @@ export class PracticeAnswerService {
         existingReplay,
       );
     }
+
+    this.assertSessionAcceptsAnswers(session.status);
 
     return this.dataSource.transaction(async (entityManager) => {
       const sessionQuestionRepository = entityManager.getRepository(PracticeSessionQuestionEntity);
@@ -210,8 +210,8 @@ export class PracticeAnswerService {
       );
 
       return {
-        attemptId: attempt.id,
-        clientAnswerId: attempt.clientAnswerId,
+        attemptId: normalizeUuid(attempt.id),
+        clientAnswerId: normalizeUuid(attempt.clientAnswerId),
         attemptNumber: attempt.attemptNumber,
         isCorrect: attempt.isCorrect,
         score: attempt.score as 0 | 1,
@@ -326,8 +326,8 @@ export class PracticeAnswerService {
     );
 
     return {
-      attemptId: attempt.id,
-      clientAnswerId: attempt.clientAnswerId,
+      attemptId: normalizeUuid(attempt.id),
+      clientAnswerId: normalizeUuid(attempt.clientAnswerId),
       attemptNumber: attempt.attemptNumber,
       isCorrect: attempt.isCorrect,
       score: attempt.score as 0 | 1,

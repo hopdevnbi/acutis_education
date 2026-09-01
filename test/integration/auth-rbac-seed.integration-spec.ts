@@ -72,6 +72,13 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
       )
     `);
     await AppDataSource.query(`
+      UPDATE curriculum_assignments
+      SET assigned_by_user_id = NULL
+      WHERE assigned_by_user_id IN (
+        SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
+      )
+    `);
+    await AppDataSource.query(`
       DELETE FROM enrollments
       WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'Demo Student%')
     `);

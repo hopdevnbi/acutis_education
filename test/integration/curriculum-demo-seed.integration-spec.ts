@@ -86,6 +86,14 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
       WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
     `);
     await AppDataSource.query(`
+      DELETE FROM question_curriculum_links
+      WHERE authoring_curriculum_version_id IN (
+        SELECT cv.id FROM curriculum_versions cv
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
       DELETE FROM lesson_contents
       WHERE lesson_id IN (
         SELECT l.id FROM lessons l
@@ -134,6 +142,60 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
 
   it('refuses to run when parish-academic prerequisites are missing', async () => {
     await AppDataSource.query(`
+      DELETE FROM curriculum_assignments
+      WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
+    `);
+    await AppDataSource.query(`
+      UPDATE curriculums
+      SET current_published_version_id = NULL
+      WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_curriculum_links
+      WHERE authoring_curriculum_version_id IN (
+        SELECT cv.id FROM curriculum_versions cv
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM lesson_contents
+      WHERE lesson_id IN (
+        SELECT l.id FROM lessons l
+        INNER JOIN topics t ON t.id = l.topic_id
+        INNER JOIN curriculum_versions cv ON cv.id = t.curriculum_version_id
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM lessons
+      WHERE topic_id IN (
+        SELECT t.id FROM topics t
+        INNER JOIN curriculum_versions cv ON cv.id = t.curriculum_version_id
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM topics
+      WHERE curriculum_version_id IN (
+        SELECT cv.id FROM curriculum_versions cv
+        INNER JOIN curriculums c ON c.id = cv.curriculum_id
+        WHERE c.code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM curriculum_versions
+      WHERE curriculum_id IN (
+        SELECT id FROM curriculums WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM curriculums
+      WHERE code = '${CURRICULUM_DEMO_CURRICULUM_CODE}'
+    `);
+    await AppDataSource.query(`
       DELETE FROM enrollments
       WHERE class_id IN (
         SELECT id FROM classes WHERE code IN ('demo-class-a', 'demo-class-b')
@@ -164,6 +226,61 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
       )
     `);
     await AppDataSource.query(`
+      DELETE FROM question_correct_options
+      WHERE question_version_id IN (
+        SELECT qv.id FROM question_versions qv
+        INNER JOIN questions q ON q.id = qv.question_id
+        INNER JOIN parishes p ON p.id = q.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_options
+      WHERE question_version_id IN (
+        SELECT qv.id FROM question_versions qv
+        INNER JOIN questions q ON q.id = qv.question_id
+        INNER JOIN parishes p ON p.id = q.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_tag_links
+      WHERE question_id IN (
+        SELECT q.id FROM questions q
+        INNER JOIN parishes p ON p.id = q.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_curriculum_links
+      WHERE question_id IN (
+        SELECT q.id FROM questions q
+        INNER JOIN parishes p ON p.id = q.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      UPDATE questions
+      SET current_published_version_id = NULL
+      WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_versions
+      WHERE question_id IN (
+        SELECT q.id FROM questions q
+        INNER JOIN parishes p ON p.id = q.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM questions
+      WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
+    `);
+    await AppDataSource.query(`
+      DELETE FROM question_tags
+      WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
+    `);
+    await AppDataSource.query(`
       DELETE FROM parishes
       WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
     `);
@@ -174,6 +291,7 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
   });
 
   it('creates published demo curriculum with assignment and readable published tree on first run', async () => {
+    await authRbacSeedService.run();
     await parishAcademicSeedService.run();
     await classEnrollmentSeedService.run();
 
@@ -269,6 +387,7 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
   });
 
   it('is idempotent on second run', async () => {
+    await authRbacSeedService.run();
     await parishAcademicSeedService.run();
     await classEnrollmentSeedService.run();
     await curriculumDemoSeedService.run();
