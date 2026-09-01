@@ -124,6 +124,7 @@ describe('Localization provider jobs integration (MSSQL)', () => {
           text: unit.text,
         })),
       }),
+      applyTranslation: (_snapshot, payload) => payload,
     };
 
     translationSourceRegistryService.registerAdapter(fakeAdapter);
@@ -198,6 +199,7 @@ describe('Localization provider jobs integration (MSSQL)', () => {
       buildPayload: (_snapshot, translatedUnits) => ({
         prompt: translatedUnits[0]?.text,
       }),
+      applyTranslation: (_snapshot, payload) => payload,
     };
 
     translationSourceRegistryService.registerAdapter(fakeAdapter);

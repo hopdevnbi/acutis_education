@@ -19,6 +19,12 @@ export class PracticeSessionQuestionEntity {
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   deliveredOptionOrderJson!: string | null;
 
+  @Column({ type: 'uniqueidentifier', nullable: true })
+  translationRevisionId!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  deliveredLocale!: string | null;
+
   @CreateDateColumn({ type: 'datetime2' })
   createdAt!: Date;
 }

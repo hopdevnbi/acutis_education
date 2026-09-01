@@ -8,8 +8,12 @@ import { EnrollmentAccessService } from '../../enrollment/services/enrollment-ac
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { documentReferencesMediaAsset } from '../../learning-content/utils/content-media-reference.util';
 import { LearningContentService } from '../../learning-content/services/learning-content.service';
+import { TranslationResourceType } from '../../localization/enums/translation-resource-type.enum';
+import { LocalizationService } from '../../localization/services/localization.service';
 import type { MediaAssetContent } from '../../media/interfaces/media-asset.interface';
 import { MediaAssetService } from '../../media/services/media-asset.service';
+import { ParishService } from '../../parish/services/parish.service';
+import { UserAccountService } from '../../users/services/user-account.service';
 import {
   ContextualMediaAssetNotReferencedError,
   DraftCurriculumDeliveryDeniedError,
@@ -20,7 +24,9 @@ import type {
   LearnerLessonContent,
 } from '../interfaces/curriculum-delivery.interface';
 import {
-  toLearnerCurriculumTree,
+  attachTreeLocalizationKeys,
+  buildCurriculumTreeLocalizationInputs,
+  mergeLocalizedCurriculumTree,
   toLearnerLessonContent,
 } from '../mappers/curriculum-delivery.mapper';
 
@@ -34,26 +40,33 @@ export class CurriculumDeliveryService {
     private readonly curriculumService: CurriculumService,
     private readonly learningContentService: LearningContentService,
     private readonly mediaAssetService: MediaAssetService,
+    private readonly localizationService: LocalizationService,
+    private readonly userAccountService: UserAccountService,
+    private readonly parishService: ParishService,
   ) {}
 
   async getClassCurriculumTree(
     rawUserId: string,
     rawClassId: string,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerCurriculumTree> {
     await this.classScopeService.assertCanReadClass(rawUserId, rawClassId);
 
     const classSnapshot = await this.classService.getClassById(rawClassId);
 
     return this.buildLearnerTreeForTriple(
+      rawUserId,
       classSnapshot.parishId,
       classSnapshot.academicYearId,
       classSnapshot.catechismLevelId,
+      acceptLanguageHeader,
     );
   }
 
   async getEnrollmentCurriculumTree(
     rawUserId: string,
     rawEnrollmentId: string,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerCurriculumTree> {
     const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
 
@@ -66,9 +79,11 @@ export class CurriculumDeliveryService {
     const classSnapshot = await this.classService.getClassById(enrollment.classId);
 
     return this.buildLearnerTreeForTriple(
+      rawUserId,
       classSnapshot.parishId,
       classSnapshot.academicYearId,
       classSnapshot.catechismLevelId,
+      acceptLanguageHeader,
     );
   }
 
@@ -76,7 +91,7 @@ export class CurriculumDeliveryService {
     rawUserId: string,
     rawClassId: string,
     rawLessonId: string,
-    requestedLocale: string | null,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerLessonContent> {
     await this.classScopeService.assertCanReadClass(rawUserId, rawClassId);
 
@@ -88,9 +103,11 @@ export class CurriculumDeliveryService {
     );
 
     return this.buildLearnerContentForAssignedVersion(
+      rawUserId,
+      classSnapshot.parishId,
       rawLessonId,
       assignedVersion.id,
-      requestedLocale,
+      acceptLanguageHeader,
     );
   }
 
@@ -98,7 +115,7 @@ export class CurriculumDeliveryService {
     rawUserId: string,
     rawEnrollmentId: string,
     rawLessonId: string,
-    requestedLocale: string | null,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerLessonContent> {
     const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
 
@@ -116,9 +133,11 @@ export class CurriculumDeliveryService {
     );
 
     return this.buildLearnerContentForAssignedVersion(
+      rawUserId,
+      classSnapshot.parishId,
       rawLessonId,
       assignedVersion.id,
-      requestedLocale,
+      acceptLanguageHeader,
     );
   }
 
@@ -165,9 +184,11 @@ export class CurriculumDeliveryService {
   }
 
   private async buildLearnerTreeForTriple(
+    rawUserId: string,
     parishId: string,
     academicYearId: string,
     catechismLevelId: string,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerCurriculumTree> {
     const assignedVersion = await this.curriculumService.getPublishedVersionForAssignment(
       parishId,
@@ -176,14 +197,41 @@ export class CurriculumDeliveryService {
     );
     const curriculum = await this.curriculumService.getCurriculumById(assignedVersion.curriculumId);
     const versionTree = await this.curriculumService.getVersionTree(assignedVersion.id);
+    const localeResolution = await this.resolveLearnerLocale(
+      rawUserId,
+      parishId,
+      acceptLanguageHeader,
+    );
+    const localizationInputs = buildCurriculumTreeLocalizationInputs({
+      curriculumId: curriculum.id,
+      versionId: assignedVersion.id,
+      versionTree,
+      targetLocale: localeResolution.resolvedLocale,
+      requestedLocale: localeResolution.requestedLocale,
+      parishId,
+    });
+    const resolutions =
+      await this.localizationService.resolveLocalizedResources(localizationInputs);
+    const resolutionMap = attachTreeLocalizationKeys(
+      curriculum.id,
+      assignedVersion.id,
+      versionTree,
+      resolutions,
+    );
 
-    return toLearnerCurriculumTree(curriculum, assignedVersion, versionTree);
+    return mergeLocalizedCurriculumTree(curriculum, assignedVersion, versionTree, {
+      requestedLocale: localeResolution.requestedLocale,
+      resolvedLocale: localeResolution.resolvedLocale,
+      resolutionMap,
+    });
   }
 
   private async buildLearnerContentForAssignedVersion(
+    rawUserId: string,
+    parishId: string,
     rawLessonId: string,
     assignedVersionId: string,
-    requestedLocale: string | null,
+    acceptLanguageHeader: string | null,
   ): Promise<LearnerLessonContent> {
     const lessonContext = await this.curriculumService.getLessonCurriculumContext(rawLessonId);
 
@@ -198,14 +246,42 @@ export class CurriculumDeliveryService {
     const assignedVersion = await this.curriculumService.assertVersionPublished(assignedVersionId);
     const curriculum = await this.curriculumService.getCurriculumById(lessonContext.curriculumId);
     const content = await this.learningContentService.getLessonContent(rawLessonId);
-
-    return toLearnerLessonContent(
-      curriculum,
-      assignedVersion,
-      lessonContext,
-      content,
-      requestedLocale,
+    const localeResolution = await this.resolveLearnerLocale(
+      rawUserId,
+      parishId,
+      acceptLanguageHeader,
     );
+    const resolution = await this.localizationService.resolveLocalizedResource({
+      resourceType: TranslationResourceType.LearningContentDocument,
+      resourceId: rawLessonId,
+      targetLocale: localeResolution.resolvedLocale,
+      requestedLocale: localeResolution.requestedLocale,
+      parishId,
+    });
+
+    return toLearnerLessonContent(curriculum, assignedVersion, lessonContext, content, resolution);
+  }
+
+  private async resolveLearnerLocale(
+    rawUserId: string,
+    parishId: string,
+    acceptLanguageHeader: string | null,
+  ): Promise<{
+    readonly requestedLocale: string | null;
+    readonly resolvedLocale: string;
+  }> {
+    const account = await this.userAccountService.getAccountSnapshotById(rawUserId);
+    const parish = await this.parishService.getParishById(parishId);
+    const localeResolution = this.localizationService.resolveLocale({
+      userPreferredLocale: account?.preferredLocale ?? null,
+      acceptLanguageHeader,
+      parishDefaultLocale: parish.defaultLocale,
+    });
+
+    return {
+      requestedLocale: localeResolution.requestedLocale,
+      resolvedLocale: localeResolution.resolvedLocale,
+    };
   }
 
   private async resolveContextualLessonMediaContent(

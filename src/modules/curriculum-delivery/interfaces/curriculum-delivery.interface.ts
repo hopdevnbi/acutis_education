@@ -1,6 +1,6 @@
 import type { ContentDocumentV1 } from '../../learning-content/interfaces/learning-content.interface';
 
-export type LearnerTranslationStatus = 'SOURCE';
+export type LearnerTranslationStatus = 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
 
 export interface LearnerCurriculumSummary {
   readonly id: string;
@@ -11,6 +11,7 @@ export interface LearnerCurriculumSummary {
 export interface LearnerCurriculumVersionSummary {
   readonly id: string;
   readonly versionNumber: number;
+  readonly label: string | null;
 }
 
 export interface LearnerLessonSummary {
@@ -34,6 +35,11 @@ export interface LearnerCurriculumTree {
   readonly curriculum: LearnerCurriculumSummary;
   readonly version: LearnerCurriculumVersionSummary;
   readonly topics: readonly LearnerTopicTree[];
+  readonly requestedLocale: string | null;
+  readonly resolvedLocale: string;
+  readonly sourceLocale: string;
+  readonly translationStatus: LearnerTranslationStatus;
+  readonly isFallback: boolean;
 }
 
 export interface LearnerLessonContent {
@@ -43,9 +49,11 @@ export interface LearnerLessonContent {
   readonly versionNumber: number;
   readonly sourceLocale: string;
   readonly resolvedLocale: string;
-  readonly isFallback: false;
+  readonly isFallback: boolean;
   readonly translationStatus: LearnerTranslationStatus;
   readonly requestedLocale: string | null;
+  readonly translationRevisionId: string | null;
+  readonly sourceContentHash: string;
   readonly contentSchemaVersion: number;
   readonly contentHash: string;
   readonly document: ContentDocumentV1;

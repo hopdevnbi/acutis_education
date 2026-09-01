@@ -60,21 +60,72 @@ export class TranslationResourceService {
   }
 
   async getResourceByRef(ref: TranslationResourceRef): Promise<TranslationResourceSnapshot> {
-    this.assertResourceType(ref.resourceType);
-    const resourceId = this.parseResourceId(ref.resourceId);
-
-    const resource = await this.translationResourceRepository.findOne({
-      where: {
-        resourceType: ref.resourceType,
-        resourceId,
-      },
-    });
+    const resource = await this.findResourceEntityByRef(ref);
 
     if (resource === null) {
       throw new TranslationResourceNotFoundError();
     }
 
     return toTranslationResourceSnapshot(resource);
+  }
+
+  async findResourceByRef(
+    ref: TranslationResourceRef,
+  ): Promise<TranslationResourceSnapshot | null> {
+    const resource = await this.findResourceEntityByRef(ref);
+
+    if (resource === null) {
+      return null;
+    }
+
+    return toTranslationResourceSnapshot(resource);
+  }
+
+  async findResourcesByRefs(
+    refs: readonly TranslationResourceRef[],
+  ): Promise<Map<string, TranslationResourceSnapshot>> {
+    const normalizedRefs = refs.map((ref) => ({
+      resourceType: ref.resourceType,
+      resourceId: this.parseResourceId(ref.resourceId),
+    }));
+    const uniqueRefs = new Map<string, TranslationResourceRef>();
+
+    for (const ref of normalizedRefs) {
+      uniqueRefs.set(`${ref.resourceType}:${ref.resourceId}`, ref);
+    }
+
+    if (uniqueRefs.size === 0) {
+      return new Map();
+    }
+
+    const resources = await this.translationResourceRepository
+      .createQueryBuilder('resource')
+      .where(
+        normalizedRefs
+          .map(
+            (_ref, index) =>
+              `(resource.resourceType = :resourceType${index} AND resource.resourceId = :resourceId${index})`,
+          )
+          .join(' OR '),
+        Object.fromEntries(
+          normalizedRefs.flatMap((ref, index) => [
+            [`resourceType${index}`, ref.resourceType],
+            [`resourceId${index}`, ref.resourceId],
+          ]),
+        ),
+      )
+      .getMany();
+
+    const result = new Map<string, TranslationResourceSnapshot>();
+
+    for (const resource of resources) {
+      result.set(
+        `${resource.resourceType}:${normalizeUuid(resource.resourceId)}`,
+        toTranslationResourceSnapshot(resource),
+      );
+    }
+
+    return result;
   }
 
   async getResourceById(translationResourceId: string): Promise<TranslationResourceSnapshot> {
@@ -105,6 +156,20 @@ export class TranslationResourceService {
     }
 
     return normalizeUuid(rawResourceId);
+  }
+
+  private async findResourceEntityByRef(
+    ref: TranslationResourceRef,
+  ): Promise<TranslationResourceEntity | null> {
+    this.assertResourceType(ref.resourceType);
+    const resourceId = this.parseResourceId(ref.resourceId);
+
+    return this.translationResourceRepository.findOne({
+      where: {
+        resourceType: ref.resourceType,
+        resourceId,
+      },
+    });
   }
 
   private assertBindingCompatible(

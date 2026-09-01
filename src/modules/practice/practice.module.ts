@@ -8,6 +8,7 @@ import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { MediaModule } from '../media/media.module';
 import { ParishModule } from '../parish/parish.module';
 import { QuestionBankModule } from '../question-bank/question-bank.module';
+import { LocalizationModule } from '../localization/localization.module';
 import { StudentModule } from '../student/student.module';
 import { PracticeController } from './controllers/practice.controller';
 import { PracticeAnswerAttemptEntity } from './entities/practice-answer-attempt.entity';
@@ -30,6 +31,7 @@ import { PracticeService } from './services/practice.service';
       PracticeAnswerAttemptEntity,
     ]),
     QuestionBankModule,
+    LocalizationModule,
     EnrollmentModule,
     ClassModule,
     CurriculumModule,

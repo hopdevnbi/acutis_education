@@ -19,6 +19,9 @@ export class LearnerCurriculumVersionSummaryDto {
 
   @ApiProperty()
   versionNumber!: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  label!: string | null;
 }
 
 export class LearnerLessonSummaryDto {
@@ -67,6 +70,21 @@ export class LearnerCurriculumTreeResponseDto {
 
   @ApiProperty({ type: [LearnerTopicTreeDto] })
   topics!: LearnerTopicTreeDto[];
+
+  @ApiPropertyOptional({ nullable: true })
+  requestedLocale!: string | null;
+
+  @ApiProperty({ example: 'vi-VN' })
+  resolvedLocale!: string;
+
+  @ApiProperty({ example: 'vi-VN' })
+  sourceLocale!: string;
+
+  @ApiProperty({ enum: ['SOURCE', 'APPROVED', 'MISSING', 'STALE'] })
+  translationStatus!: LearnerTranslationStatus;
+
+  @ApiProperty({ example: false })
+  isFallback!: boolean;
 }
 
 export class LearnerLessonContentResponseDto {
@@ -89,13 +107,19 @@ export class LearnerLessonContentResponseDto {
   resolvedLocale!: string;
 
   @ApiProperty({ example: false })
-  isFallback!: false;
+  isFallback!: boolean;
 
-  @ApiProperty({ enum: ['SOURCE'] })
+  @ApiProperty({ enum: ['SOURCE', 'APPROVED', 'MISSING', 'STALE'] })
   translationStatus!: LearnerTranslationStatus;
 
   @ApiPropertyOptional({ nullable: true })
   requestedLocale!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  translationRevisionId!: string | null;
+
+  @ApiProperty()
+  sourceContentHash!: string;
 
   @ApiProperty()
   contentSchemaVersion!: number;

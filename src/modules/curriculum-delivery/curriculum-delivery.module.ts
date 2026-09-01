@@ -5,7 +5,10 @@ import { ClassModule } from '../class/class.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
 import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { LearningContentModule } from '../learning-content/learning-content.module';
+import { LocalizationModule } from '../localization/localization.module';
 import { MediaModule } from '../media/media.module';
+import { ParishModule } from '../parish/parish.module';
+import { UsersModule } from '../users/users.module';
 import { CurriculumDeliveryController } from './controllers/curriculum-delivery.controller';
 import { CurriculumDeliveryService } from './services/curriculum-delivery.service';
 
@@ -18,6 +21,9 @@ import { CurriculumDeliveryService } from './services/curriculum-delivery.servic
     EnrollmentModule,
     AuthModule,
     AccessControlModule,
+    LocalizationModule,
+    UsersModule,
+    ParishModule,
   ],
   controllers: [CurriculumDeliveryController],
   providers: [CurriculumDeliveryService],

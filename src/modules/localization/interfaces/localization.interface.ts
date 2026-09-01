@@ -5,6 +5,7 @@ import type {
 } from '../enums/translation-revision-status.enum';
 import type { TranslationJobStatus } from '../enums/translation-job-status.enum';
 import type { CatholicGlossaryVersionStatus } from '../enums/catholic-glossary-version-status.enum';
+import type { LearnerTranslationReadStatus } from '../enums/learner-translation-read-status.enum';
 
 export interface TranslationResourceRef {
   readonly resourceType: TranslationResourceType;
@@ -79,6 +80,42 @@ export interface LocaleResolutionResult {
   readonly resolvedLocale: string;
   readonly resolutionSource:
     'explicit' | 'user_preference' | 'accept_language' | 'parish_default' | 'system_default';
+}
+
+export interface ResolveLocalizedResourceInput {
+  readonly resourceType: TranslationResourceType;
+  readonly resourceId: string;
+  readonly targetLocale: string;
+  readonly parishId: string | null;
+  readonly requestedLocale?: string | null;
+}
+
+export interface ResolveLocalizedResourceWithRevisionInput {
+  readonly resourceType: TranslationResourceType;
+  readonly resourceId: string;
+  readonly translationRevisionId: string;
+  readonly parishId: string | null;
+}
+
+export interface LocalizedResourceResolution {
+  readonly payload: Record<string, unknown>;
+  readonly requestedLocale: string | null;
+  readonly resolvedLocale: string;
+  readonly sourceLocale: string;
+  readonly translationStatus: LearnerTranslationReadStatus;
+  readonly isFallback: boolean;
+  readonly translationRevisionId: string | null;
+  readonly sourceContentHash: string;
+}
+
+export interface LocalizedQuestionDisplayPayload {
+  readonly prompt: string;
+  readonly instruction: string | null;
+  readonly explanation: string | null;
+  readonly options: readonly {
+    readonly id: string;
+    readonly text: string | null;
+  }[];
 }
 
 export interface TranslationJobSnapshot {

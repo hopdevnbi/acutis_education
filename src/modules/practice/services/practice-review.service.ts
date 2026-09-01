@@ -133,6 +133,8 @@ export class PracticeReviewService {
           sessionQuestion.questionVersionId = wrongQuestion.questionVersionId;
           sessionQuestion.position = index + 1;
           sessionQuestion.deliveredOptionOrderJson = wrongQuestion.deliveredOptionOrderJson;
+          sessionQuestion.translationRevisionId = wrongQuestion.translationRevisionId;
+          sessionQuestion.deliveredLocale = wrongQuestion.deliveredLocale;
           await sessionQuestionRepository.save(sessionQuestion);
         }
       });
@@ -172,6 +174,8 @@ export class PracticeReviewService {
     Array<{
       questionVersionId: string;
       deliveredOptionOrderJson: string | null;
+      translationRevisionId: string | null;
+      deliveredLocale: string | null;
     }>
   > {
     const sessionQuestions = await this.dataSource
@@ -184,6 +188,8 @@ export class PracticeReviewService {
     const wrongQuestions: Array<{
       questionVersionId: string;
       deliveredOptionOrderJson: string | null;
+      translationRevisionId: string | null;
+      deliveredLocale: string | null;
     }> = [];
 
     for (const sessionQuestion of sessionQuestions) {
@@ -205,6 +211,8 @@ export class PracticeReviewService {
         wrongQuestions.push({
           questionVersionId: sessionQuestion.questionVersionId,
           deliveredOptionOrderJson: sessionQuestion.deliveredOptionOrderJson,
+          translationRevisionId: sessionQuestion.translationRevisionId,
+          deliveredLocale: sessionQuestion.deliveredLocale,
         });
       }
     }

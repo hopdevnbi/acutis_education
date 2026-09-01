@@ -12,6 +12,8 @@ import { EnrollmentStatus } from '../../enrollment/enums/enrollment-status.enum'
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import type { PublishedQuestionSelectionSnapshot } from '../../question-bank/interfaces/question-bank.interface';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
+import { TranslationResourceType } from '../../localization/enums/translation-resource-type.enum';
+import { LocalizationService } from '../../localization/services/localization.service';
 import { StudentStatus } from '../../student/enums/student-status.enum';
 import { StudentService } from '../../student/services/student.service';
 import {
@@ -61,6 +63,7 @@ export class PracticeGenerationService {
     private readonly classService: ClassService,
     private readonly curriculumService: CurriculumService,
     private readonly questionBankService: QuestionBankService,
+    private readonly localizationService: LocalizationService,
     private readonly practiceAccessService: PracticeAccessService,
     private readonly practiceSessionQueryService: PracticeSessionQueryService,
   ) {}
@@ -162,6 +165,21 @@ export class PracticeGenerationService {
     }
 
     const selectedCandidates = this.selectCandidates(candidates, normalizedRequest);
+    const localizedResolutions = await this.localizationService.resolveLocalizedResources(
+      selectedCandidates.map((candidate) => ({
+        resourceType: TranslationResourceType.QuestionBankVersion,
+        resourceId: candidate.questionVersionId,
+        targetLocale: normalizedRequest.locale,
+        requestedLocale: normalizedRequest.locale,
+        parishId: classSnapshot.parishId,
+      })),
+    );
+    const localizationByVersionId = new Map(
+      selectedCandidates.map((candidate, index) => [
+        normalizeUuid(candidate.questionVersionId),
+        localizedResolutions[index],
+      ]),
+    );
     const projections = await this.questionBankService.getLearnerQuestionProjections(
       selectedCandidates.map((candidate) => candidate.questionVersionId),
     );
@@ -218,6 +236,16 @@ export class PracticeGenerationService {
             projection,
             normalizedRequest.randomizeOptions,
           );
+          const localization = localizationByVersionId.get(
+            normalizeUuid(candidate.questionVersionId),
+          );
+          sessionQuestion.translationRevisionId = localization?.translationRevisionId ?? null;
+          sessionQuestion.deliveredLocale =
+            localization === undefined
+              ? candidate.sourceLocale
+              : localization.isFallback
+                ? localization.sourceLocale
+                : localization.resolvedLocale;
 
           await sessionQuestionRepository.save(sessionQuestion);
         }

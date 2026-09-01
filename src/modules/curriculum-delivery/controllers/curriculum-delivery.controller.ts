@@ -30,7 +30,6 @@ import {
   LearnerLessonContentResponseDto,
 } from '../dto/learner-curriculum-delivery-response.dto';
 import {
-  parseRequestedLocale,
   toLearnerCurriculumTreeResponseDto,
   toLearnerLessonContentResponseDto,
 } from '../mappers/curriculum-delivery-response.mapper';
@@ -58,11 +57,13 @@ export class CurriculumDeliveryController {
   async getClassCurriculumTree(
     @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('classId') classId: string,
+    @Headers('accept-language') acceptLanguage: string | undefined,
   ): Promise<LearnerCurriculumTreeResponseDto> {
     try {
       const tree = await this.curriculumDeliveryService.getClassCurriculumTree(
         authenticatedUser.userId,
         classId,
+        acceptLanguage ?? null,
       );
 
       return toLearnerCurriculumTreeResponseDto(tree);
@@ -78,11 +79,13 @@ export class CurriculumDeliveryController {
   async getEnrollmentCurriculumTree(
     @CurrentUser() authenticatedUser: AuthenticatedUser,
     @Param('enrollmentId') enrollmentId: string,
+    @Headers('accept-language') acceptLanguage: string | undefined,
   ): Promise<LearnerCurriculumTreeResponseDto> {
     try {
       const tree = await this.curriculumDeliveryService.getEnrollmentCurriculumTree(
         authenticatedUser.userId,
         enrollmentId,
+        acceptLanguage ?? null,
       );
 
       return toLearnerCurriculumTreeResponseDto(tree);
@@ -111,7 +114,7 @@ export class CurriculumDeliveryController {
         authenticatedUser.userId,
         classId,
         lessonId,
-        parseRequestedLocale(acceptLanguage),
+        acceptLanguage ?? null,
       );
 
       return toLearnerLessonContentResponseDto(content, {
@@ -145,7 +148,7 @@ export class CurriculumDeliveryController {
         authenticatedUser.userId,
         enrollmentId,
         lessonId,
-        parseRequestedLocale(acceptLanguage),
+        acceptLanguage ?? null,
       );
 
       return toLearnerLessonContentResponseDto(content, {

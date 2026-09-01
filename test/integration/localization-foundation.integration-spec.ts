@@ -112,7 +112,7 @@ describe('Localization foundation integration (MSSQL)', () => {
         INSERT INTO users (id, email, password_hash, status, preferred_locale, created_at, updated_at)
         VALUES (@0, @1, @2, 'ACTIVE', NULL, GETUTCDATE(), GETUTCDATE())
       `,
-      [approverUserId, `${TEST_CODE_PREFIX}approver@example.com`, 'hash'],
+      [approverUserId, `${TEST_CODE_PREFIX}approver-${generateUuidV4()}@example.com`, 'hash'],
     );
 
     const sourceHash = 'a'.repeat(64);
@@ -161,7 +161,7 @@ describe('Localization foundation integration (MSSQL)', () => {
 
   it('updates user preferred locale and parish default locale with normalization', async () => {
     const account = await userAccountService.createAccount({
-      email: `${TEST_CODE_PREFIX}user@example.com`,
+      email: `${TEST_CODE_PREFIX}user-${generateUuidV4()}@example.com`,
       password: 'LocalDev!Sample2026',
     });
     const updatedAccount = await userAccountService.updatePreferredLocale(account.id, ' en-us ');
@@ -169,7 +169,7 @@ describe('Localization foundation integration (MSSQL)', () => {
     expect(updatedAccount.preferredLocale).toBe('en-US');
 
     const parish = await parishService.createParish({
-      code: `${TEST_CODE_PREFIX}parish`,
+      code: `${TEST_CODE_PREFIX}parish-${generateUuidV4().replace(/-/g, '').slice(0, 12)}`,
       name: 'Localization Parish',
     });
     const updatedParish = await parishService.updateParish(parish.id, {

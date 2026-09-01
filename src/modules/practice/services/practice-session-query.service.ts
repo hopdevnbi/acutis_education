@@ -2,6 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
+import { ClassService } from '../../class/services/class.service';
+import { EnrollmentService } from '../../enrollment/services/enrollment.service';
+import type { LocalizedQuestionDisplayPayload } from '../../localization/interfaces/localization.interface';
+import { TranslationResourceType } from '../../localization/enums/translation-resource-type.enum';
+import { LocalizationService } from '../../localization/services/localization.service';
 import type { LearnerQuestionProjection } from '../../question-bank/interfaces/question-bank.interface';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
 import { PracticeAnswerAttemptEntity } from '../entities/practice-answer-attempt.entity';
@@ -34,10 +39,14 @@ export class PracticeSessionQueryService {
     @InjectRepository(PracticeAnswerAttemptEntity)
     private readonly practiceAnswerAttemptRepository: Repository<PracticeAnswerAttemptEntity>,
     private readonly questionBankService: QuestionBankService,
+    private readonly localizationService: LocalizationService,
+    private readonly enrollmentService: EnrollmentService,
+    private readonly classService: ClassService,
   ) {}
 
   async getSessionSnapshot(rawSessionId: string): Promise<PracticeSessionSnapshot> {
     const session = await this.findSessionEntity(rawSessionId);
+    const parishId = await this.resolveSessionParishId(session.enrollmentId);
     const sessionQuestions = await this.practiceSessionQuestionRepository.find({
       where: { practiceSessionId: session.id },
       order: { position: 'ASC' },
@@ -65,6 +74,7 @@ export class PracticeSessionQueryService {
     const projectionMap = new Map(
       projections.map((projection) => [normalizeUuid(projection.questionVersionId), projection]),
     );
+    const localizedDisplays = await this.resolvePinnedQuestionDisplays(sessionQuestions, parishId);
 
     const questions: PracticeSessionQuestionDelivery[] = [];
 
@@ -75,6 +85,8 @@ export class PracticeSessionQueryService {
         throw new PracticeSessionQuestionNotFoundError();
       }
 
+      const localizedDisplay = localizedDisplays.get(normalizeUuid(sessionQuestion.id)) ?? null;
+
       const questionAttempts = (attemptsByQuestionId.get(normalizeUuid(sessionQuestion.id)) ?? [])
         .sort((left, right) => left.attemptNumber - right.attemptNumber)
         .map((attempt) => this.toAttemptRecord(attempt));
@@ -83,9 +95,12 @@ export class PracticeSessionQueryService {
         questionAttempts,
         session.maxAttemptsPerQuestion,
         session.status,
+        localizedDisplay?.display.explanation ?? null,
       );
 
-      questions.push(this.toQuestionDelivery(sessionQuestion, projection, attemptState));
+      questions.push(
+        this.toQuestionDelivery(sessionQuestion, projection, attemptState, localizedDisplay),
+      );
     }
 
     return {
@@ -157,6 +172,7 @@ export class PracticeSessionQueryService {
     attempts: readonly PracticeAttemptRecord[],
     maxAttemptsPerQuestion: number,
     sessionStatus: PracticeSessionStatus,
+    localizedExplanation: string | null,
   ): Promise<PracticeSessionQuestionAttemptState> {
     const derived = derivePracticeQuestionAttemptState({
       attempts,
@@ -189,11 +205,76 @@ export class PracticeSessionQueryService {
         feedback === null
           ? null
           : {
-              explanation: feedback.explanation,
+              explanation: localizedExplanation ?? feedback.explanation,
               explanationMediaJson: feedback.explanationMediaJson,
               correctOptionIds: feedback.correctOptionIds,
             },
     };
+  }
+
+  private async resolveSessionParishId(rawEnrollmentId: string): Promise<string> {
+    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
+    const classSnapshot = await this.classService.getClassById(enrollment.classId);
+
+    return classSnapshot.parishId;
+  }
+
+  private async resolvePinnedQuestionDisplays(
+    sessionQuestions: readonly PracticeSessionQuestionEntity[],
+    parishId: string,
+  ): Promise<
+    Map<
+      string,
+      {
+        readonly display: LocalizedQuestionDisplayPayload;
+        readonly deliveredLocale: string;
+        readonly translationRevisionId: string | null;
+        readonly translationStatus: 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
+        readonly isFallback: boolean;
+      }
+    >
+  > {
+    const result = new Map<
+      string,
+      {
+        readonly display: LocalizedQuestionDisplayPayload;
+        readonly deliveredLocale: string;
+        readonly translationRevisionId: string | null;
+        readonly translationStatus: 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
+        readonly isFallback: boolean;
+      }
+    >();
+
+    await Promise.all(
+      sessionQuestions.map(async (sessionQuestion) => {
+        if (sessionQuestion.translationRevisionId === null) {
+          return;
+        }
+
+        const resolution = await this.localizationService.resolveLocalizedResourceWithRevision({
+          resourceType: TranslationResourceType.QuestionBankVersion,
+          resourceId: sessionQuestion.questionVersionId,
+          translationRevisionId: sessionQuestion.translationRevisionId,
+          parishId,
+        });
+        const display = resolution.payload['display'] as
+          LocalizedQuestionDisplayPayload | undefined;
+
+        if (display === undefined) {
+          return;
+        }
+
+        result.set(normalizeUuid(sessionQuestion.id), {
+          display,
+          deliveredLocale: sessionQuestion.deliveredLocale ?? resolution.sourceLocale,
+          translationRevisionId: sessionQuestion.translationRevisionId,
+          translationStatus: resolution.translationStatus,
+          isFallback: resolution.isFallback,
+        });
+      }),
+    );
+
+    return result;
   }
 
   private buildSessionSummary(
@@ -239,10 +320,22 @@ export class PracticeSessionQueryService {
     sessionQuestion: PracticeSessionQuestionEntity,
     projection: LearnerQuestionProjection,
     attemptState: PracticeSessionQuestionAttemptState,
+    localizedDisplay: {
+      readonly display: LocalizedQuestionDisplayPayload;
+      readonly deliveredLocale: string;
+      readonly translationRevisionId: string | null;
+      readonly translationStatus: 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
+      readonly isFallback: boolean;
+    } | null,
   ): PracticeSessionQuestionDelivery {
     const deliveredOptionIds = this.resolveDeliveredOptionOrder(sessionQuestion, projection);
     const optionMap = new Map(
       projection.options.map((option) => [normalizeUuid(option.id), option] as const),
+    );
+    const localizedOptionMap = new Map(
+      (localizedDisplay?.display.options ?? []).map(
+        (option) => [normalizeUuid(option.id), option] as const,
+      ),
     );
 
     return {
@@ -250,10 +343,15 @@ export class PracticeSessionQueryService {
       position: sessionQuestion.position,
       questionVersionId: sessionQuestion.questionVersionId,
       questionType: projection.questionType,
-      prompt: projection.prompt,
-      instruction: projection.instruction,
+      prompt: localizedDisplay?.display.prompt ?? projection.prompt,
+      instruction: localizedDisplay?.display.instruction ?? projection.instruction,
       difficulty: projection.difficulty,
       promptMediaJson: projection.promptMediaJson,
+      deliveredLocale:
+        sessionQuestion.deliveredLocale ?? localizedDisplay?.deliveredLocale ?? 'vi-VN',
+      translationRevisionId: sessionQuestion.translationRevisionId,
+      translationStatus: localizedDisplay?.translationStatus ?? 'SOURCE',
+      isFallback: localizedDisplay?.isFallback ?? false,
       options: deliveredOptionIds.map((optionId, index) => {
         const option = optionMap.get(optionId);
 
@@ -261,9 +359,11 @@ export class PracticeSessionQueryService {
           throw new PracticeSessionQuestionNotFoundError();
         }
 
+        const localizedOption = localizedOptionMap.get(optionId);
+
         return {
           id: option.id,
-          text: option.text,
+          text: localizedOption?.text ?? option.text,
           mediaAssetId: option.mediaAssetId,
           sortOrder: option.sortOrder,
           deliveredPosition: index + 1,

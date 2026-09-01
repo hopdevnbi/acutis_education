@@ -106,6 +106,18 @@ export class PracticeSessionQuestionResponseDto {
   @ApiPropertyOptional({ nullable: true })
   promptMediaJson!: string | null;
 
+  @ApiProperty()
+  deliveredLocale!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  translationRevisionId!: string | null;
+
+  @ApiProperty({ enum: ['SOURCE', 'APPROVED', 'MISSING', 'STALE'] })
+  translationStatus!: 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
+
+  @ApiProperty()
+  isFallback!: boolean;
+
   @ApiProperty({ type: [PracticeSessionQuestionOptionResponseDto] })
   options!: PracticeSessionQuestionOptionResponseDto[];
 
@@ -207,6 +219,10 @@ export function toPracticeSessionResponseDto(
       instruction: question.instruction,
       difficulty: question.difficulty,
       promptMediaJson: question.promptMediaJson,
+      deliveredLocale: question.deliveredLocale,
+      translationRevisionId: question.translationRevisionId,
+      translationStatus: question.translationStatus,
+      isFallback: question.isFallback,
       options: question.options.map((option) => ({
         id: option.id,
         text: option.text,

@@ -313,7 +313,7 @@ describe('Curriculum delivery integration (MSSQL)', () => {
     const { adminUserId, classId, lessonId, canonicalLessonKey, publishedVersionId } =
       await seedPublishedAssignedClassFixture();
 
-    const tree = await curriculumDeliveryService.getClassCurriculumTree(adminUserId, classId);
+    const tree = await curriculumDeliveryService.getClassCurriculumTree(adminUserId, classId, null);
 
     expect(tree.curriculum.name).toBe('Delivery Curriculum');
     expect(normalizeUuid(tree.version.id)).toBe(normalizeUuid(publishedVersionId));
@@ -359,6 +359,7 @@ describe('Curriculum delivery integration (MSSQL)', () => {
     const learnerTree = await curriculumDeliveryService.getClassCurriculumTree(
       adminUserId,
       classId,
+      null,
     );
 
     expect(normalizeUuid(learnerTree.topics[0]?.lessons[0]?.canonicalLessonKey ?? '')).toBe(
@@ -386,6 +387,7 @@ describe('Curriculum delivery integration (MSSQL)', () => {
     const tree = await curriculumDeliveryService.getClassCurriculumTree(
       catechistAccount.id,
       classId,
+      null,
     );
 
     expect(tree.topics).toHaveLength(1);

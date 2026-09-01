@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { parseLocale } from '../../../common/locale';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { TranslationResourceEntity } from '../entities/translation-resource.entity';
 import { TranslationRevisionEntity } from '../entities/translation-revision.entity';
@@ -179,6 +180,41 @@ export class TranslationRevisionService {
     }
 
     return toTranslationRevisionSnapshot(revision);
+  }
+
+  async findLatestApprovedRevisionsForResources(input: {
+    readonly translationResourceIds: readonly string[];
+    readonly targetLocale: string;
+  }): Promise<Map<string, TranslationRevisionSnapshot>> {
+    if (input.translationResourceIds.length === 0) {
+      return new Map();
+    }
+
+    const normalizedResourceIds = [
+      ...new Set(input.translationResourceIds.map((id) => this.parseTranslationResourceId(id))),
+    ];
+    const normalizedTargetLocale = parseLocale(input.targetLocale);
+    const revisions = await this.translationRevisionRepository
+      .createQueryBuilder('revision')
+      .where('revision.translationResourceId IN (:...translationResourceIds)', {
+        translationResourceIds: normalizedResourceIds,
+      })
+      .andWhere('revision.targetLocale = :targetLocale', { targetLocale: normalizedTargetLocale })
+      .andWhere('revision.status = :status', { status: TranslationRevisionStatus.Approved })
+      .orderBy('revision.revisionNumber', 'DESC')
+      .getMany();
+
+    const latestByResourceId = new Map<string, TranslationRevisionSnapshot>();
+
+    for (const revision of revisions) {
+      const resourceId = normalizeUuid(revision.translationResourceId);
+
+      if (!latestByResourceId.has(resourceId)) {
+        latestByResourceId.set(resourceId, toTranslationRevisionSnapshot(revision));
+      }
+    }
+
+    return latestByResourceId;
   }
 
   private async createRevisionWithRetry(

@@ -50,6 +50,11 @@ export function toLearnerCurriculumTreeResponseDto(
       sortOrder: topic.sortOrder,
       lessons: topic.lessons.map((lesson) => ({ ...lesson })),
     })),
+    requestedLocale: tree.requestedLocale,
+    resolvedLocale: tree.resolvedLocale,
+    sourceLocale: tree.sourceLocale,
+    translationStatus: tree.translationStatus,
+    isFallback: tree.isFallback,
   };
 }
 
@@ -69,18 +74,4 @@ export function toLearnerLessonContentResponseDto(
     ...content,
     document,
   };
-}
-
-export function parseRequestedLocale(rawAcceptLanguage: string | undefined): string | null {
-  if (rawAcceptLanguage === undefined || rawAcceptLanguage.trim().length === 0) {
-    return null;
-  }
-
-  const firstTag = rawAcceptLanguage.split(',')[0]?.trim();
-
-  if (firstTag === undefined || firstTag.length === 0) {
-    return null;
-  }
-
-  return firstTag;
 }

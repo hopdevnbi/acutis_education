@@ -73,6 +73,10 @@ export interface PracticeSessionQuestionDelivery {
   readonly instruction: string | null;
   readonly difficulty: QuestionDifficulty | null;
   readonly promptMediaJson: string | null;
+  readonly deliveredLocale: string;
+  readonly translationRevisionId: string | null;
+  readonly translationStatus: 'SOURCE' | 'APPROVED' | 'MISSING' | 'STALE';
+  readonly isFallback: boolean;
   readonly options: readonly {
     readonly id: string;
     readonly text: string | null;

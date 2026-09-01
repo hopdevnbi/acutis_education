@@ -13,7 +13,13 @@ import {
   type ContentDocumentV1,
 } from '../../learning-content/interfaces/learning-content.interface';
 import { LearningContentService } from '../../learning-content/services/learning-content.service';
+import { TranslationResourceType } from '../../localization/enums/translation-resource-type.enum';
+import { LearnerTranslationReadStatus } from '../../localization/enums/learner-translation-read-status.enum';
+import type { LocalizedResourceResolution } from '../../localization/interfaces/localization.interface';
+import { LocalizationService } from '../../localization/services/localization.service';
 import { MediaAssetService } from '../../media/services/media-asset.service';
+import { ParishService } from '../../parish/services/parish.service';
+import { UserAccountService } from '../../users/services/user-account.service';
 import { StudentAccessDeniedError } from '../../student/errors/student-access.errors';
 import {
   ContextualMediaAssetNotReferencedError,
@@ -44,6 +50,14 @@ describe('CurriculumDeliveryService', () => {
   let mediaAssetService: jest.Mocked<
     Pick<MediaAssetService, 'assertAssetReady' | 'openAssetContent'>
   >;
+  let localizationService: jest.Mocked<
+    Pick<
+      LocalizationService,
+      'resolveLocale' | 'resolveLocalizedResources' | 'resolveLocalizedResource'
+    >
+  >;
+  let userAccountService: jest.Mocked<Pick<UserAccountService, 'getAccountSnapshotById'>>;
+  let parishService: jest.Mocked<Pick<ParishService, 'getParishById'>>;
 
   const parishId = '11111111-1111-4111-8111-111111111111';
   const academicYearId = '22222222-2222-4222-8222-222222222222';
@@ -221,6 +235,102 @@ describe('CurriculumDeliveryService', () => {
       }),
     };
 
+    localizationService = {
+      resolveLocale: jest.fn().mockReturnValue({
+        requestedLocale: null,
+        resolvedLocale: 'vi-VN',
+        resolutionSource: 'system_default',
+      }),
+      resolveLocalizedResources: jest
+        .fn()
+        .mockImplementation((inputs: readonly { resourceType: TranslationResourceType }[]) =>
+          inputs.map((input) => {
+            if (input.resourceType === TranslationResourceType.CurriculumMetadata) {
+              return {
+                payload: { name: 'Khai Tam' },
+                requestedLocale: null,
+                resolvedLocale: 'vi-VN',
+                sourceLocale: 'vi-VN',
+                translationStatus: LearnerTranslationReadStatus.Source,
+                isFallback: false,
+                translationRevisionId: null,
+                sourceContentHash: 'hash',
+              } satisfies LocalizedResourceResolution;
+            }
+
+            if (input.resourceType === TranslationResourceType.CurriculumVersion) {
+              return {
+                payload: { label: 'Published v1' },
+                requestedLocale: null,
+                resolvedLocale: 'vi-VN',
+                sourceLocale: 'vi-VN',
+                translationStatus: LearnerTranslationReadStatus.Source,
+                isFallback: false,
+                translationRevisionId: null,
+                sourceContentHash: 'hash',
+              } satisfies LocalizedResourceResolution;
+            }
+
+            if (input.resourceType === TranslationResourceType.CurriculumTopic) {
+              return {
+                payload: { title: 'Topic A', description: null },
+                requestedLocale: null,
+                resolvedLocale: 'vi-VN',
+                sourceLocale: 'vi-VN',
+                translationStatus: LearnerTranslationReadStatus.Source,
+                isFallback: false,
+                translationRevisionId: null,
+                sourceContentHash: 'hash',
+              } satisfies LocalizedResourceResolution;
+            }
+
+            return {
+              payload: { title: 'Lesson A', summary: null },
+              requestedLocale: null,
+              resolvedLocale: 'vi-VN',
+              sourceLocale: 'vi-VN',
+              translationStatus: LearnerTranslationReadStatus.Source,
+              isFallback: false,
+              translationRevisionId: null,
+              sourceContentHash: 'hash',
+            } satisfies LocalizedResourceResolution;
+          }),
+        ),
+      resolveLocalizedResource: jest.fn().mockResolvedValue({
+        payload: { document: sampleDocument },
+        requestedLocale: 'vi-VN',
+        resolvedLocale: 'vi-VN',
+        sourceLocale: 'vi-VN',
+        translationStatus: LearnerTranslationReadStatus.Source,
+        isFallback: false,
+        translationRevisionId: null,
+        sourceContentHash: 'abc123hash',
+      }),
+    };
+
+    userAccountService = {
+      getAccountSnapshotById: jest.fn().mockResolvedValue({
+        id: adminUserId,
+        email: 'admin@example.com',
+        preferredLocale: null,
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    };
+
+    parishService = {
+      getParishById: jest.fn().mockResolvedValue({
+        id: parishId,
+        code: 'parish-a',
+        name: 'Parish A',
+        defaultLocale: null,
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    };
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         CurriculumDeliveryService,
@@ -231,6 +341,9 @@ describe('CurriculumDeliveryService', () => {
         { provide: CurriculumService, useValue: curriculumService },
         { provide: LearningContentService, useValue: learningContentService },
         { provide: MediaAssetService, useValue: mediaAssetService },
+        { provide: LocalizationService, useValue: localizationService },
+        { provide: UserAccountService, useValue: userAccountService },
+        { provide: ParishService, useValue: parishService },
       ],
     }).compile();
 
@@ -239,7 +352,11 @@ describe('CurriculumDeliveryService', () => {
 
   describe('getClassCurriculumTree', () => {
     it('returns the assigned published tree for an assigned catechist', async () => {
-      const tree = await curriculumDeliveryService.getClassCurriculumTree(catechistUserId, classId);
+      const tree = await curriculumDeliveryService.getClassCurriculumTree(
+        catechistUserId,
+        classId,
+        null,
+      );
 
       expect(classScopeService.assertCanReadClass).toHaveBeenCalledWith(catechistUserId, classId);
       expect(curriculumService.getPublishedVersionForAssignment).toHaveBeenCalledWith(
@@ -252,7 +369,11 @@ describe('CurriculumDeliveryService', () => {
     });
 
     it('returns the assigned published tree for a parish admin', async () => {
-      const tree = await curriculumDeliveryService.getClassCurriculumTree(adminUserId, classId);
+      const tree = await curriculumDeliveryService.getClassCurriculumTree(
+        adminUserId,
+        classId,
+        null,
+      );
 
       expect(classScopeService.assertCanReadClass).toHaveBeenCalledWith(adminUserId, classId);
       expect(tree.curriculum.name).toBe('Khai Tam');
@@ -262,7 +383,7 @@ describe('CurriculumDeliveryService', () => {
       classScopeService.assertCanReadClass.mockRejectedValue(new ClassScopeAccessDeniedError());
 
       await expect(
-        curriculumDeliveryService.getClassCurriculumTree(catechistUserId, classId),
+        curriculumDeliveryService.getClassCurriculumTree(catechistUserId, classId, null),
       ).rejects.toBeInstanceOf(ClassScopeAccessDeniedError);
     });
 
@@ -272,7 +393,7 @@ describe('CurriculumDeliveryService', () => {
       );
 
       await expect(
-        curriculumDeliveryService.getClassCurriculumTree(adminUserId, classId),
+        curriculumDeliveryService.getClassCurriculumTree(adminUserId, classId, null),
       ).rejects.toBeInstanceOf(CurriculumAssignmentNotFoundError);
     });
   });
@@ -282,6 +403,7 @@ describe('CurriculumDeliveryService', () => {
       const tree = await curriculumDeliveryService.getEnrollmentCurriculumTree(
         parentUserId,
         enrollmentId,
+        null,
       );
 
       expect(enrollmentAccessService.assertCanReadEnrollment).toHaveBeenCalledWith(
@@ -298,7 +420,7 @@ describe('CurriculumDeliveryService', () => {
       );
 
       await expect(
-        curriculumDeliveryService.getEnrollmentCurriculumTree(parentUserId, enrollmentId),
+        curriculumDeliveryService.getEnrollmentCurriculumTree(parentUserId, enrollmentId, null),
       ).rejects.toBeInstanceOf(StudentAccessDeniedError);
     });
   });
@@ -319,7 +441,6 @@ describe('CurriculumDeliveryService', () => {
       expect(content.sourceLocale).toBe('vi-VN');
       expect(content.resolvedLocale).toBe('vi-VN');
       expect(content.translationStatus).toBe('SOURCE');
-      expect(content.requestedLocale).toBe('vi-VN');
       expect(content.document).toEqual(sampleDocument);
     });
 

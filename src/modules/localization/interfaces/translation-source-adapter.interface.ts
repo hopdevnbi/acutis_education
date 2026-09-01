@@ -18,4 +18,8 @@ export interface TranslationSourceAdapter {
     snapshot: TranslationSourceSnapshot,
     translatedUnits: readonly TranslatedUnit[],
   ): Record<string, unknown>;
+  applyTranslation(
+    snapshot: TranslationSourceSnapshot,
+    payload: Record<string, unknown>,
+  ): Record<string, unknown>;
 }
