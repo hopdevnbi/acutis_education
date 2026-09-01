@@ -42,7 +42,8 @@
     "seed:class-enrollment": "ts-node --project tsconfig.json scripts/seed-class-enrollment.ts",
     "seed:curriculum-demo": "ts-node --project tsconfig.json scripts/seed-curriculum-demo.ts",
     "seed:question-bank-demo": "ts-node --project tsconfig.json scripts/seed-question-bank-demo.ts",
-    "seed:learning-progress-demo": "ts-node --project tsconfig.json scripts/seed-learning-progress-demo.ts"
+    "seed:learning-progress-demo": "ts-node --project tsconfig.json scripts/seed-learning-progress-demo.ts",
+    "localization:process-jobs": "ts-node --project tsconfig.json scripts/localization-process-jobs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

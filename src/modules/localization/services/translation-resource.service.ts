@@ -77,6 +77,22 @@ export class TranslationResourceService {
     return toTranslationResourceSnapshot(resource);
   }
 
+  async getResourceById(translationResourceId: string): Promise<TranslationResourceSnapshot> {
+    if (!isUuidV4(translationResourceId)) {
+      throw new TranslationResourceNotFoundError();
+    }
+
+    const resource = await this.translationResourceRepository.findOne({
+      where: { id: normalizeUuid(translationResourceId) },
+    });
+
+    if (resource === null) {
+      throw new TranslationResourceNotFoundError();
+    }
+
+    return toTranslationResourceSnapshot(resource);
+  }
+
   private assertResourceType(resourceType: TranslationResourceType): void {
     if (!Object.values(TranslationResourceType).includes(resourceType)) {
       throw new InvalidTranslationResourceTypeError();

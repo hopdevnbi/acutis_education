@@ -67,3 +67,59 @@ export class TranslationRevisionNotFoundError extends Error {
     this.name = 'TranslationRevisionNotFoundError';
   }
 }
+
+export class TranslationJobNotFoundError extends Error {
+  constructor() {
+    super('Translation job was not found.');
+    this.name = 'TranslationJobNotFoundError';
+  }
+}
+
+export class TranslationJobStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TranslationJobStateError';
+  }
+}
+
+export class UnsupportedTranslationResourceError extends Error {
+  constructor() {
+    super('Translation source resource is unsupported or unavailable.');
+    this.name = 'UnsupportedTranslationResourceError';
+  }
+}
+
+export class CatholicGlossaryVersionNotFoundError extends Error {
+  constructor() {
+    super('Catholic glossary version was not found.');
+    this.name = 'CatholicGlossaryVersionNotFoundError';
+  }
+}
+
+export class CatholicGlossaryTermNotFoundError extends Error {
+  constructor() {
+    super('Catholic glossary term was not found.');
+    this.name = 'CatholicGlossaryTermNotFoundError';
+  }
+}
+
+export class CatholicGlossaryVersionImmutableError extends Error {
+  constructor() {
+    super('Published or archived glossary versions are immutable.');
+    this.name = 'CatholicGlossaryVersionImmutableError';
+  }
+}
+
+export class CatholicGlossaryLocalePairError extends Error {
+  constructor() {
+    super('Glossary source and target locales must differ and be valid BCP47 tags.');
+    this.name = 'CatholicGlossaryLocalePairError';
+  }
+}
+
+export class CatholicGlossaryTermConflictError extends Error {
+  constructor() {
+    super('Glossary term already exists for this version.');
+    this.name = 'CatholicGlossaryTermConflictError';
+  }
+}

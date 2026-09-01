@@ -3,6 +3,8 @@ import type {
   DerivedTranslationReadStatus,
   TranslationRevisionStatus,
 } from '../enums/translation-revision-status.enum';
+import type { TranslationJobStatus } from '../enums/translation-job-status.enum';
+import type { CatholicGlossaryVersionStatus } from '../enums/catholic-glossary-version-status.enum';
 
 export interface TranslationResourceRef {
   readonly resourceType: TranslationResourceType;
@@ -77,4 +79,71 @@ export interface LocaleResolutionResult {
   readonly resolvedLocale: string;
   readonly resolutionSource:
     'explicit' | 'user_preference' | 'accept_language' | 'parish_default' | 'system_default';
+}
+
+export interface TranslationJobSnapshot {
+  readonly id: string;
+  readonly translationResourceId: string;
+  readonly targetLocale: string;
+  readonly sourceContentHash: string;
+  readonly sourceVersionKey: string | null;
+  readonly status: TranslationJobStatus;
+  readonly attemptCount: number;
+  readonly maxAttempts: number;
+  readonly requestedByUserId: string | null;
+  readonly providerId: string | null;
+  readonly lastErrorCode: string | null;
+  readonly lastErrorMessage: string | null;
+  readonly nextAttemptAt: Date | null;
+  readonly lockedAt: Date | null;
+  readonly startedAt: Date | null;
+  readonly completedAt: Date | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface QueueTranslationJobInput {
+  readonly translationResourceId: string;
+  readonly targetLocale: string;
+  readonly sourceContentHash: string;
+  readonly sourceVersionKey?: string | null;
+  readonly requestedByUserId?: string | null;
+  readonly providerId?: string | null;
+}
+
+export type QueueTranslationJobResult =
+  | { readonly kind: 'queued'; readonly job: TranslationJobSnapshot }
+  | { readonly kind: 'existing_active'; readonly job: TranslationJobSnapshot }
+  | { readonly kind: 'short_circuit_revision'; readonly revision: TranslationRevisionSnapshot };
+
+export interface TranslationJobProcessingSummary {
+  readonly claimedCount: number;
+  readonly succeededCount: number;
+  readonly failedCount: number;
+  readonly deadCount: number;
+}
+
+export interface CatholicGlossaryVersionSnapshot {
+  readonly id: string;
+  readonly sourceLocale: string;
+  readonly targetLocale: string;
+  readonly versionNumber: number;
+  readonly status: CatholicGlossaryVersionStatus;
+  readonly providerGlossaryId: string | null;
+  readonly createdByUserId: string | null;
+  readonly publishedByUserId: string | null;
+  readonly createdAt: Date;
+  readonly publishedAt: Date | null;
+  readonly updatedAt: Date;
+}
+
+export interface CatholicGlossaryTermSnapshot {
+  readonly id: string;
+  readonly glossaryVersionId: string;
+  readonly sourceTerm: string;
+  readonly targetTerm: string;
+  readonly notes: string | null;
+  readonly caseSensitive: boolean;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
 }

@@ -1,5 +1,8 @@
 import type { EntityTarget } from 'typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
+import { CatholicGlossaryTermEntity } from '../modules/localization/entities/catholic-glossary-term.entity';
+import { CatholicGlossaryVersionEntity } from '../modules/localization/entities/catholic-glossary-version.entity';
+import { TranslationJobEntity } from '../modules/localization/entities/translation-job.entity';
 import { TranslationResourceEntity } from '../modules/localization/entities/translation-resource.entity';
 import { TranslationRevisionEntity } from '../modules/localization/entities/translation-revision.entity';
 
@@ -61,5 +64,31 @@ describe('Localization foundation entities', () => {
         'approvedAt',
       ]),
     );
+  });
+});
+
+describe('Localization provider/jobs/glossary entities', () => {
+  it('maps TranslationJobEntity without relations', () => {
+    expect(resolveTableName(TranslationJobEntity)).toBe('translation_jobs');
+    expect(resolveRelationCount(TranslationJobEntity)).toBe(0);
+  });
+
+  it('maps Catholic glossary entities without relations', () => {
+    expect(resolveTableName(CatholicGlossaryVersionEntity)).toBe('catholic_glossary_versions');
+    expect(resolveTableName(CatholicGlossaryTermEntity)).toBe('catholic_glossary_terms');
+    expect(resolveRelationCount(CatholicGlossaryVersionEntity)).toBe(0);
+    expect(resolveRelationCount(CatholicGlossaryTermEntity)).toBe(0);
+  });
+
+  it('keeps exactly five localization-owned tables represented in entity metadata', () => {
+    const tableNames = [
+      TranslationResourceEntity,
+      TranslationRevisionEntity,
+      TranslationJobEntity,
+      CatholicGlossaryVersionEntity,
+      CatholicGlossaryTermEntity,
+    ].map((entity) => resolveTableName(entity));
+
+    expect(new Set(tableNames).size).toBe(5);
   });
 });

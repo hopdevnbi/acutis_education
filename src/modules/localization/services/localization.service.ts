@@ -5,11 +5,16 @@ import type {
   LatestApprovedTranslationRevisionResult,
   LocaleResolutionInput,
   LocaleResolutionResult,
+  QueueTranslationJobInput,
+  QueueTranslationJobResult,
+  TranslationJobProcessingSummary,
   TranslationResourceRef,
   TranslationResourceSnapshot,
   TranslationRevisionSnapshot,
 } from '../interfaces/localization.interface';
 import { LocaleResolutionService } from './locale-resolution.service';
+import { TranslationJobProcessorService } from './translation-job-processor.service';
+import { TranslationJobService } from './translation-job.service';
 import { TranslationResourceService } from './translation-resource.service';
 import { TranslationRevisionService } from './translation-revision.service';
 
@@ -19,6 +24,8 @@ export class LocalizationService {
     private readonly localeResolutionService: LocaleResolutionService,
     private readonly translationResourceService: TranslationResourceService,
     private readonly translationRevisionService: TranslationRevisionService,
+    private readonly translationJobService: TranslationJobService,
+    private readonly translationJobProcessorService: TranslationJobProcessorService,
   ) {}
 
   resolveLocale(input: LocaleResolutionInput): LocaleResolutionResult {
@@ -54,5 +61,13 @@ export class LocalizationService {
     readonly currentSourceContentHash: string;
   }): Promise<LatestApprovedTranslationRevisionResult> {
     return this.translationRevisionService.getLatestApprovedRevision(input);
+  }
+
+  queueTranslationJob(input: QueueTranslationJobInput): Promise<QueueTranslationJobResult> {
+    return this.translationJobService.queueTranslation(input);
+  }
+
+  processTranslationJobs(batchSize?: number): Promise<TranslationJobProcessingSummary> {
+    return this.translationJobProcessorService.processBatch(batchSize);
   }
 }
