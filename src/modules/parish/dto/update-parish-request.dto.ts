@@ -13,4 +13,10 @@ export class UpdateParishRequestDto {
   @IsString()
   @MaxLength(128)
   name?: string;
+
+  @ApiPropertyOptional({ example: 'vi-VN', maxLength: 32, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  defaultLocale?: string | null;
 }

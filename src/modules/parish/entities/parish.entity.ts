@@ -18,6 +18,9 @@ export class ParishEntity {
   @Column({ type: 'varchar', length: 32 })
   status!: ParishStatus;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  defaultLocale!: string | null;
+
   @CreateDateColumn({ type: 'datetime2' })
   createdAt!: Date;
 

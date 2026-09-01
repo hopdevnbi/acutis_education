@@ -63,6 +63,7 @@ describe('ParishService', () => {
       code: 'giao-xu-thanh-gia',
       name: 'Giáo xứ Thánh Gia',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt,
       updatedAt,
     } satisfies ParishEntity;
@@ -79,12 +80,14 @@ describe('ParishService', () => {
       code: 'giao-xu-thanh-gia',
       name: 'Giáo xứ Thánh Gia',
       status: ParishStatus.Active,
+      defaultLocale: null,
     });
     expect(snapshot).toEqual({
       id: parishId,
       code: 'giao-xu-thanh-gia',
       name: 'Giáo xứ Thánh Gia',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt,
       updatedAt,
     });
@@ -96,6 +99,7 @@ describe('ParishService', () => {
       code: 'duplicate-code',
       name: 'Duplicate Parish',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies ParishEntity);
@@ -118,6 +122,7 @@ describe('ParishService', () => {
       code: 'sample-parish',
       name: 'Sample Parish',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     } satisfies ParishEntity);
@@ -146,6 +151,7 @@ describe('ParishService', () => {
       code: 'old-code',
       name: 'Old Name',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     } satisfies ParishEntity;
@@ -168,6 +174,7 @@ describe('ParishService', () => {
       code: 'sample-parish',
       name: 'Sample Parish',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     } satisfies ParishEntity;
@@ -186,6 +193,7 @@ describe('ParishService', () => {
       code: 'active-parish',
       name: 'Active Parish',
       status: ParishStatus.Active,
+      defaultLocale: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     } satisfies ParishEntity);
@@ -201,6 +209,7 @@ describe('ParishService', () => {
       code: 'inactive-parish',
       name: 'Inactive Parish',
       status: ParishStatus.Inactive,
+      defaultLocale: null,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     } satisfies ParishEntity);
@@ -218,6 +227,7 @@ describe('ParishService', () => {
         code: 'listed-parish',
         name: 'Listed Parish',
         status: ParishStatus.Active,
+        defaultLocale: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       } satisfies ParishEntity,

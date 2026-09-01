@@ -17,6 +17,9 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 32 })
   status!: UserStatus;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  preferredLocale!: string | null;
+
   @CreateDateColumn({ type: 'datetime2' })
   createdAt!: Date;
 

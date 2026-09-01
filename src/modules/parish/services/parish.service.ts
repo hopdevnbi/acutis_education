@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
+import { parseLocale } from '../../../common/locale';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { ParishEntity } from '../entities/parish.entity';
 import { ParishStatus } from '../enums/parish-status.enum';
 import {
+  InvalidParishDefaultLocaleError,
   InvalidParishIdError,
   ParishCodeAlreadyExistsError,
   ParishInactiveError,
@@ -45,6 +47,7 @@ export class ParishService {
       code,
       name,
       status: ParishStatus.Active,
+      defaultLocale: null,
     });
 
     try {
@@ -129,6 +132,10 @@ export class ParishService {
       parish.name = parseParishName(input.name);
     }
 
+    if (input.defaultLocale !== undefined) {
+      parish.defaultLocale = this.parseOptionalDefaultLocale(input.defaultLocale);
+    }
+
     try {
       const savedParish = await this.parishRepository.save(parish);
 
@@ -174,6 +181,18 @@ export class ParishService {
     }
 
     return normalizeUuid(rawParishId);
+  }
+
+  private parseOptionalDefaultLocale(defaultLocale: string | null): string | null {
+    if (defaultLocale === null) {
+      return null;
+    }
+
+    try {
+      return parseLocale(defaultLocale);
+    } catch {
+      throw new InvalidParishDefaultLocaleError();
+    }
   }
 
   private applyListFilters(

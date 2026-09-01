@@ -155,6 +155,7 @@ describe('AuthService', () => {
       id: '11111111-1111-4111-8111-111111111111',
       email: 'teacher@parish.example',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -164,6 +165,7 @@ describe('AuthService', () => {
     ).resolves.toEqual({
       id: '11111111-1111-4111-8111-111111111111',
       email: 'teacher@parish.example',
+      preferredLocale: null,
     });
   });
 });

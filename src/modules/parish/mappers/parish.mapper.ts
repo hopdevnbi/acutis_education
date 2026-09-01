@@ -8,6 +8,7 @@ export function toParishSnapshot(entity: ParishEntity): ParishSnapshot {
     code: entity.code,
     name: entity.name,
     status: entity.status,
+    defaultLocale: entity.defaultLocale,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
   };

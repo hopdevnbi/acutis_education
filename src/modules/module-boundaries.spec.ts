@@ -40,6 +40,9 @@ import { PracticeModule } from './practice/practice.module';
 import { PracticeService } from './practice/services/practice.service';
 import { LearningProgressModule } from './learning-progress/learning-progress.module';
 import { LearningProgressService } from './learning-progress/services/learning-progress.service';
+import { LocalizationModule } from './localization/localization.module';
+import { LocalizationService } from './localization/services/localization.service';
+import { LocaleResolutionService } from './localization/services/locale-resolution.service';
 import { QuestionBankModule } from './question-bank/question-bank.module';
 import { QuestionBankService } from './question-bank/services/question-bank.service';
 import { StudentAccessService } from './student/services/student-access.service';
@@ -200,6 +203,15 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
+  it('exports LocalizationService and LocaleResolutionService only from LocalizationModule', () => {
+    const exports = resolveModuleExports(LocalizationModule);
+
+    expect(exports).toHaveLength(2);
+    expect(exports).toContain(LocalizationService);
+    expect(exports).toContain(LocaleResolutionService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
   it('does not import EnrollmentModule from StudentModule', () => {
     const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, StudentModule);
 
@@ -215,6 +227,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'parish/parish.module.ts'),
       join(__dirname, 'curriculum-orchestration/curriculum-orchestration.module.ts'),
       join(__dirname, 'curriculum-delivery/curriculum-delivery.module.ts'),
+      join(__dirname, 'localization/localization.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {

@@ -9,6 +9,7 @@ export function toParishResponseDto(snapshot: ParishSnapshot): ParishResponseDto
     code: snapshot.code,
     name: snapshot.name,
     status: snapshot.status,
+    defaultLocale: snapshot.defaultLocale,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
   };

@@ -10,6 +10,7 @@ export function toUserAccountSnapshot(entity: UserEntity): UserAccountSnapshot {
     id: normalizeUuid(entity.id),
     email: entity.email,
     status: entity.status,
+    preferredLocale: entity.preferredLocale,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
   };

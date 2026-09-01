@@ -113,7 +113,11 @@ export class ParishController {
     @Param('id') parishId: string,
     @Body() request: UpdateParishRequestDto,
   ): Promise<ParishResponseDto> {
-    if (request.code === undefined && request.name === undefined) {
+    if (
+      request.code === undefined &&
+      request.name === undefined &&
+      request.defaultLocale === undefined
+    ) {
       throw new BadRequestException('At least one field must be provided.');
     }
 
@@ -121,6 +125,7 @@ export class ParishController {
       const snapshot = await this.parishService.updateParish(parishId, {
         code: request.code,
         name: request.name,
+        defaultLocale: request.defaultLocale,
       });
 
       return toParishResponseDto(snapshot);

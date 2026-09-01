@@ -75,7 +75,11 @@ export class AuthService {
     await this.authSessionService.revokeTokenFamilyBySessionId(sessionId);
   }
 
-  async getAuthenticatedProfile(userId: string): Promise<{ id: string; email: string }> {
+  async getAuthenticatedProfile(userId: string): Promise<{
+    id: string;
+    email: string;
+    preferredLocale: string | null;
+  }> {
     const accountSnapshot = await this.userAccountService.getAccountSnapshotById(userId);
 
     if (accountSnapshot === null) {
@@ -85,6 +89,7 @@ export class AuthService {
     return {
       id: accountSnapshot.id,
       email: accountSnapshot.email,
+      preferredLocale: accountSnapshot.preferredLocale,
     };
   }
 }

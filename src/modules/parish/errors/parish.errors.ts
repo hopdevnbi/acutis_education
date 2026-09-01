@@ -39,3 +39,10 @@ export class ParishInactiveError extends Error {
     this.name = 'ParishInactiveError';
   }
 }
+
+export class InvalidParishDefaultLocaleError extends Error {
+  constructor() {
+    super('Parish default locale is invalid.');
+    this.name = 'InvalidParishDefaultLocaleError';
+  }
+}

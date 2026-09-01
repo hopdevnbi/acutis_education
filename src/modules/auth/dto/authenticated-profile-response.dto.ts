@@ -6,4 +6,7 @@ export class AuthenticatedProfileResponseDto {
 
   @ApiProperty({ example: 'teacher@parish.example' })
   email!: string;
+
+  @ApiProperty({ example: 'vi-VN', nullable: true })
+  preferredLocale!: string | null;
 }

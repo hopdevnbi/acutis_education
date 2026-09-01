@@ -18,3 +18,17 @@ export class InvalidPasswordError extends Error {
     this.name = 'InvalidPasswordError';
   }
 }
+
+export class InvalidPreferredLocaleError extends Error {
+  constructor() {
+    super('Preferred locale is invalid.');
+    this.name = 'InvalidPreferredLocaleError';
+  }
+}
+
+export class UserAccountNotFoundError extends Error {
+  constructor() {
+    super('User account was not found.');
+    this.name = 'UserAccountNotFoundError';
+  }
+}

@@ -2,11 +2,14 @@ import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { parseLocale } from '../../../common/locale';
 import { UserEntity } from '../entities/user.entity';
 import { UserStatus } from '../enums/user-status.enum';
 import {
   InvalidEmailError,
   InvalidPasswordError,
+  InvalidPreferredLocaleError,
+  UserAccountNotFoundError,
   UserEmailAlreadyExistsError,
 } from '../errors/user-account.errors';
 import type { CreateAccountInput } from '../interfaces/create-account-input.interface';
@@ -63,6 +66,7 @@ export class UserAccountService {
       email: normalizedEmail,
       passwordHash: await this.passwordHashService.hash(input.password),
       status: input.status ?? UserStatus.Active,
+      preferredLocale: null,
     });
 
     try {
@@ -152,6 +156,34 @@ export class UserAccountService {
     const accountSnapshot = await this.getAccountSnapshotById(userId);
 
     return accountSnapshot !== null && accountSnapshot.status === UserStatus.Active;
+  }
+
+  async updatePreferredLocale(
+    userId: string,
+    preferredLocale: string | null,
+  ): Promise<UserAccountSnapshot> {
+    const normalizedUserId = normalizeUuid(userId);
+    const user = await this.userRepository.findOne({
+      where: { id: normalizedUserId },
+    });
+
+    if (user === null) {
+      throw new UserAccountNotFoundError();
+    }
+
+    if (preferredLocale === null) {
+      user.preferredLocale = null;
+    } else {
+      try {
+        user.preferredLocale = parseLocale(preferredLocale);
+      } catch {
+        throw new InvalidPreferredLocaleError();
+      }
+    }
+
+    const savedUser = await this.userRepository.save(user);
+
+    return toUserAccountSnapshot(savedUser);
   }
 
   private async runTimingSafePasswordCheck(password: string): Promise<void> {

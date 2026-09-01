@@ -17,6 +17,7 @@ import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
 import { LearningProgressModule } from './modules/learning-progress/learning-progress.module';
+import { LocalizationModule } from './modules/localization/localization.module';
 import { MediaModule } from './modules/media/media.module';
 import { PracticeModule } from './modules/practice/practice.module';
 import { QuestionBankModule } from './modules/question-bank/question-bank.module';
@@ -57,6 +58,7 @@ export class AppModule {
         QuestionBankModule,
         PracticeModule,
         LearningProgressModule,
+        LocalizationModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],

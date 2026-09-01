@@ -56,6 +56,7 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$hash',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt,
       updatedAt,
     } satisfies UserEntity;
@@ -73,11 +74,13 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$hash',
       status: UserStatus.Active,
+      preferredLocale: null,
     });
     expect(snapshot).toEqual({
       id: savedUser.id,
       email: savedUser.email,
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt,
       updatedAt,
     });
@@ -108,6 +111,7 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$hash',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies UserEntity);
@@ -130,6 +134,7 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$hash',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies UserEntity);
@@ -157,6 +162,7 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$legacy',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies UserEntity;
@@ -191,6 +197,7 @@ describe('UserAccountService', () => {
       email: 'teacher@parish.example',
       passwordHash: '$argon2id$v=19$hash',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt,
       updatedAt,
     } satisfies UserEntity);
@@ -201,6 +208,7 @@ describe('UserAccountService', () => {
       id: '11111111-1111-4111-8111-111111111111',
       email: 'teacher@parish.example',
       status: UserStatus.Active,
+      preferredLocale: null,
       createdAt,
       updatedAt,
     });
@@ -225,6 +233,7 @@ describe('UserAccountService', () => {
           email: 'teacher@parish.example',
           passwordHash: '$argon2id$v=19$hash',
           status: statusOrNull,
+          preferredLocale: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         } satisfies UserEntity);

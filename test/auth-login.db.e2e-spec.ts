@@ -28,6 +28,7 @@ interface ErrorResponseBody {
 interface AuthenticatedProfileResponseBody {
   id: string;
   email: string;
+  preferredLocale: string | null;
 }
 
 function decodeJwtPayload(token: string): { sub: string; sid: string } {
@@ -191,6 +192,7 @@ describe('Auth login and access JWT (db e2e)', () => {
     expect(profileResponse.body as AuthenticatedProfileResponseBody).toEqual({
       id: createdAccount.id,
       email,
+      preferredLocale: null,
     });
   });
 });

@@ -14,6 +14,9 @@ export class ParishResponseDto {
   @ApiProperty({ enum: ParishStatus })
   status!: ParishStatus;
 
+  @ApiProperty({ example: 'vi-VN', nullable: true, required: false })
+  defaultLocale!: string | null;
+
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt!: Date;
 

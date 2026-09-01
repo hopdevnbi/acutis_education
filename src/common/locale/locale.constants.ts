@@ -1,0 +1,6 @@
+export const LOCALE_MAX_LENGTH = 32;
+export const SYSTEM_DEFAULT_LOCALE = 'vi-VN';
+export const MAX_ACCEPT_LANGUAGE_ENTRIES = 32;
+export const MAX_TRANSLATION_PAYLOAD_BYTES = 512 * 1024;
+export const SOURCE_CONTENT_HASH_LENGTH = 64;
+export const SOURCE_CONTENT_HASH_PATTERN = /^[a-f0-9]{64}$/;
