@@ -32,3 +32,24 @@ export class LessonProgressInvalidTargetStatusError extends Error {
     this.name = 'LessonProgressInvalidTargetStatusError';
   }
 }
+
+export class LearningProgressCurriculumMismatchError extends Error {
+  constructor(message = 'Curriculum filter does not match the assigned curriculum context.') {
+    super(message);
+    this.name = 'LearningProgressCurriculumMismatchError';
+  }
+}
+
+export class LearningProgressClassProgressAccessDeniedError extends Error {
+  constructor(message = 'Learning progress class access denied.') {
+    super(message);
+    this.name = 'LearningProgressClassProgressAccessDeniedError';
+  }
+}
+
+export class LearningProgressCanonicalLessonRequiresCurriculumError extends Error {
+  constructor(message = 'canonicalLessonKey filter requires curriculumId.') {
+    super(message);
+    this.name = 'LearningProgressCanonicalLessonRequiresCurriculumError';
+  }
+}

@@ -75,7 +75,7 @@ export class LessonProgressService {
     const enrollment = await this.enrollmentService.getEnrollmentById(input.enrollmentId);
     this.assertEnrollmentWritable(enrollment);
 
-    await this.learningProgressAccessService.assertCanManageEnrollmentLessonProgress(
+    await this.learningProgressAccessService.assertCanManageLessonProgress(
       input.actorUserId,
       enrollment.studentId,
     );

@@ -30,7 +30,7 @@ describe('LessonProgressService', () => {
     assertCanonicalLessonKeyBelongsToVersion: jest.fn(),
   };
   const learningProgressAccessService = {
-    assertCanManageEnrollmentLessonProgress: jest.fn(),
+    assertCanManageLessonProgress: jest.fn(),
   };
 
   let lessonProgressService: LessonProgressService;
@@ -78,9 +78,7 @@ describe('LessonProgressService', () => {
       curriculumId: context.curriculumId,
     });
     curriculumService.assertCanonicalLessonKeyBelongsToVersion.mockResolvedValue(undefined);
-    learningProgressAccessService.assertCanManageEnrollmentLessonProgress.mockResolvedValue(
-      undefined,
-    );
+    learningProgressAccessService.assertCanManageLessonProgress.mockResolvedValue(undefined);
   });
 
   it('returns NOT_STARTED when no row exists', async () => {
@@ -193,7 +191,7 @@ describe('LessonProgressService', () => {
   });
 
   it('denies unrelated actor writes', async () => {
-    learningProgressAccessService.assertCanManageEnrollmentLessonProgress.mockRejectedValue(
+    learningProgressAccessService.assertCanManageLessonProgress.mockRejectedValue(
       new LearningProgressAccessDeniedError(),
     );
 
