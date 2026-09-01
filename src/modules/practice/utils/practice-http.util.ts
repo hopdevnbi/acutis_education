@@ -20,6 +20,7 @@ import {
   PracticeAccessDeniedError,
   PracticeAnswerIdempotencyConflictError,
   PracticeCanonicalLessonInvalidError,
+  PracticeClassProgressAccessDeniedError,
   PracticeCurriculumMismatchError,
   PracticeCurriculumNotAssignedError,
   PracticeEnrollmentNotEligibleError,
@@ -29,6 +30,8 @@ import {
   PracticeInvalidGenerationInputError,
   PracticeMediaNotReferencedError,
   PracticeNoWrongQuestionsError,
+  PracticeProgressCanonicalLessonRequiresCurriculumError,
+  PracticeProgressInvalidDateRangeError,
   PracticeQuestionFinalizedError,
   PracticeReviewSourceInvalidError,
   PracticeReviewSourceNotCompletedError,
@@ -40,8 +43,22 @@ import {
 } from '../errors/practice.errors';
 
 export function rethrowPracticeServiceError(error: unknown): never {
-  if (error instanceof PracticeAccessDeniedError) {
+  if (
+    error instanceof PracticeAccessDeniedError ||
+    error instanceof PracticeClassProgressAccessDeniedError
+  ) {
     throw new ForbiddenException(error.message);
+  }
+
+  if (error instanceof PracticeInvalidAnswerError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (
+    error instanceof PracticeProgressInvalidDateRangeError ||
+    error instanceof PracticeProgressCanonicalLessonRequiresCurriculumError
+  ) {
+    throw new BadRequestException(error.message);
   }
 
   if (
@@ -53,10 +70,6 @@ export function rethrowPracticeServiceError(error: unknown): never {
     error instanceof PracticeSessionQuestionContentUnavailableError
   ) {
     throw new NotFoundException(error.message);
-  }
-
-  if (error instanceof PracticeInvalidAnswerError) {
-    throw new BadRequestException(error.message);
   }
 
   if (error instanceof PracticeMediaNotReferencedError) {

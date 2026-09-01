@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Res,
   StreamableFile,
   UseGuards,
@@ -45,6 +46,16 @@ import {
   toPracticeSessionResponseDto,
 } from '../dto/practice-session-response.dto';
 import { SubmitPracticeAnswerRequestDto } from '../dto/submit-practice-answer-request.dto';
+import {
+  ClassPracticeProgressQueryDto,
+  PracticeProgressQueryDto,
+} from '../dto/practice-progress-query.dto';
+import {
+  ClassPracticeProgressResponseDto,
+  EnrollmentPracticeProgressResponseDto,
+  toClassPracticeProgressResponseDto,
+  toEnrollmentPracticeProgressResponseDto,
+} from '../dto/practice-progress-response.dto';
 import { PracticeService } from '../services/practice.service';
 import { rethrowPracticeServiceError } from '../utils/practice-http.util';
 
@@ -224,6 +235,62 @@ export class PracticeController {
       }
 
       return new StreamableFile(content.body);
+    } catch (error: unknown) {
+      rethrowPracticeServiceError(error);
+    }
+  }
+
+  @Get('enrollments/:enrollmentId/practice/progress')
+  @RequirePermissions(PRACTICE_READ_PERMISSION)
+  @ApiOperation({ summary: 'Get derived practice progress for a learner enrollment' })
+  @ApiOkResponse({ type: EnrollmentPracticeProgressResponseDto })
+  @ApiForbiddenResponse({
+    description: 'Caller cannot read practice progress for this enrollment.',
+  })
+  async getEnrollmentPracticeProgress(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('enrollmentId', ParseUUIDPipe) enrollmentId: string,
+    @Query() query: PracticeProgressQueryDto,
+  ): Promise<EnrollmentPracticeProgressResponseDto> {
+    try {
+      const snapshot = await this.practiceService.getEnrollmentProgress({
+        enrollmentId,
+        actorUserId: authenticatedUser.userId,
+        curriculumId: query.curriculumId,
+        canonicalLessonKey: query.canonicalLessonKey,
+        from: query.from,
+        to: query.to,
+      });
+
+      return toEnrollmentPracticeProgressResponseDto(snapshot);
+    } catch (error: unknown) {
+      rethrowPracticeServiceError(error);
+    }
+  }
+
+  @Get('classes/:classId/practice/progress')
+  @RequirePermissions(PRACTICE_READ_PERMISSION)
+  @ApiOperation({ summary: 'Get aggregated practice progress for a class roster' })
+  @ApiOkResponse({ type: ClassPracticeProgressResponseDto })
+  @ApiForbiddenResponse({ description: 'Caller cannot read class practice progress.' })
+  async getClassPracticeProgress(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('classId', ParseUUIDPipe) classId: string,
+    @Query() query: ClassPracticeProgressQueryDto,
+  ): Promise<ClassPracticeProgressResponseDto> {
+    try {
+      const snapshot = await this.practiceService.getClassProgress({
+        classId,
+        actorUserId: authenticatedUser.userId,
+        page: query.page,
+        limit: query.limit,
+        curriculumId: query.curriculumId,
+        canonicalLessonKey: query.canonicalLessonKey,
+        from: query.from,
+        to: query.to,
+      });
+
+      return toClassPracticeProgressResponseDto(snapshot);
     } catch (error: unknown) {
       rethrowPracticeServiceError(error);
     }

@@ -13,10 +13,17 @@ import type {
   SubmitPracticeAnswerInput,
 } from '../interfaces/practice.interface';
 import type { MediaAssetContent } from '../../media/interfaces/media-asset.interface';
+import type {
+  ClassPracticeProgressSnapshot,
+  EnrollmentPracticeProgressSnapshot,
+  GetClassPracticeProgressInput,
+  GetEnrollmentPracticeProgressInput,
+} from '../interfaces/practice-progress.interface';
 import { PracticeAnswerService } from './practice-answer.service';
 import { PracticeGenerationService } from './practice-generation.service';
 import { PracticeMediaService } from './practice-media.service';
 import { PracticeAccessService } from './practice-access.service';
+import { PracticeProgressService } from './practice-progress.service';
 import { PracticeReviewService } from './practice-review.service';
 import { PracticeSessionQueryService } from './practice-session-query.service';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
@@ -33,6 +40,7 @@ export class PracticeService {
     private readonly practiceReviewService: PracticeReviewService,
     private readonly practiceSessionQueryService: PracticeSessionQueryService,
     private readonly practiceMediaService: PracticeMediaService,
+    private readonly practiceProgressService: PracticeProgressService,
   ) {}
 
   createSession(input: CreatePracticeSessionInput): Promise<PracticeSessionSnapshot> {
@@ -94,5 +102,15 @@ export class PracticeService {
       rawSessionQuestionId,
       rawAssetId,
     );
+  }
+
+  getEnrollmentProgress(
+    input: GetEnrollmentPracticeProgressInput,
+  ): Promise<EnrollmentPracticeProgressSnapshot> {
+    return this.practiceProgressService.getEnrollmentProgress(input);
+  }
+
+  getClassProgress(input: GetClassPracticeProgressInput): Promise<ClassPracticeProgressSnapshot> {
+    return this.practiceProgressService.getClassProgress(input);
   }
 }

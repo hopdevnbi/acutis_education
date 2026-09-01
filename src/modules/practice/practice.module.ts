@@ -17,6 +17,7 @@ import { PracticeAccessService } from './services/practice-access.service';
 import { PracticeAnswerService } from './services/practice-answer.service';
 import { PracticeGenerationService } from './services/practice-generation.service';
 import { PracticeMediaService } from './services/practice-media.service';
+import { PracticeProgressService } from './services/practice-progress.service';
 import { PracticeReviewService } from './services/practice-review.service';
 import { PracticeSessionQueryService } from './services/practice-session-query.service';
 import { PracticeService } from './services/practice.service';
@@ -46,6 +47,7 @@ import { PracticeService } from './services/practice.service';
     PracticeReviewService,
     PracticeSessionQueryService,
     PracticeMediaService,
+    PracticeProgressService,
     PracticeAccessService,
   ],
   exports: [PracticeService],

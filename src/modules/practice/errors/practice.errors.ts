@@ -189,3 +189,30 @@ export class PracticeSessionQuestionContentUnavailableError extends Error {
     this.name = 'PracticeSessionQuestionContentUnavailableError';
   }
 }
+
+export class PracticeProgressInvalidDateRangeError extends Error {
+  readonly code = 'PRACTICE_PROGRESS_INVALID_DATE_RANGE' as const;
+
+  constructor() {
+    super('Practice progress date range is invalid.');
+    this.name = 'PracticeProgressInvalidDateRangeError';
+  }
+}
+
+export class PracticeProgressCanonicalLessonRequiresCurriculumError extends Error {
+  readonly code = 'PRACTICE_PROGRESS_CANONICAL_LESSON_REQUIRES_CURRICULUM' as const;
+
+  constructor() {
+    super('Canonical lesson key requires curriculumId filter.');
+    this.name = 'PracticeProgressCanonicalLessonRequiresCurriculumError';
+  }
+}
+
+export class PracticeClassProgressAccessDeniedError extends Error {
+  readonly code = 'PRACTICE_CLASS_PROGRESS_ACCESS_DENIED' as const;
+
+  constructor() {
+    super('Class practice progress access was denied.');
+    this.name = 'PracticeClassProgressAccessDeniedError';
+  }
+}

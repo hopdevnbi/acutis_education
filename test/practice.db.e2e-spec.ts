@@ -45,7 +45,24 @@ interface StudentListResponseBody {
 }
 
 interface EnrollmentListResponseBody {
-  items: Array<{ id: string }>;
+  items: Array<{ id: string; classId: string }>;
+}
+
+interface EnrollmentPracticeProgressResponseBody {
+  enrollmentId: string;
+  standard: {
+    sessionsCompleted: number;
+    questionsAttempted: number;
+    firstAttemptAccuracy: number;
+    finalAccuracy: number;
+  };
+  review: {
+    sessionsCompleted: number;
+    questionsAttempted: number;
+    finalAccuracy: number;
+    uniqueQuestionVersionsReviewed: number;
+  };
+  lastPracticedAt: string | null;
 }
 
 interface PracticeSessionResponseBody {
@@ -85,6 +102,7 @@ describe('Practice API (db e2e)', () => {
   let application: INestApplication;
   let seedModuleRef: TestingModule;
   let enrollmentId: string;
+  let classId: string;
   let parentToken: string;
   let unlinkedParentToken: string;
   let catechistToken: string;
@@ -181,9 +199,10 @@ describe('Practice API (db e2e)', () => {
       .expect(200);
 
     enrollmentId = (enrollmentsResponse.body as EnrollmentListResponseBody).items[0]?.id ?? '';
+    classId = (enrollmentsResponse.body as EnrollmentListResponseBody).items[0]?.classId ?? '';
 
-    if (enrollmentId.length === 0) {
-      throw new Error('Expected enrollment for demo student alpha.');
+    if (enrollmentId.length === 0 || classId.length === 0) {
+      throw new Error('Expected enrollment and class for demo student alpha.');
     }
   });
 
@@ -541,5 +560,70 @@ describe('Practice API (db e2e)', () => {
     expect((abandonResponse.body as PracticeSessionResponseBody).status).toBe(
       PracticeSessionStatus.Abandoned,
     );
+  });
+
+  it('returns enrollment progress for linked parent without answer leakage', async () => {
+    const createResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send(SINGLE_CHOICE_SESSION_REQUEST)
+      .expect(201);
+    const created = createResponse.body as PracticeSessionResponseBody;
+    const question = created.questions[0];
+
+    if (question === undefined) {
+      throw new Error('Expected one practice question.');
+    }
+
+    await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        clientAnswerId: generateUuidV4(),
+        selectedOptionIds: [question.options[0]?.id ?? generateUuidV4()],
+      })
+      .expect(201);
+
+    const progressResponse = await request(getTestHttpServer(application))
+      .get(`/api/v1/enrollments/${enrollmentId}/practice/progress`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .expect(200);
+
+    const progress = progressResponse.body as EnrollmentPracticeProgressResponseBody;
+    expect(progress.standard.sessionsCompleted).toBe(1);
+    expect(progress.standard.questionsAttempted).toBe(1);
+    expect(progress.standard.finalAccuracy).toBe(1);
+    expect(JSON.stringify(progress)).not.toContain('selectedOptionIds');
+    expect(JSON.stringify(progress)).not.toContain('correctOptionIds');
+    expect(JSON.stringify(progress)).not.toContain('explanation');
+  });
+
+  it('denies unlinked parent and parent class progress reads', async () => {
+    await request(getTestHttpServer(application))
+      .get(`/api/v1/enrollments/${enrollmentId}/practice/progress`)
+      .set('Authorization', `Bearer ${unlinkedParentToken}`)
+      .expect(403);
+
+    await request(getTestHttpServer(application))
+      .get(`/api/v1/classes/${classId}/practice/progress`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .expect(403);
+  });
+
+  it('allows assigned catechist and parish admin class progress reads', async () => {
+    await request(getTestHttpServer(application))
+      .get(`/api/v1/classes/${classId}/practice/progress`)
+      .set('Authorization', `Bearer ${catechistToken}`)
+      .expect(200);
+
+    const adminResponse = await request(getTestHttpServer(application))
+      .get(`/api/v1/classes/${classId}/practice/progress`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(adminResponse.body).toHaveProperty('summary');
+    expect(adminResponse.body).toHaveProperty('learners');
   });
 });
