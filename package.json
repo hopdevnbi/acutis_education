@@ -41,7 +41,8 @@
     "seed:parish-academic": "ts-node --project tsconfig.json scripts/seed-parish-academic.ts",
     "seed:class-enrollment": "ts-node --project tsconfig.json scripts/seed-class-enrollment.ts",
     "seed:curriculum-demo": "ts-node --project tsconfig.json scripts/seed-curriculum-demo.ts",
-    "seed:question-bank-demo": "ts-node --project tsconfig.json scripts/seed-question-bank-demo.ts"
+    "seed:question-bank-demo": "ts-node --project tsconfig.json scripts/seed-question-bank-demo.ts",
+    "seed:learning-progress-demo": "ts-node --project tsconfig.json scripts/seed-learning-progress-demo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

@@ -1,0 +1,557 @@
+{
+  "info": {
+    "_postman_id": "acutis-learning-progress-demo",
+    "name": "Acutis Education — Learning Progress",
+    "description": "Manual verification for Learning Progress APIs (lesson PATCH + enrollment/class aggregates). Uses demo seed identities only. Password variables are dev-sample placeholders — never commit real secrets.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "parentPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "catechistPassword", "value": "LocalDev!Sample2026" },
+    { "key": "parishAdminEmail", "value": "admin@local.catechism.test" },
+    { "key": "parishAdminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "superAdminEmail", "value": "superadmin@local.catechism.test" },
+    { "key": "superAdminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "parentToken", "value": "" },
+    { "key": "catechistToken", "value": "" },
+    { "key": "parishAdminToken", "value": "" },
+    { "key": "superAdminToken", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "curriculumId", "value": "" },
+    { "key": "canonicalLessonKeyInProgress", "value": "" },
+    { "key": "canonicalLessonKeyCompleted", "value": "" },
+    { "key": "invalidCanonicalLessonKey", "value": "00000000-0000-4000-8000-000000000099" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{parentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('catechistToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{catechistPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parish Admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('parishAdminToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parishAdminEmail}}\",\n  \"password\": \"{{parishAdminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Super Admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('superAdminToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{superAdminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Setup",
+      "item": [
+        {
+          "name": "Resolve demo student + enrollment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 students', () => pm.response.to.have.status(200));",
+                  "const students = pm.response.json().items;",
+                  "const alpha = students.find((s) => s.fullName === 'Demo Student Alpha');",
+                  "pm.expect(alpha).to.be.an('object');",
+                  "pm.collectionVariables.set('studentId', alpha.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parishAdminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/students?search=Demo%20Student%20Alpha&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["students"],
+              "query": [
+                { "key": "search", "value": "Demo Student Alpha" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resolve enrollment + class + curriculum tree",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 enrollments', () => pm.response.to.have.status(200));",
+                  "const enrollment = pm.response.json().items[0];",
+                  "pm.collectionVariables.set('enrollmentId', enrollment.id);",
+                  "pm.collectionVariables.set('classId', enrollment.classId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/students/{{studentId}}/enrollments?limit=5"
+          }
+        },
+        {
+          "name": "Capture curriculum + lesson keys",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 curriculum tree', () => pm.response.to.have.status(200));",
+                  "const tree = pm.response.json();",
+                  "pm.collectionVariables.set('curriculumId', tree.version.curriculumId);",
+                  "const flat = tree.topics.flatMap((t) => t.lessons);",
+                  "const inProgress = flat.find((l) => l.code === 'demo-lesson-creation-2');",
+                  "const completed = flat.find((l) => l.code === 'demo-lesson-jesus-1');",
+                  "pm.expect(inProgress).to.be.an('object');",
+                  "pm.expect(completed).to.be.an('object');",
+                  "pm.collectionVariables.set('canonicalLessonKeyInProgress', inProgress.canonicalLessonKey);",
+                  "pm.collectionVariables.set('canonicalLessonKeyCompleted', completed.canonicalLessonKey);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/curriculum-tree"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Lesson progress",
+      "item": [
+        {
+          "name": "GET enrollment learning progress (baseline)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 aggregate', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.have.property('learning');",
+                  "pm.expect(body).to.have.property('practice');",
+                  "pm.expect(body.exam).to.eql(null);",
+                  "pm.expect(JSON.stringify(body)).to.not.include('selectedOptionIds');",
+                  "pm.expect(JSON.stringify(body)).to.not.include('correctOptionIds');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/learning-progress"
+          }
+        },
+        {
+          "name": "PATCH lesson IN_PROGRESS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 patch', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().status).to.eql('IN_PROGRESS');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyInProgress}}/progress"
+          }
+        },
+        {
+          "name": "PATCH same IN_PROGRESS idempotently",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 idempotent', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().status).to.eql('IN_PROGRESS');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyInProgress}}/progress"
+          }
+        },
+        {
+          "name": "PATCH lesson COMPLETED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 completed', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().status).to.eql('COMPLETED');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"COMPLETED\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyCompleted}}/progress"
+          }
+        },
+        {
+          "name": "GET verify completion ratio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 verify', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.learning.completionRatio).to.be.at.least(0);",
+                  "pm.expect(body.learning.completionRatio).to.be.at.most(1);",
+                  "pm.expect(body.lessons.some((l) => l.status === 'NOT_STARTED')).to.eql(true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/learning-progress"
+          }
+        },
+        {
+          "name": "PATCH COMPLETED -> IN_PROGRESS denied (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('409 backward transition', () => pm.response.to.have.status(409));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyCompleted}}/progress"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Access control",
+      "item": [
+        {
+          "name": "Catechist class progress 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 class', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json()).to.have.property('summary');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/learning-progress"
+          }
+        },
+        {
+          "name": "Catechist PATCH denied 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403 catechist patch', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyInProgress}}/progress"
+          }
+        },
+        {
+          "name": "Parent class progress denied 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403 parent class', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/learning-progress"
+          }
+        },
+        {
+          "name": "Parish Admin class progress 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 admin class', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parishAdminToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/learning-progress"
+          }
+        },
+        {
+          "name": "Parish Admin PATCH denied 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403 admin patch', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parishAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyInProgress}}/progress"
+          }
+        },
+        {
+          "name": "Super Admin GET 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 super admin get', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superAdminToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/learning-progress"
+          }
+        },
+        {
+          "name": "Super Admin PATCH denied 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403 super admin patch', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{canonicalLessonKeyInProgress}}/progress"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Validation errors",
+      "item": [
+        {
+          "name": "Invalid canonicalLessonKey 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('422 invalid lesson', () => pm.response.to.have.status(422));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}" },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/lessons/{{invalidCanonicalLessonKey}}/progress"
+          }
+        },
+        {
+          "name": "Curriculum mismatch 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('422 curriculum mismatch', () => pm.response.to.have.status(422));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{enrollmentId}}/learning-progress?curriculumId=00000000-0000-4000-8000-000000000001",
+              "host": ["{{baseUrl}}"],
+              "path": ["enrollments", "{{enrollmentId}}", "learning-progress"],
+              "query": [
+                {
+                  "key": "curriculumId",
+                  "value": "00000000-0000-4000-8000-000000000001"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

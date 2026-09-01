@@ -385,6 +385,28 @@ Progress query filters: `curriculumId`, `canonicalLessonKey` (requires `curricul
 
 Postman collection: `docs/postman/Acutis-Education-Practice.postman_collection.json`
 
+## Learning Progress API
+
+Explicit lesson completion tracking for linked learner enrollments, composed with Practice progress metrics. Learning Progress owns `lesson_progress` only; Practice remains the source of truth for quiz metrics.
+
+**Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → (`seed:question-bank-demo` + Practice sessions optional for non-zero Practice block) → `seed:learning-progress-demo`.
+
+| Method | Route | Permission | Notes |
+|--------|-------|------------|-------|
+| `PATCH` | `/api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress` | `learning-progress.manage` | Explicit `IN_PROGRESS` or `COMPLETED` only |
+| `GET` | `/api/v1/enrollments/:enrollmentId/learning-progress` | `learning-progress.read` | Lesson states + Practice composition + `exam: null` |
+| `GET` | `/api/v1/classes/:classId/learning-progress` | `learning-progress.read` | Weighted class summary + paginated learner rows |
+
+**State model:** missing row = `NOT_STARTED`. Monotonic transitions only (`NOT_STARTED → IN_PROGRESS → COMPLETED`). No reopen/reset. No passive GET tracking from Curriculum Delivery.
+
+**Completion ratio:** enrollment `lessonsCompleted / lessonsAssigned` for current assigned curriculum tree. Class summary uses weighted opportunities (`SUM(completed) / SUM(assigned)`), not averaged learner percentages.
+
+**Scoped access:** linked parent/guardian may PATCH lesson progress and read enrollment aggregate. Parish admin and assigned catechist may read enrollment and class aggregates. **Parent is denied class aggregate** even when linked. Catechist/parish admin/super-admin cannot PATCH learner lesson progress.
+
+Query filters: `curriculumId`, `canonicalLessonKey` (requires `curriculumId`). No `from`/`to` date filters on aggregate APIs (intentional MVP — lesson completion is current-state; Practice date filters remain on Practice progress routes).
+
+Postman collection: `docs/postman/Acutis-Education-Learning-Progress.postman_collection.json`
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.
