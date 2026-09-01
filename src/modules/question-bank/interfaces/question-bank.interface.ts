@@ -111,6 +111,13 @@ export interface GradeAnswerResult {
   readonly score: 0 | 1;
 }
 
+export interface PracticeFeedbackSnapshot {
+  readonly questionVersionId: string;
+  readonly explanation: string | null;
+  readonly explanationMediaJson: string | null;
+  readonly correctOptionIds: readonly string[];
+}
+
 export interface ImmutableAssessmentSnapshotOption {
   readonly id: string;
   readonly text: string | null;

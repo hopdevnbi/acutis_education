@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -12,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -32,10 +35,16 @@ import {
   PRACTICE_READ_PERMISSION,
 } from '../constants/practice-permissions.constants';
 import { CreatePracticeSessionRequestDto } from '../dto/create-practice-session-request.dto';
+import { CreateReviewWrongSessionRequestDto } from '../dto/create-review-wrong-session-request.dto';
+import {
+  PracticeAnswerResponseDto,
+  toPracticeAnswerResponseDto,
+} from '../dto/practice-answer-response.dto';
 import {
   PracticeSessionResponseDto,
   toPracticeSessionResponseDto,
 } from '../dto/practice-session-response.dto';
+import { SubmitPracticeAnswerRequestDto } from '../dto/submit-practice-answer-request.dto';
 import { PracticeService } from '../services/practice.service';
 import { rethrowPracticeServiceError } from '../utils/practice-http.util';
 
@@ -95,6 +104,71 @@ export class PracticeController {
       const snapshot = await this.practiceService.getSession(authenticatedUser.userId, sessionId);
 
       return toPracticeSessionResponseDto(snapshot);
+    } catch (error: unknown) {
+      rethrowPracticeServiceError(error);
+    }
+  }
+
+  @Post('practice-sessions/:sessionId/questions/:sessionQuestionId/answers')
+  @RequirePermissions(PRACTICE_MANAGE_PERMISSION)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Submit a learner practice answer attempt' })
+  @ApiCreatedResponse({ type: PracticeAnswerResponseDto })
+  @ApiOkResponse({ type: PracticeAnswerResponseDto })
+  @ApiConflictResponse({ description: 'Session lifecycle or idempotency conflict.' })
+  async submitPracticeAnswer(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Param('sessionQuestionId', ParseUUIDPipe) sessionQuestionId: string,
+    @Body() request: SubmitPracticeAnswerRequestDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<PracticeAnswerResponseDto> {
+    try {
+      const result = await this.practiceService.submitAnswer({
+        actorUserId: authenticatedUser.userId,
+        sessionId,
+        sessionQuestionId,
+        clientAnswerId: request.clientAnswerId,
+        selectedOptionIds: request.selectedOptionIds,
+      });
+
+      if (result.replayed) {
+        response.status(HttpStatus.OK);
+      }
+
+      return toPracticeAnswerResponseDto(result);
+    } catch (error: unknown) {
+      rethrowPracticeServiceError(error);
+    }
+  }
+
+  @Post('practice-sessions/:sessionId/review-wrong')
+  @RequirePermissions(PRACTICE_MANAGE_PERMISSION)
+  @ApiOperation({
+    summary: 'Create a review-wrong practice session from a completed source session',
+  })
+  @ApiCreatedResponse({ type: PracticeSessionResponseDto })
+  @ApiUnprocessableEntityResponse({
+    description: 'Source session has no finally incorrect questions.',
+  })
+  async createReviewWrongSession(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Body() request: CreateReviewWrongSessionRequestDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<PracticeSessionResponseDto> {
+    try {
+      const reviewResult = await this.practiceService.createReviewWrongSession({
+        sourceSessionId: sessionId,
+        actorUserId: authenticatedUser.userId,
+        clientRequestId: request.clientRequestId,
+      });
+
+      if (reviewResult.replayed) {
+        response.status(HttpStatus.OK);
+      }
+
+      return toPracticeSessionResponseDto(reviewResult.snapshot);
     } catch (error: unknown) {
       rethrowPracticeServiceError(error);
     }

@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  BadRequestException,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -17,17 +18,24 @@ import {
 } from '../../question-bank/errors/question-bank.errors';
 import {
   PracticeAccessDeniedError,
+  PracticeAnswerIdempotencyConflictError,
   PracticeCanonicalLessonInvalidError,
   PracticeCurriculumMismatchError,
   PracticeCurriculumNotAssignedError,
   PracticeEnrollmentNotEligibleError,
   PracticeIdempotencyConflictError,
   PracticeInsufficientQuestionsError,
+  PracticeInvalidAnswerError,
   PracticeInvalidGenerationInputError,
   PracticeMediaNotReferencedError,
+  PracticeNoWrongQuestionsError,
+  PracticeQuestionFinalizedError,
+  PracticeReviewSourceInvalidError,
+  PracticeReviewSourceNotCompletedError,
   PracticeSessionAbandonedError,
   PracticeSessionCompletedError,
   PracticeSessionNotFoundError,
+  PracticeSessionQuestionContentUnavailableError,
   PracticeSessionQuestionNotFoundError,
 } from '../errors/practice.errors';
 
@@ -41,9 +49,14 @@ export function rethrowPracticeServiceError(error: unknown): never {
     error instanceof PracticeSessionQuestionNotFoundError ||
     error instanceof EnrollmentNotFoundError ||
     error instanceof StudentNotFoundError ||
-    error instanceof QuestionVersionNotFoundError
+    error instanceof QuestionVersionNotFoundError ||
+    error instanceof PracticeSessionQuestionContentUnavailableError
   ) {
     throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof PracticeInvalidAnswerError) {
+    throw new BadRequestException(error.message);
   }
 
   if (error instanceof PracticeMediaNotReferencedError) {
@@ -56,7 +69,10 @@ export function rethrowPracticeServiceError(error: unknown): never {
     error instanceof PracticeCurriculumNotAssignedError ||
     error instanceof PracticeCurriculumMismatchError ||
     error instanceof PracticeCanonicalLessonInvalidError ||
-    error instanceof PracticeInvalidGenerationInputError
+    error instanceof PracticeInvalidGenerationInputError ||
+    error instanceof PracticeNoWrongQuestionsError ||
+    error instanceof PracticeReviewSourceNotCompletedError ||
+    error instanceof PracticeReviewSourceInvalidError
   ) {
     throw new UnprocessableEntityException(error.message);
   }
@@ -65,6 +81,8 @@ export function rethrowPracticeServiceError(error: unknown): never {
     error instanceof PracticeSessionCompletedError ||
     error instanceof PracticeSessionAbandonedError ||
     error instanceof PracticeIdempotencyConflictError ||
+    error instanceof PracticeAnswerIdempotencyConflictError ||
+    error instanceof PracticeQuestionFinalizedError ||
     error instanceof QuestionVersionNotDeliverableError
   ) {
     throw new ConflictException(error.message);

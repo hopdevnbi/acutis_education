@@ -228,3 +228,24 @@ export function learnerProjectionReferencesMediaAsset(
       option.mediaAssetId !== null && normalizeUuid(option.mediaAssetId) === normalizedAssetId,
   );
 }
+
+export function practiceFeedbackReferencesMediaAsset(
+  feedback: {
+    readonly explanationMediaJson: string | null;
+  },
+  rawAssetId: string,
+): boolean {
+  const normalizedAssetId = normalizeUuid(rawAssetId);
+
+  if (feedback.explanationMediaJson === null || feedback.explanationMediaJson.trim().length === 0) {
+    return false;
+  }
+
+  try {
+    const document = parseQuestionMediaJsonDocument(feedback.explanationMediaJson);
+
+    return document.items.some((item) => normalizeUuid(item.assetId) === normalizedAssetId);
+  } catch {
+    return false;
+  }
+}

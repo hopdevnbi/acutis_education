@@ -6,12 +6,18 @@ import { PracticeSessionStatus } from '../enums/practice-session-status.enum';
 import { PracticeSessionCompletedError } from '../errors/practice.errors';
 import type {
   CreatePracticeSessionInput,
+  CreateReviewWrongSessionInput,
+  PracticeAnswerResult,
   PracticeSessionSnapshot,
+  ReviewWrongSessionResult,
+  SubmitPracticeAnswerInput,
 } from '../interfaces/practice.interface';
 import type { MediaAssetContent } from '../../media/interfaces/media-asset.interface';
+import { PracticeAnswerService } from './practice-answer.service';
 import { PracticeGenerationService } from './practice-generation.service';
 import { PracticeMediaService } from './practice-media.service';
 import { PracticeAccessService } from './practice-access.service';
+import { PracticeReviewService } from './practice-review.service';
 import { PracticeSessionQueryService } from './practice-session-query.service';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 
@@ -23,6 +29,8 @@ export class PracticeService {
     private readonly enrollmentService: EnrollmentService,
     private readonly practiceAccessService: PracticeAccessService,
     private readonly practiceGenerationService: PracticeGenerationService,
+    private readonly practiceAnswerService: PracticeAnswerService,
+    private readonly practiceReviewService: PracticeReviewService,
     private readonly practiceSessionQueryService: PracticeSessionQueryService,
     private readonly practiceMediaService: PracticeMediaService,
   ) {}
@@ -62,6 +70,16 @@ export class PracticeService {
     await this.practiceSessionRepository.save(session);
 
     return this.practiceSessionQueryService.getSessionSnapshot(session.id);
+  }
+
+  submitAnswer(input: SubmitPracticeAnswerInput): Promise<PracticeAnswerResult> {
+    return this.practiceAnswerService.submitAnswer(input);
+  }
+
+  createReviewWrongSession(
+    input: CreateReviewWrongSessionInput,
+  ): Promise<ReviewWrongSessionResult> {
+    return this.practiceReviewService.createReviewWrongSession(input);
   }
 
   openSessionQuestionMediaContent(

@@ -298,6 +298,43 @@ describe('QuestionGradingService', () => {
     expect(result.isCorrect).toBe(true);
   });
 
+  it('returns practice feedback for published versions', async () => {
+    questionCorrectOptionRepository.find.mockResolvedValue([
+      { optionId: optionAId, questionVersionId: versionId },
+    ] as QuestionCorrectOptionEntity[]);
+
+    const feedback = await questionGradingService.getPracticeFeedback(versionId);
+
+    expect(feedback.questionVersionId).toBe(versionId);
+    expect(feedback.explanation).toBe('Explanation');
+    expect(feedback.correctOptionIds).toEqual([optionAId]);
+  });
+
+  it('allows practice feedback for archived versions', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      ...publishedVersion,
+      status: QuestionVersionStatus.Archived,
+    });
+    questionCorrectOptionRepository.find.mockResolvedValue([
+      { optionId: optionAId, questionVersionId: versionId },
+    ] as QuestionCorrectOptionEntity[]);
+
+    const feedback = await questionGradingService.getPracticeFeedback(versionId);
+
+    expect(feedback.questionVersionId).toBe(versionId);
+  });
+
+  it('rejects practice feedback for draft versions', async () => {
+    questionVersionRepository.findOne.mockResolvedValue({
+      ...publishedVersion,
+      status: QuestionVersionStatus.Draft,
+    });
+
+    await expect(questionGradingService.getPracticeFeedback(versionId)).rejects.toBeInstanceOf(
+      QuestionVersionNotGradableError,
+    );
+  });
+
   it('returns immutable assessment snapshot for published versions', async () => {
     const snapshot = await questionGradingService.getImmutableAssessmentSnapshot(versionId);
 

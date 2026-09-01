@@ -22,6 +22,7 @@ import type {
   GradeAnswerResult,
   ImmutableAssessmentSnapshot,
   LearnerQuestionProjection,
+  PracticeFeedbackSnapshot,
   QuestionVersionPreview,
 } from '../interfaces/question-bank.interface';
 
@@ -149,6 +150,20 @@ export class QuestionGradingService {
       questionType: version.questionType,
       isCorrect,
       score: isCorrect ? 1 : 0,
+    };
+  }
+
+  async getPracticeFeedback(rawVersionId: string): Promise<PracticeFeedbackSnapshot> {
+    const version = await this.findGradableVersionEntity(rawVersionId);
+    const correctOptions = await this.questionCorrectOptionRepository.find({
+      where: { questionVersionId: version.id },
+    });
+
+    return {
+      questionVersionId: version.id,
+      explanation: version.explanation,
+      explanationMediaJson: version.explanationMediaJson,
+      correctOptionIds: correctOptions.map((row) => normalizeUuid(row.optionId)),
     };
   }
 

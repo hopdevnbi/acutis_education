@@ -4,6 +4,40 @@ import { PracticeSessionType } from '../enums/practice-session-type.enum';
 import type { PracticeSessionSnapshot } from '../interfaces/practice.interface';
 import { buildPracticeSessionQuestionMediaContentPath } from '../utils/practice-media-content-path.util';
 
+export class PracticeSessionQuestionLatestAttemptResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  attemptId!: string;
+
+  @ApiProperty()
+  attemptNumber!: number;
+
+  @ApiProperty({ format: 'uuid' })
+  clientAnswerId!: string;
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  selectedOptionIds!: string[];
+
+  @ApiProperty()
+  isCorrect!: boolean;
+
+  @ApiProperty()
+  score!: number;
+
+  @ApiProperty()
+  submittedAt!: string;
+}
+
+export class PracticeSessionQuestionFeedbackResponseDto {
+  @ApiPropertyOptional({ nullable: true })
+  explanation!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  explanationMediaJson!: string | null;
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  correctOptionIds!: string[];
+}
+
 export class PracticeSessionQuestionAttemptStateResponseDto {
   @ApiProperty()
   attemptCount!: number;
@@ -13,6 +47,18 @@ export class PracticeSessionQuestionAttemptStateResponseDto {
 
   @ApiProperty()
   finalized!: boolean;
+
+  @ApiProperty()
+  remainingAttempts!: number;
+
+  @ApiProperty()
+  feedbackRevealed!: boolean;
+
+  @ApiPropertyOptional({ type: PracticeSessionQuestionLatestAttemptResponseDto, nullable: true })
+  latestAttempt!: PracticeSessionQuestionLatestAttemptResponseDto | null;
+
+  @ApiPropertyOptional({ type: PracticeSessionQuestionFeedbackResponseDto, nullable: true })
+  feedback!: PracticeSessionQuestionFeedbackResponseDto | null;
 }
 
 export class PracticeSessionQuestionOptionResponseDto {
@@ -67,6 +113,23 @@ export class PracticeSessionQuestionResponseDto {
   attemptState!: PracticeSessionQuestionAttemptStateResponseDto;
 }
 
+export class PracticeSessionSummaryResponseDto {
+  @ApiProperty()
+  totalQuestions!: number;
+
+  @ApiProperty()
+  answeredQuestionCount!: number;
+
+  @ApiProperty()
+  finalizedQuestionCount!: number;
+
+  @ApiProperty()
+  finalCorrectCount!: number;
+
+  @ApiProperty()
+  sessionCompleted!: boolean;
+}
+
 export class PracticeSessionResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -112,6 +175,9 @@ export class PracticeSessionResponseDto {
 
   @ApiProperty({ type: [PracticeSessionQuestionResponseDto] })
   questions!: PracticeSessionQuestionResponseDto[];
+
+  @ApiProperty({ type: PracticeSessionSummaryResponseDto })
+  summary!: PracticeSessionSummaryResponseDto;
 }
 
 export function toPracticeSessionResponseDto(
@@ -160,7 +226,36 @@ export function toPracticeSessionResponseDto(
         attemptCount: question.attemptState.attemptCount,
         canRetry: question.attemptState.canRetry,
         finalized: question.attemptState.finalized,
+        remainingAttempts: question.attemptState.remainingAttempts,
+        feedbackRevealed: question.attemptState.feedbackRevealed,
+        latestAttempt:
+          question.attemptState.latestAttempt === null
+            ? null
+            : {
+                attemptId: question.attemptState.latestAttempt.attemptId,
+                attemptNumber: question.attemptState.latestAttempt.attemptNumber,
+                clientAnswerId: question.attemptState.latestAttempt.clientAnswerId,
+                selectedOptionIds: [...question.attemptState.latestAttempt.selectedOptionIds],
+                isCorrect: question.attemptState.latestAttempt.isCorrect,
+                score: question.attemptState.latestAttempt.score,
+                submittedAt: question.attemptState.latestAttempt.submittedAt.toISOString(),
+              },
+        feedback:
+          question.attemptState.feedback === null
+            ? null
+            : {
+                explanation: question.attemptState.feedback.explanation,
+                explanationMediaJson: question.attemptState.feedback.explanationMediaJson,
+                correctOptionIds: [...question.attemptState.feedback.correctOptionIds],
+              },
       },
     })),
+    summary: {
+      totalQuestions: snapshot.summary.totalQuestions,
+      answeredQuestionCount: snapshot.summary.answeredQuestionCount,
+      finalizedQuestionCount: snapshot.summary.finalizedQuestionCount,
+      finalCorrectCount: snapshot.summary.finalCorrectCount,
+      sessionCompleted: snapshot.summary.sessionCompleted,
+    },
   };
 }

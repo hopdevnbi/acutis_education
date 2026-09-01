@@ -14,8 +14,10 @@ import { PracticeAnswerAttemptEntity } from './entities/practice-answer-attempt.
 import { PracticeSessionQuestionEntity } from './entities/practice-session-question.entity';
 import { PracticeSessionEntity } from './entities/practice-session.entity';
 import { PracticeAccessService } from './services/practice-access.service';
+import { PracticeAnswerService } from './services/practice-answer.service';
 import { PracticeGenerationService } from './services/practice-generation.service';
 import { PracticeMediaService } from './services/practice-media.service';
+import { PracticeReviewService } from './services/practice-review.service';
 import { PracticeSessionQueryService } from './services/practice-session-query.service';
 import { PracticeService } from './services/practice.service';
 
@@ -40,6 +42,8 @@ import { PracticeService } from './services/practice.service';
   providers: [
     PracticeService,
     PracticeGenerationService,
+    PracticeAnswerService,
+    PracticeReviewService,
     PracticeSessionQueryService,
     PracticeMediaService,
     PracticeAccessService,

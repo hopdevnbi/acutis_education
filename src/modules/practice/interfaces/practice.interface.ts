@@ -19,10 +19,49 @@ export interface CreatePracticeSessionInput {
   readonly randomizeOptions?: boolean;
 }
 
+export interface CreateReviewWrongSessionInput {
+  readonly sourceSessionId: string;
+  readonly actorUserId: string;
+  readonly clientRequestId: string;
+}
+
+export interface ReviewWrongSessionResult {
+  readonly snapshot: PracticeSessionSnapshot;
+  readonly replayed: boolean;
+}
+
+export interface SubmitPracticeAnswerInput {
+  readonly actorUserId: string;
+  readonly sessionId: string;
+  readonly sessionQuestionId: string;
+  readonly clientAnswerId: string;
+  readonly selectedOptionIds: readonly string[];
+}
+
+export interface PracticeSessionQuestionLatestAttempt {
+  readonly attemptId: string;
+  readonly attemptNumber: number;
+  readonly clientAnswerId: string;
+  readonly selectedOptionIds: readonly string[];
+  readonly isCorrect: boolean;
+  readonly score: number;
+  readonly submittedAt: Date;
+}
+
+export interface PracticeSessionQuestionFeedback {
+  readonly explanation: string | null;
+  readonly explanationMediaJson: string | null;
+  readonly correctOptionIds: readonly string[];
+}
+
 export interface PracticeSessionQuestionAttemptState {
   readonly attemptCount: number;
   readonly canRetry: boolean;
   readonly finalized: boolean;
+  readonly remainingAttempts: number;
+  readonly feedbackRevealed: boolean;
+  readonly latestAttempt: PracticeSessionQuestionLatestAttempt | null;
+  readonly feedback: PracticeSessionQuestionFeedback | null;
 }
 
 export interface PracticeSessionQuestionDelivery {
@@ -44,6 +83,14 @@ export interface PracticeSessionQuestionDelivery {
   readonly attemptState: PracticeSessionQuestionAttemptState;
 }
 
+export interface PracticeSessionSummary {
+  readonly totalQuestions: number;
+  readonly answeredQuestionCount: number;
+  readonly finalizedQuestionCount: number;
+  readonly finalCorrectCount: number;
+  readonly sessionCompleted: boolean;
+}
+
 export interface PracticeSessionSnapshot {
   readonly id: string;
   readonly enrollmentId: string;
@@ -60,6 +107,21 @@ export interface PracticeSessionSnapshot {
   readonly completedAt: Date | null;
   readonly abandonedAt: Date | null;
   readonly questions: readonly PracticeSessionQuestionDelivery[];
+  readonly summary: PracticeSessionSummary;
+}
+
+export interface PracticeAnswerResult {
+  readonly attemptId: string;
+  readonly clientAnswerId: string;
+  readonly attemptNumber: number;
+  readonly isCorrect: boolean;
+  readonly score: 0 | 1;
+  readonly questionFinalized: boolean;
+  readonly canRetry: boolean;
+  readonly remainingAttempts: number;
+  readonly sessionCompleted: boolean;
+  readonly feedback: PracticeSessionQuestionFeedback | null;
+  readonly replayed: boolean;
 }
 
 export interface NormalizedPracticeGenerationRequest {

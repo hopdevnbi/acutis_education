@@ -117,3 +117,75 @@ export class PracticeInvalidGenerationInputError extends Error {
     this.name = 'PracticeInvalidGenerationInputError';
   }
 }
+
+export class PracticeInvalidAnswerError extends Error {
+  readonly code = 'PRACTICE_INVALID_ANSWER' as const;
+
+  constructor(message = 'Practice answer payload is invalid.') {
+    super(message);
+    this.name = 'PracticeInvalidAnswerError';
+  }
+}
+
+export class PracticeQuestionFinalizedError extends Error {
+  readonly code = 'PRACTICE_QUESTION_FINALIZED' as const;
+
+  constructor() {
+    super('Practice session question is already finalized.');
+    this.name = 'PracticeQuestionFinalizedError';
+  }
+}
+
+export class PracticeAnswerIdempotencyConflictError extends Error {
+  readonly code = 'PRACTICE_ANSWER_IDEMPOTENCY_CONFLICT' as const;
+
+  constructor() {
+    super('Client answer id was reused with a different selected option set.');
+    this.name = 'PracticeAnswerIdempotencyConflictError';
+  }
+}
+
+export class PracticeRetryNotAllowedError extends Error {
+  readonly code = 'PRACTICE_RETRY_NOT_ALLOWED' as const;
+
+  constructor() {
+    super('Retry is not allowed for this practice session question.');
+    this.name = 'PracticeRetryNotAllowedError';
+  }
+}
+
+export class PracticeNoWrongQuestionsError extends Error {
+  readonly code = 'PRACTICE_NO_WRONG_QUESTIONS' as const;
+
+  constructor() {
+    super('No finally incorrect questions are available for review.');
+    this.name = 'PracticeNoWrongQuestionsError';
+  }
+}
+
+export class PracticeReviewSourceNotCompletedError extends Error {
+  readonly code = 'PRACTICE_REVIEW_SOURCE_NOT_COMPLETED' as const;
+
+  constructor() {
+    super('Review source session must be completed.');
+    this.name = 'PracticeReviewSourceNotCompletedError';
+  }
+}
+
+export class PracticeReviewSourceInvalidError extends Error {
+  readonly code = 'PRACTICE_REVIEW_SOURCE_INVALID' as const;
+
+  constructor(message = 'Review source session is invalid.') {
+    super(message);
+    this.name = 'PracticeReviewSourceInvalidError';
+  }
+}
+
+export class PracticeSessionQuestionContentUnavailableError extends Error {
+  readonly code = 'PRACTICE_SESSION_QUESTION_CONTENT_UNAVAILABLE' as const;
+
+  constructor() {
+    super('Practice session question content is unavailable.');
+    this.name = 'PracticeSessionQuestionContentUnavailableError';
+  }
+}

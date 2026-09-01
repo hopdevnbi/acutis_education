@@ -50,7 +50,27 @@ interface PracticeSessionResponseBody {
     questionVersionId: string;
     prompt: string;
     options: Array<{ id: string; deliveredPosition: number }>;
+    attemptState: {
+      attemptCount: number;
+      canRetry: boolean;
+      finalized: boolean;
+      feedbackRevealed: boolean;
+      feedback: { correctOptionIds: string[] } | null;
+    };
   }>;
+  summary: {
+    totalQuestions: number;
+    sessionCompleted: boolean;
+  };
+}
+
+interface PracticeAnswerResponseBody {
+  attemptId: string;
+  isCorrect: boolean;
+  canRetry: boolean;
+  questionFinalized: boolean;
+  sessionCompleted: boolean;
+  feedback: { correctOptionIds: string[] } | null;
 }
 
 describe('Practice API (db e2e)', () => {
@@ -261,20 +281,212 @@ describe('Practice API (db e2e)', () => {
       .expect(403);
   });
 
-  it('does not expose answer submission routes in this phase', async () => {
+  it('returns 401 for unauthenticated answer submission', async () => {
     const createResponse = await request(getTestHttpServer(application))
       .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ questionCount: 1 })
+      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
       .expect(201);
     const created = createResponse.body as PracticeSessionResponseBody;
     const sessionQuestionId = created.questions[0]?.sessionQuestionId ?? generateUuidV4();
 
     await request(getTestHttpServer(application))
       .post(`/api/v1/practice-sessions/${created.id}/questions/${sessionQuestionId}/answers`)
+      .send({
+        clientAnswerId: generateUuidV4(),
+        selectedOptionIds: [created.questions[0]?.options[0]?.id ?? generateUuidV4()],
+      })
+      .expect(401);
+  });
+
+  it('supports linked parent answer submission with feedback gating and retry', async () => {
+    const createResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
       .set('Authorization', `Bearer ${parentToken}`)
-      .send({ selectedOptionIds: [] })
-      .expect(404);
+      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .expect(201);
+    const created = createResponse.body as PracticeSessionResponseBody;
+    const question = created.questions[0];
+
+    if (question === undefined) {
+      throw new Error('Expected one practice question.');
+    }
+
+    const wrongOptionId = question.options[1]?.id ?? question.options[0]?.id;
+
+    const wrongResponse = await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        clientAnswerId: generateUuidV4(),
+        selectedOptionIds: [wrongOptionId],
+      })
+      .expect(201);
+
+    const wrongBody = wrongResponse.body as PracticeAnswerResponseBody;
+    expect(wrongBody.isCorrect).toBe(false);
+    expect(wrongBody.canRetry).toBe(true);
+    expect(wrongBody.feedback).toBeNull();
+
+    const correctOptionId = question.options[0]?.id ?? generateUuidV4();
+    const correctResponse = await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        clientAnswerId: generateUuidV4(),
+        selectedOptionIds: [correctOptionId],
+      })
+      .expect(201);
+
+    const correctBody = correctResponse.body as PracticeAnswerResponseBody;
+    expect(correctBody.isCorrect).toBe(true);
+    expect(correctBody.questionFinalized).toBe(true);
+    expect(correctBody.sessionCompleted).toBe(true);
+    expect(correctBody.feedback).not.toBeNull();
+
+    const getResponse = await request(getTestHttpServer(application))
+      .get(`/api/v1/practice-sessions/${created.id}`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .expect(200);
+
+    const completed = getResponse.body as PracticeSessionResponseBody;
+    expect(completed.status).toBe(PracticeSessionStatus.Completed);
+    expect(completed.summary.sessionCompleted).toBe(true);
+    expect(completed.questions[0]?.attemptState.feedback).not.toBeNull();
+  });
+
+  it('returns 403 for catechist and parish admin answer submission', async () => {
+    const createResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ questionCount: 1 })
+      .expect(201);
+    const created = createResponse.body as PracticeSessionResponseBody;
+    const question = created.questions[0];
+
+    if (question === undefined) {
+      throw new Error('Expected one practice question.');
+    }
+
+    const payload = {
+      clientAnswerId: generateUuidV4(),
+      selectedOptionIds: [question.options[0]?.id ?? generateUuidV4()],
+    };
+
+    await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${catechistToken}`)
+      .send(payload)
+      .expect(403);
+
+    await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(payload)
+      .expect(403);
+  });
+
+  it('replays answer submission with HTTP 200 and rejects id mismatch with 409', async () => {
+    const createResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .expect(201);
+    const created = createResponse.body as PracticeSessionResponseBody;
+    const question = created.questions[0];
+
+    if (question === undefined) {
+      throw new Error('Expected one practice question.');
+    }
+
+    const clientAnswerId = generateUuidV4();
+    const selectedOptionIds = [question.options[0]?.id ?? generateUuidV4()];
+
+    const firstResponse = await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ clientAnswerId, selectedOptionIds })
+      .expect(201);
+
+    const replayResponse = await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ clientAnswerId, selectedOptionIds })
+      .expect(200);
+
+    expect((replayResponse.body as PracticeAnswerResponseBody).attemptId).toBe(
+      (firstResponse.body as PracticeAnswerResponseBody).attemptId,
+    );
+
+    await request(getTestHttpServer(application))
+      .post(
+        `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+      )
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        clientAnswerId,
+        selectedOptionIds: [question.options[1]?.id ?? generateUuidV4()],
+      })
+      .expect(409);
+  });
+
+  it('creates review-wrong session and replays clientRequestId with HTTP 200', async () => {
+    const createResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/enrollments/${enrollmentId}/practice-sessions`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ questionCount: 1, randomizeQuestions: false, randomizeOptions: false })
+      .expect(201);
+    const created = createResponse.body as PracticeSessionResponseBody;
+    const question = created.questions[0];
+
+    if (question === undefined) {
+      throw new Error('Expected one practice question.');
+    }
+
+    const wrongOptionId = question.options[1]?.id ?? question.options[0]?.id;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await request(getTestHttpServer(application))
+        .post(
+          `/api/v1/practice-sessions/${created.id}/questions/${question.sessionQuestionId}/answers`,
+        )
+        .set('Authorization', `Bearer ${parentToken}`)
+        .send({
+          clientAnswerId: generateUuidV4(),
+          selectedOptionIds: [wrongOptionId],
+        })
+        .expect(201);
+    }
+
+    const clientRequestId = generateUuidV4();
+    const reviewResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/practice-sessions/${created.id}/review-wrong`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ clientRequestId })
+      .expect(201);
+
+    const reviewSession = reviewResponse.body as PracticeSessionResponseBody;
+    expect(reviewSession.questions).toHaveLength(1);
+
+    const replayResponse = await request(getTestHttpServer(application))
+      .post(`/api/v1/practice-sessions/${created.id}/review-wrong`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ clientRequestId })
+      .expect(200);
+
+    expect((replayResponse.body as PracticeSessionResponseBody).id).toBe(reviewSession.id);
   });
 
   it('returns 404 when contextual media asset is not referenced by the question', async () => {

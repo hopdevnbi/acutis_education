@@ -69,6 +69,7 @@ import type {
   ListQuestionVersionsInput,
   ListQuestionsInput,
   ListQuestionsResult,
+  PracticeFeedbackSnapshot,
   PublishedQuestionSelectionSnapshot,
   SelectCurrentPublishedQuestionsForPracticeInput,
   QuestionAuthoringSnapshot,
@@ -90,7 +91,9 @@ import { parseQuestionCode } from '../utils/question-code.util';
 import { parseQuestionTagCode } from '../utils/question-tag-code.util';
 import {
   collectQuestionMediaJsonValidationIssues,
+  learnerProjectionReferencesMediaAsset,
   parseOptionalQuestionMediaJson,
+  practiceFeedbackReferencesMediaAsset,
   toPublishValidationIssues,
   validateQuestionMediaJsonAssets,
 } from '../utils/question-media-json.util';
@@ -102,7 +105,6 @@ import {
 import { QuestionGradingService } from './question-grading.service';
 import { QuestionOptionService } from './question-option.service';
 import { QuestionPracticeSelectionService } from './question-practice-selection.service';
-import { learnerProjectionReferencesMediaAsset } from '../utils/question-media-json.util';
 import { QuestionExportService } from './question-export.service';
 import { QuestionImportValidationService } from './question-import-validation.service';
 
@@ -701,6 +703,17 @@ export class QuestionBankService {
     rawAssetId: string,
   ): boolean {
     return learnerProjectionReferencesMediaAsset(projection, rawAssetId);
+  }
+
+  practiceFeedbackReferencesMediaAsset(
+    feedback: PracticeFeedbackSnapshot,
+    rawAssetId: string,
+  ): boolean {
+    return practiceFeedbackReferencesMediaAsset(feedback, rawAssetId);
+  }
+
+  async getPracticeFeedback(rawVersionId: string): Promise<PracticeFeedbackSnapshot> {
+    return this.questionGradingService.getPracticeFeedback(rawVersionId);
   }
 
   async selectCurrentPublishedQuestionsForPractice(
