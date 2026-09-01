@@ -413,6 +413,29 @@ export class CurriculumService {
     }
   }
 
+  async assertCanonicalLessonKeyBelongsToVersion(
+    rawVersionId: string,
+    rawCanonicalLessonKey: string,
+  ): Promise<void> {
+    const versionId = this.parseVersionId(rawVersionId);
+
+    if (!isUuidV4(rawCanonicalLessonKey)) {
+      throw new CanonicalLessonKeyNotInCurriculumError();
+    }
+
+    const canonicalLessonKey = normalizeUuid(rawCanonicalLessonKey);
+    const lessonCount = await this.lessonRepository.count({
+      where: {
+        curriculumVersionId: versionId,
+        canonicalLessonKey,
+      },
+    });
+
+    if (lessonCount === 0) {
+      throw new CanonicalLessonKeyNotInCurriculumError();
+    }
+  }
+
   async assertVersionBelongsToCurriculum(
     rawVersionId: string,
     rawCurriculumId: string,

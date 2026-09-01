@@ -16,6 +16,7 @@ import { CurriculumDeliveryModule } from './modules/curriculum-delivery/curricul
 import { ClassDomainScopeModule } from './modules/enrollment/class-domain-scope.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
+import { LearningProgressModule } from './modules/learning-progress/learning-progress.module';
 import { MediaModule } from './modules/media/media.module';
 import { PracticeModule } from './modules/practice/practice.module';
 import { QuestionBankModule } from './modules/question-bank/question-bank.module';
@@ -55,6 +56,7 @@ export class AppModule {
         MediaModule,
         QuestionBankModule,
         PracticeModule,
+        LearningProgressModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),
       ],

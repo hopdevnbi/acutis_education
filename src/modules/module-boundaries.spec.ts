@@ -38,6 +38,8 @@ import { MediaModule } from './media/media.module';
 import { MediaAssetService } from './media/services/media-asset.service';
 import { PracticeModule } from './practice/practice.module';
 import { PracticeService } from './practice/services/practice.service';
+import { LearningProgressModule } from './learning-progress/learning-progress.module';
+import { LearningProgressService } from './learning-progress/services/learning-progress.service';
 import { QuestionBankModule } from './question-bank/question-bank.module';
 import { QuestionBankService } from './question-bank/services/question-bank.service';
 import { StudentAccessService } from './student/services/student-access.service';
@@ -187,6 +189,14 @@ describe('Auth module persistence boundaries', () => {
 
     expect(exports).toHaveLength(1);
     expect(exports).toContain(PracticeService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports LearningProgressService only from LearningProgressModule', () => {
+    const exports = resolveModuleExports(LearningProgressModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(LearningProgressService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
