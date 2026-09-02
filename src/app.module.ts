@@ -20,6 +20,7 @@ import { LearningProgressModule } from './modules/learning-progress/learning-pro
 import { LocalizationModule } from './modules/localization/localization.module';
 import { MediaModule } from './modules/media/media.module';
 import { PracticeModule } from './modules/practice/practice.module';
+import { ExamModule } from './modules/exam/exam.module';
 import { QuestionBankModule } from './modules/question-bank/question-bank.module';
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
@@ -57,6 +58,7 @@ export class AppModule {
         MediaModule,
         QuestionBankModule,
         PracticeModule,
+        ExamModule,
         LearningProgressModule,
         LocalizationModule,
         ClassDomainScopeModule,

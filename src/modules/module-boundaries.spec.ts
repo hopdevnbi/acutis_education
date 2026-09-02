@@ -37,7 +37,9 @@ import { LearningContentService } from './learning-content/services/learning-con
 import { MediaModule } from './media/media.module';
 import { MediaAssetService } from './media/services/media-asset.service';
 import { PracticeModule } from './practice/practice.module';
+import { ExamModule } from './exam/exam.module';
 import { PracticeService } from './practice/services/practice.service';
+import { ExamService } from './exam/services/exam.service';
 import { LearningProgressModule } from './learning-progress/learning-progress.module';
 import { LearningProgressService } from './learning-progress/services/learning-progress.service';
 import { LocalizationModule } from './localization/localization.module';
@@ -197,6 +199,14 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
+  it('exports ExamService only from ExamModule', () => {
+    const exports = resolveModuleExports(ExamModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(ExamService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
   it('exports LearningProgressService only from LearningProgressModule', () => {
     const exports = resolveModuleExports(LearningProgressModule);
 
@@ -221,6 +231,13 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).not.toContain(EnrollmentModule);
   });
 
+  it('does not import PracticeModule from ExamModule', () => {
+    const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, ExamModule);
+
+    expect(Array.isArray(imports)).toBe(true);
+    expect(imports).not.toContain(PracticeModule);
+  });
+
   it('does not use forwardRef in class-domain module definitions', () => {
     const modulePaths = [
       join(__dirname, 'student/student.module.ts'),
@@ -230,6 +247,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'curriculum-orchestration/curriculum-orchestration.module.ts'),
       join(__dirname, 'curriculum-delivery/curriculum-delivery.module.ts'),
       join(__dirname, 'localization/localization.module.ts'),
+      join(__dirname, 'exam/exam.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {
