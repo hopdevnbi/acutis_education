@@ -42,6 +42,8 @@ import { PracticeService } from './practice/services/practice.service';
 import { ExamService } from './exam/services/exam.service';
 import { LearningProgressModule } from './learning-progress/learning-progress.module';
 import { LearningProgressService } from './learning-progress/services/learning-progress.service';
+import { FamilyPortalModule } from './family-portal/family-portal.module';
+import { FamilyPortalService } from './family-portal/family-portal.service';
 import { LocalizationModule } from './localization/localization.module';
 import { LocalizationService } from './localization/services/localization.service';
 import { LocaleResolutionService } from './localization/services/locale-resolution.service';
@@ -213,6 +215,22 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).toHaveLength(1);
     expect(exports).toContain(LearningProgressService);
     expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('exports FamilyPortalService only from FamilyPortalModule', () => {
+    const exports = resolveModuleExports(FamilyPortalModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(FamilyPortalService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('does not import EnrollmentModule from FamilyPortalModule', () => {
+    const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, FamilyPortalModule);
+
+    expect(Array.isArray(imports)).toBe(true);
+    expect(imports).toContain(EnrollmentModule);
+    expect(imports).not.toContain(TypeOrmModule);
   });
 
   it('exports LocalizationService and LocaleResolutionService only from LocalizationModule', () => {

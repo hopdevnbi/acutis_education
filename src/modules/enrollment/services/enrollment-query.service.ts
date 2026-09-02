@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { EnrollmentEntity } from '../entities/enrollment.entity';
 import { EnrollmentStatus } from '../enums/enrollment-status.enum';
@@ -8,6 +8,8 @@ import type {
   ListParishEnrollmentStudentsInput,
   ListParishEnrollmentStudentsResult,
 } from '../interfaces/enrollment-query.interface';
+import type { EnrollmentSnapshot } from '../interfaces/enrollment.interface';
+import { toEnrollmentSnapshot } from '../mappers/enrollment.mapper';
 
 function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
@@ -217,6 +219,79 @@ export class EnrollmentQueryService {
       .getCount();
 
     return count > 0;
+  }
+
+  async getEnrollmentSnapshotsByIds(
+    rawEnrollmentIds: readonly string[],
+  ): Promise<EnrollmentSnapshot[]> {
+    const uniqueEnrollmentIds = [
+      ...new Set(
+        rawEnrollmentIds.filter(isUuidV4).map((enrollmentId) => normalizeUuid(enrollmentId)),
+      ),
+    ];
+
+    if (uniqueEnrollmentIds.length === 0) {
+      return [];
+    }
+
+    const enrollmentEntities = await this.enrollmentRepository.find({
+      where: { id: In(uniqueEnrollmentIds) },
+    });
+    const snapshotsById = new Map(
+      enrollmentEntities.map((enrollmentEntity) => [
+        normalizeUuid(enrollmentEntity.id),
+        toEnrollmentSnapshot(enrollmentEntity),
+      ]),
+    );
+
+    return uniqueEnrollmentIds
+      .map((enrollmentId) => snapshotsById.get(enrollmentId))
+      .filter((snapshot): snapshot is EnrollmentSnapshot => snapshot !== undefined);
+  }
+
+  async countActiveEnrollmentsByClassIds(
+    rawClassIds: readonly string[],
+  ): Promise<Map<string, number>> {
+    const uniqueClassIds = [
+      ...new Set(rawClassIds.filter(isUuidV4).map((classId) => normalizeUuid(classId))),
+    ];
+
+    if (uniqueClassIds.length === 0) {
+      return new Map();
+    }
+
+    const countRows = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .select('enrollment.classId', 'classId')
+      .addSelect('COUNT(*)', 'count')
+      .where('enrollment.classId IN (:...classIds)', { classIds: uniqueClassIds })
+      .andWhere('enrollment.status = :status', { status: EnrollmentStatus.Active })
+      .groupBy('enrollment.classId')
+      .getRawMany<{ classId: string; count: string }>();
+
+    return new Map(countRows.map((row) => [normalizeUuid(row.classId), Number(row.count ?? 0)]));
+  }
+
+  async listActiveEnrollmentsByStudentIds(
+    rawStudentIds: readonly string[],
+  ): Promise<EnrollmentSnapshot[]> {
+    const uniqueStudentIds = [
+      ...new Set(rawStudentIds.filter(isUuidV4).map((studentId) => normalizeUuid(studentId))),
+    ];
+
+    if (uniqueStudentIds.length === 0) {
+      return [];
+    }
+
+    const enrollmentEntities = await this.enrollmentRepository.find({
+      where: {
+        studentId: In(uniqueStudentIds),
+        status: EnrollmentStatus.Active,
+      },
+      order: { enrolledAt: 'DESC' },
+    });
+
+    return enrollmentEntities.map((enrollmentEntity) => toEnrollmentSnapshot(enrollmentEntity));
   }
 
   private applyEnrollmentFilters(

@@ -24,6 +24,7 @@ import { ExamModule } from './modules/exam/exam.module';
 import { QuestionBankModule } from './modules/question-bank/question-bank.module';
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
+import { FamilyPortalModule } from './modules/family-portal/family-portal.module';
 import { UsersModule } from './modules/users/users.module';
 
 export interface AppModuleOptions {
@@ -60,6 +61,7 @@ export class AppModule {
         PracticeModule,
         ExamModule,
         LearningProgressModule,
+        FamilyPortalModule,
         LocalizationModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { isUniqueConstraintViolation } from '../../academic-structure/utils/unique-constraint.util';
 import { ParishService } from '../../parish/services/parish.service';
+import type { EnrollmentSnapshot } from '../../enrollment/interfaces/enrollment.interface';
+import { EnrollmentQueryService } from '../../enrollment/services/enrollment-query.service';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { QuestionStatus } from '../../question-bank/enums/question-status.enum';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
@@ -86,31 +88,125 @@ export class ExamService {
     private readonly examAttemptRepository: Repository<ExamAttemptEntity>,
     private readonly parishService: ParishService,
     private readonly enrollmentService: EnrollmentService,
+    private readonly enrollmentQueryService: EnrollmentQueryService,
     private readonly questionBankService: QuestionBankService,
   ) {}
 
   async getEnrollmentExamSummary(rawEnrollmentId: string): Promise<EnrollmentExamSummarySnapshot> {
     const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
-    const assignmentsAvailable = await this.examAssignmentRepository.count({
-      where: [
-        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Scheduled },
-        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Open },
-        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Closed },
-      ],
-    });
+    const summaries = await this.buildEnrollmentExamSummaries([enrollment]);
+
+    return summaries.get(enrollment.id)!;
+  }
+
+  async getEnrollmentExamSummariesByEnrollmentIds(
+    rawEnrollmentIds: readonly string[],
+  ): Promise<Map<string, EnrollmentExamSummarySnapshot>> {
+    const enrollments =
+      await this.enrollmentQueryService.getEnrollmentSnapshotsByIds(rawEnrollmentIds);
+
+    return this.buildEnrollmentExamSummaries(enrollments);
+  }
+
+  private async buildEnrollmentExamSummaries(
+    enrollments: readonly EnrollmentSnapshot[],
+  ): Promise<Map<string, EnrollmentExamSummarySnapshot>> {
+    const summaries = new Map<string, EnrollmentExamSummarySnapshot>();
+
+    if (enrollments.length === 0) {
+      return summaries;
+    }
+
+    const enrollmentIds = enrollments.map((enrollment) => enrollment.id);
+    const classIds = [...new Set(enrollments.map((enrollment) => enrollment.classId))];
+    const [assignmentCountsByClassId, gradedAttemptStatsByEnrollmentId] = await Promise.all([
+      this.countExamAssignmentsByClassIds(classIds),
+      this.getGradedAttemptStatsByEnrollmentIds(enrollmentIds),
+    ]);
+
+    for (const enrollment of enrollments) {
+      const gradedAttemptStats = gradedAttemptStatsByEnrollmentId.get(enrollment.id);
+
+      summaries.set(enrollment.id, {
+        assignmentsAvailable: assignmentCountsByClassId.get(enrollment.classId) ?? 0,
+        attemptsCompleted: gradedAttemptStats?.attemptsCompleted ?? 0,
+        latestScorePercent: gradedAttemptStats?.latestScorePercent ?? null,
+      });
+    }
+
+    return summaries;
+  }
+
+  private async countExamAssignmentsByClassIds(
+    rawClassIds: readonly string[],
+  ): Promise<Map<string, number>> {
+    const uniqueClassIds = [
+      ...new Set(rawClassIds.filter(isUuidV4).map((classId) => normalizeUuid(classId))),
+    ];
+
+    if (uniqueClassIds.length === 0) {
+      return new Map();
+    }
+
+    const countRows = await this.examAssignmentRepository
+      .createQueryBuilder('assignment')
+      .select('assignment.classId', 'classId')
+      .addSelect('COUNT(*)', 'count')
+      .where('assignment.classId IN (:...classIds)', { classIds: uniqueClassIds })
+      .andWhere('assignment.status IN (:...statuses)', {
+        statuses: [
+          ExamAssignmentStatus.Scheduled,
+          ExamAssignmentStatus.Open,
+          ExamAssignmentStatus.Closed,
+        ],
+      })
+      .groupBy('assignment.classId')
+      .getRawMany<{ classId: string; count: string }>();
+
+    return new Map(countRows.map((row) => [normalizeUuid(row.classId), Number(row.count ?? 0)]));
+  }
+
+  private async getGradedAttemptStatsByEnrollmentIds(
+    rawEnrollmentIds: readonly string[],
+  ): Promise<Map<string, { attemptsCompleted: number; latestScorePercent: string | null }>> {
+    const uniqueEnrollmentIds = [
+      ...new Set(
+        rawEnrollmentIds.filter(isUuidV4).map((enrollmentId) => normalizeUuid(enrollmentId)),
+      ),
+    ];
+
+    if (uniqueEnrollmentIds.length === 0) {
+      return new Map();
+    }
+
     const gradedAttempts = await this.examAttemptRepository.find({
       where: {
-        enrollmentId: normalizeUuid(enrollment.id),
+        enrollmentId: In(uniqueEnrollmentIds),
         status: ExamAttemptStatus.Graded,
       },
       order: { gradedAt: 'DESC' },
     });
+    const statsByEnrollmentId = new Map<
+      string,
+      { attemptsCompleted: number; latestScorePercent: string | null }
+    >();
 
-    return {
-      assignmentsAvailable,
-      attemptsCompleted: gradedAttempts.length,
-      latestScorePercent: gradedAttempts[0]?.scorePercent ?? null,
-    };
+    for (const attempt of gradedAttempts) {
+      const enrollmentId = normalizeUuid(attempt.enrollmentId);
+      const existingStats = statsByEnrollmentId.get(enrollmentId);
+
+      if (existingStats === undefined) {
+        statsByEnrollmentId.set(enrollmentId, {
+          attemptsCompleted: 1,
+          latestScorePercent: attempt.scorePercent ?? null,
+        });
+        continue;
+      }
+
+      existingStats.attemptsCompleted += 1;
+    }
+
+    return statsByEnrollmentId;
   }
 
   async createExam(rawParishId: string, input: CreateExamInput): Promise<ExamSnapshot> {

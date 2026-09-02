@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, In, QueryFailedError, Repository, SelectQueryBuilder } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { AcademicYearStatus } from '../../academic-structure/enums/academic-year-status.enum';
 import { AcademicYearService } from '../../academic-structure/services/academic-year.service';
@@ -96,6 +96,30 @@ export class ClassService {
     const classEntity = await this.findClassEntity(rawClassId);
 
     return toClassSnapshot(classEntity);
+  }
+
+  async getClassSnapshotsByIds(rawClassIds: readonly string[]): Promise<ClassSnapshot[]> {
+    const uniqueClassIds = [
+      ...new Set(rawClassIds.filter(isUuidV4).map((classId) => normalizeUuid(classId))),
+    ];
+
+    if (uniqueClassIds.length === 0) {
+      return [];
+    }
+
+    const classEntities = await this.classRepository.find({
+      where: { id: In(uniqueClassIds) },
+    });
+    const snapshotsById = new Map(
+      classEntities.map((classEntity) => [
+        normalizeUuid(classEntity.id),
+        toClassSnapshot(classEntity),
+      ]),
+    );
+
+    return uniqueClassIds
+      .map((classId) => snapshotsById.get(classId))
+      .filter((snapshot): snapshot is ClassSnapshot => snapshot !== undefined);
   }
 
   async getClassSnapshotForEnrollment(rawClassId: string): Promise<ClassSnapshot> {
