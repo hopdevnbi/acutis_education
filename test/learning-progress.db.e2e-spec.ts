@@ -64,7 +64,11 @@ interface EnrollmentLearningProgressResponseBody {
     review: { sessionsCompleted: number };
     lastPracticedAt: string | null;
   };
-  exam: null;
+  exam: {
+    assignmentsAvailable: number;
+    attemptsCompleted: number;
+    latestScorePercent: string | null;
+  };
   lastLearningActivityAt: string | null;
 }
 
@@ -233,7 +237,8 @@ describe('Learning progress API (db e2e)', () => {
     expect(
       aggregate.lessons.some((lesson) => lesson.status === LessonProgressStatus.InProgress),
     ).toBe(true);
-    expect(aggregate.exam).toBeNull();
+    expect(aggregate.exam.assignmentsAvailable).toBeGreaterThanOrEqual(0);
+    expect(aggregate.exam.attemptsCompleted).toBeGreaterThanOrEqual(0);
     expect(aggregate.practice).toBeDefined();
     expect(JSON.stringify(aggregate)).not.toContain('selectedOptionIds');
     expect(JSON.stringify(aggregate)).not.toContain('correctOptionIds');

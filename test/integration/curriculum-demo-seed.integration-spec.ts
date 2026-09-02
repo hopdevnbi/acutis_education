@@ -29,6 +29,7 @@ import { LearningContentService } from '../../src/modules/learning-content/servi
 import { EnrollmentService } from '../../src/modules/enrollment/services/enrollment.service';
 import { ParishService } from '../../src/modules/parish/services/parish.service';
 import { StudentService } from '../../src/modules/student/services/student.service';
+import { deleteExamEngineRowsForParishCode } from './helpers/delete-exam-engine-rows-for-parish-code.util';
 
 describe('CurriculumDemoSeedService integration (MSSQL)', () => {
   let moduleRef: TestingModule;
@@ -76,6 +77,7 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
   });
 
   afterEach(async () => {
+    await deleteExamEngineRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
     await AppDataSource.query(`
       DELETE FROM curriculum_assignments
       WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')
@@ -141,6 +143,7 @@ describe('CurriculumDemoSeedService integration (MSSQL)', () => {
   });
 
   it('refuses to run when parish-academic prerequisites are missing', async () => {
+    await deleteExamEngineRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
     await AppDataSource.query(`
       DELETE FROM curriculum_assignments
       WHERE parish_id IN (SELECT id FROM parishes WHERE code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}')

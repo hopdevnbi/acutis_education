@@ -16,6 +16,7 @@ import { AcademicYearStatus } from '../../src/modules/academic-structure/enums/a
 import { AcademicYearService } from '../../src/modules/academic-structure/services/academic-year.service';
 import { CatechismLevelService } from '../../src/modules/academic-structure/services/catechism-level.service';
 import { ParishService } from '../../src/modules/parish/services/parish.service';
+import { deleteExamEngineRowsForParishCode } from './helpers/delete-exam-engine-rows-for-parish-code.util';
 
 describe('ParishAcademicSeedService integration (MSSQL)', () => {
   let moduleRef: TestingModule;
@@ -44,6 +45,7 @@ describe('ParishAcademicSeedService integration (MSSQL)', () => {
   });
 
   async function cleanupDemoParishState(): Promise<void> {
+    await deleteExamEngineRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
     await AppDataSource.query(`
       DELETE FROM practice_sessions
       WHERE enrollment_id IN (

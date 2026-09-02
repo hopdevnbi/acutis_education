@@ -14,6 +14,7 @@ import {
 } from '../../src/database/seeds/seed-environment.guard';
 import { AccessControlService } from '../../src/modules/access-control/services/access-control.service';
 import { UserAccountService } from '../../src/modules/users/services/user-account.service';
+import { cleanupAuthRbacSeedDomainDependencies } from './helpers/cleanup-auth-rbac-seed-domain-dependencies.util';
 
 const SEED_ROLE_CODES = AUTH_RBAC_SEED_ROLES.map((role) => `'${role.code}'`).join(', ');
 const SEED_PERMISSION_CODES = AUTH_RBAC_SEED_PERMISSIONS.map(
@@ -45,6 +46,7 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
   });
 
   afterEach(async () => {
+    await cleanupAuthRbacSeedDomainDependencies(AppDataSource, AUTH_RBAC_SAMPLE_DOMAIN);
     await AppDataSource.query(`
       DELETE FROM media_assets
       WHERE created_by_user_id IN (
@@ -77,10 +79,6 @@ describe('AuthRbacSeedService integration (MSSQL)', () => {
       WHERE assigned_by_user_id IN (
         SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
       )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM enrollments
-      WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'Demo Student%')
     `);
     await AppDataSource.query(`
       DELETE FROM class_catechist_assignments

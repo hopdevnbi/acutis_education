@@ -16,6 +16,7 @@ import { QuestionBankDemoSeedModule } from '../../src/database/seeds/question-ba
 import { QuestionBankDemoSeedService } from '../../src/database/seeds/question-bank-demo.seed.service';
 import { ExamVersionStatus } from '../../src/modules/exam/enums/exam-version-status.enum';
 import { ExamService } from '../../src/modules/exam/services/exam.service';
+import { deleteExamEngineRowsForParishCode } from './helpers/delete-exam-engine-rows-for-parish-code.util';
 
 describe('ExamDemoSeedService integration (MSSQL)', () => {
   let moduleRef: TestingModule;
@@ -67,67 +68,11 @@ describe('ExamDemoSeedService integration (MSSQL)', () => {
   });
 
   async function cleanupExamDemoState(): Promise<void> {
-    await AppDataSource.query(`
-      DELETE FROM exam_attempt_answers
-      WHERE exam_attempt_question_id IN (
-        SELECT eaq.id FROM exam_attempt_questions eaq
-        INNER JOIN exam_attempts ea ON ea.id = eaq.exam_attempt_id
-        INNER JOIN exams e ON e.id = ea.exam_id
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exam_attempt_questions
-      WHERE exam_attempt_id IN (
-        SELECT ea.id FROM exam_attempts ea
-        INNER JOIN exams e ON e.id = ea.exam_id
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exam_attempts
-      WHERE exam_id IN (
-        SELECT e.id FROM exams e
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exam_assignments
-      WHERE exam_version_id IN (
-        SELECT ev.id FROM exam_versions ev
-        INNER JOIN exams e ON e.id = ev.exam_id
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exam_version_questions
-      WHERE exam_version_id IN (
-        SELECT ev.id FROM exam_versions ev
-        INNER JOIN exams e ON e.id = ev.exam_id
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exam_versions
-      WHERE exam_id IN (
-        SELECT e.id FROM exams e
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM exams
-      WHERE id IN (
-        SELECT e.id FROM exams e
-        INNER JOIN parishes p ON p.id = e.parish_id
-        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}' AND e.code = '${EXAM_DEMO_CODE}'
-      )
-    `);
+    await deleteExamEngineRowsForParishCode(
+      AppDataSource,
+      PARISH_ACADEMIC_SAMPLE_PARISH_CODE,
+      EXAM_DEMO_CODE,
+    );
   }
 
   it('creates demo exam, published version, and open assignment', async () => {

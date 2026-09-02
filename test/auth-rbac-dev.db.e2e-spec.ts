@@ -12,6 +12,7 @@ import {
 import { Test, type TestingModule } from '@nestjs/testing';
 import { createDatabaseTestApplication } from './create-database-test-application';
 import { getTestHttpServer } from './get-test-http-server';
+import { cleanupAuthRbacSeedDomainDependencies } from './integration/helpers/cleanup-auth-rbac-seed-domain-dependencies.util';
 
 const SEED_ROLE_CODES = AUTH_RBAC_SEED_ROLES.map((role) => `'${role.code}'`).join(', ');
 const SEED_PERMISSION_CODES = AUTH_RBAC_SEED_PERMISSIONS.map(
@@ -44,6 +45,8 @@ describe('Dev RBAC endpoints with seeded accounts (db e2e)', () => {
     if (!AppDataSource.isInitialized) {
       await AppDataSource.initialize();
     }
+
+    await cleanupAuthRbacSeedDomainDependencies(AppDataSource, AUTH_RBAC_SAMPLE_DOMAIN);
 
     await AppDataSource.query(`
       DELETE FROM auth_sessions
@@ -110,10 +113,6 @@ describe('Dev RBAC endpoints with seeded accounts (db e2e)', () => {
       WHERE submitted_by_user_id IN (
         SELECT id FROM users WHERE email LIKE '%@${AUTH_RBAC_SAMPLE_DOMAIN}'
       )
-    `);
-    await AppDataSource.query(`
-      DELETE FROM enrollments
-      WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE 'Demo Student%')
     `);
     await AppDataSource.query(`
       DELETE FROM class_catechist_assignments
