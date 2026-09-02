@@ -355,6 +355,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'practice.manage',
     'learning-progress.read',
     'learning-progress.manage',
+    'exam.result.read',
   ],
   STUDENT: [
     'learner.self.read',
@@ -362,6 +363,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'lesson-content.read',
     'learning-progress.read',
     'exam.attempt',
+    'exam.result.read',
   ],
 };
 

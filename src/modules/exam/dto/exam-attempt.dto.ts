@@ -96,6 +96,35 @@ export class SaveExamAnswerRequestDto {
   selectedOptionIds!: string[];
 }
 
+export class ExamAttemptQuestionReviewResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  examAttemptQuestionId!: string;
+
+  @ApiProperty()
+  sortOrder!: number;
+
+  @ApiProperty()
+  prompt!: string;
+
+  @ApiProperty()
+  questionType!: string;
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  selectedOptionIds!: string[];
+
+  @ApiPropertyOptional({ nullable: true })
+  isCorrect!: boolean | null;
+
+  @ApiPropertyOptional({ type: [String], format: 'uuid', nullable: true })
+  correctOptionIds!: string[] | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  explanation!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  explanationMediaJson!: string | null;
+}
+
 export class ExamAttemptResultResponseDto {
   @ApiPropertyOptional({ nullable: true })
   correctCount!: number | null;
@@ -108,6 +137,90 @@ export class ExamAttemptResultResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   autoSubmitReason!: string | null;
+
+  @ApiPropertyOptional({ type: [ExamAttemptQuestionReviewResponseDto], nullable: true })
+  questions!: ExamAttemptQuestionReviewResponseDto[] | null;
+}
+
+export class ExamAttemptResultReadResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examAssignmentId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  enrollmentId!: string;
+
+  @ApiProperty()
+  attemptNumber!: number;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examVersionId!: string;
+
+  @ApiProperty()
+  examTitleDelivered!: string;
+
+  @ApiProperty()
+  deliveredLocale!: string;
+
+  @ApiProperty()
+  startedAt!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  submittedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  gradedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  questionCount!: number | null;
+
+  @ApiPropertyOptional({ type: ExamAttemptResultResponseDto, nullable: true })
+  result!: ExamAttemptResultResponseDto | null;
+}
+
+export class ExamAssignmentAttemptSummaryResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  attemptId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  enrollmentId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  studentId!: string;
+
+  @ApiProperty()
+  attemptNumber!: number;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  submittedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  gradedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  scorePercent!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  passed!: boolean | null;
+}
+
+export class ExamAssignmentAttemptSummaryListResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  examAssignmentId!: string;
+
+  @ApiProperty({ type: [ExamAssignmentAttemptSummaryResponseDto] })
+  items!: ExamAssignmentAttemptSummaryResponseDto[];
 }
 
 export class ExamAttemptResponseDto {

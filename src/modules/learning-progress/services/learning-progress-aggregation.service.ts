@@ -8,6 +8,7 @@ import { EnrollmentStatus } from '../../enrollment/enums/enrollment-status.enum'
 import type { EnrollmentSnapshot } from '../../enrollment/interfaces/enrollment.interface';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { PracticeService } from '../../practice/services/practice.service';
+import { ExamService } from '../../exam/services/exam.service';
 import {
   LEARNING_PROGRESS_DEFAULT_LIMIT,
   LEARNING_PROGRESS_DEFAULT_PAGE,
@@ -66,6 +67,7 @@ export class LearningProgressAggregationService {
     private readonly classService: ClassService,
     private readonly curriculumService: CurriculumService,
     private readonly practiceService: PracticeService,
+    private readonly examService: ExamService,
     private readonly learningProgressAccessService: LearningProgressAccessService,
   ) {}
 
@@ -98,6 +100,7 @@ export class LearningProgressAggregationService {
       canonicalLessonKey: filters.canonicalLessonKey ?? undefined,
     });
     const practice = this.toLearningPracticeSnapshot(practiceSnapshot);
+    const exam = await this.examService.getEnrollmentExamSummary(enrollment.id);
     const lastLessonActivityAt = this.resolveLatestLessonActivityAt(progressRows, scopedKeys);
 
     return {
@@ -106,7 +109,7 @@ export class LearningProgressAggregationService {
       learning,
       lessons,
       practice,
-      exam: null,
+      exam,
       lastLearningActivityAt: this.resolveLastLearningActivityAt(
         lastLessonActivityAt,
         practice.lastPracticedAt,

@@ -34,6 +34,7 @@ import {
   ExamNotFoundError,
   ExamPublishValidationError,
   ExamQuestionParishMismatchError,
+  ExamReviewNotAvailableError,
   ExamSourceLocaleImmutableError,
   ExamUpdateRequiresFieldsError,
   ExamVersionExamMismatchError,
@@ -266,6 +267,10 @@ export function rethrowExamServiceError(error: unknown): never {
   }
 
   if (error instanceof ExamAccessDeniedError) {
+    throw new ForbiddenException(error.message);
+  }
+
+  if (error instanceof ExamReviewNotAvailableError) {
     throw new ForbiddenException(error.message);
   }
 

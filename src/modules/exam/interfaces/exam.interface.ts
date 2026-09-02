@@ -148,6 +148,12 @@ export interface ListExamAssignmentsResult {
   readonly totalPages: number;
 }
 
+export interface EnrollmentExamSummarySnapshot {
+  readonly assignmentsAvailable: number;
+  readonly attemptsCompleted: number;
+  readonly latestScorePercent: string | null;
+}
+
 export interface ExamPublishValidationIssue {
   readonly code: string;
   readonly message: string;

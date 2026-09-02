@@ -7,6 +7,7 @@ import type {
   EnrollmentLearningProgressSnapshot,
   EnrollmentLessonStateSnapshot,
   LearningDimensionMetrics,
+  LearningProgressExamSnapshot,
   LearningProgressFilters,
   LearningProgressPracticeSnapshot,
 } from '../interfaces/learning-progress.interface';
@@ -105,6 +106,17 @@ export class LearningProgressPracticeReviewMetricsDto {
   uniqueQuestionVersionsReviewed!: number;
 }
 
+export class LearningProgressExamResponseDto {
+  @ApiProperty()
+  assignmentsAvailable!: number;
+
+  @ApiProperty()
+  attemptsCompleted!: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  latestScorePercent!: string | null;
+}
+
 export class LearningProgressPracticeResponseDto {
   @ApiProperty({ type: LearningProgressPracticeStandardMetricsDto })
   standard!: LearningProgressPracticeStandardMetricsDto;
@@ -158,8 +170,8 @@ export class EnrollmentLearningProgressResponseDto {
   @ApiProperty({ type: LearningProgressPracticeResponseDto })
   practice!: LearningProgressPracticeResponseDto;
 
-  @ApiProperty({ type: 'null', nullable: true, description: 'Reserved for future Exam dimension.' })
-  exam!: null;
+  @ApiProperty({ type: LearningProgressExamResponseDto })
+  exam!: LearningProgressExamResponseDto;
 
   @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
   lastLearningActivityAt!: string | null;
@@ -251,6 +263,14 @@ function toFiltersDto(filters: LearningProgressFilters): LearningProgressFilters
   };
 }
 
+function toExamDto(exam: LearningProgressExamSnapshot): LearningProgressExamResponseDto {
+  return {
+    assignmentsAvailable: exam.assignmentsAvailable,
+    attemptsCompleted: exam.attemptsCompleted,
+    latestScorePercent: exam.latestScorePercent,
+  };
+}
+
 function toPracticeDto(
   practice: LearningProgressPracticeSnapshot,
 ): LearningProgressPracticeResponseDto {
@@ -298,7 +318,7 @@ export function toEnrollmentLearningProgressResponseDto(
     learning: toLearningMetricsDto(snapshot.learning),
     lessons: snapshot.lessons.map(toLessonStateDto),
     practice: toPracticeDto(snapshot.practice),
-    exam: null,
+    exam: toExamDto(snapshot.exam),
     lastLearningActivityAt: toIsoString(snapshot.lastLearningActivityAt),
   };
 }

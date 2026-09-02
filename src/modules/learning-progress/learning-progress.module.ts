@@ -7,6 +7,7 @@ import { CurriculumModule } from '../curriculum/curriculum.module';
 import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { ParishModule } from '../parish/parish.module';
 import { PracticeModule } from '../practice/practice.module';
+import { ExamModule } from '../exam/exam.module';
 import { StudentModule } from '../student/student.module';
 import { LearningProgressController } from './controllers/learning-progress.controller';
 import { LessonProgressEntity } from './entities/lesson-progress.entity';
@@ -24,6 +25,7 @@ import { LessonProgressService } from './services/lesson-progress.service';
     StudentModule,
     ParishModule,
     PracticeModule,
+    ExamModule,
     AuthModule,
     AccessControlModule,
   ],

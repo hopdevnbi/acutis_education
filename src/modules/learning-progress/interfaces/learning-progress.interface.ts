@@ -47,13 +47,19 @@ export interface LearningProgressPracticeSnapshot {
   readonly lastPracticedAt: Date | null;
 }
 
+export interface LearningProgressExamSnapshot {
+  readonly assignmentsAvailable: number;
+  readonly attemptsCompleted: number;
+  readonly latestScorePercent: string | null;
+}
+
 export interface EnrollmentLearningProgressSnapshot {
   readonly enrollmentId: string;
   readonly filters: LearningProgressFilters;
   readonly learning: LearningDimensionMetrics;
   readonly lessons: readonly EnrollmentLessonStateSnapshot[];
   readonly practice: LearningProgressPracticeSnapshot;
-  readonly exam: null;
+  readonly exam: LearningProgressExamSnapshot;
   readonly lastLearningActivityAt: Date | null;
 }
 

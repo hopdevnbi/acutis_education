@@ -4,14 +4,19 @@ import { EntityManager, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { isUniqueConstraintViolation } from '../../academic-structure/utils/unique-constraint.util';
 import { ParishService } from '../../parish/services/parish.service';
+import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { QuestionStatus } from '../../question-bank/enums/question-status.enum';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
 import { DEFAULT_EXAM_REVIEW_POLICY } from '../constants/exam-review-policy.constants';
 import { ExamVersionQuestionEntity } from '../entities/exam-version-question.entity';
 import { ExamVersionEntity } from '../entities/exam-version.entity';
 import { ExamEntity } from '../entities/exam.entity';
+import { ExamAssignmentEntity } from '../entities/exam-assignment.entity';
+import { ExamAttemptEntity } from '../entities/exam-attempt.entity';
 import { ExamStatus } from '../enums/exam-status.enum';
 import { ExamVersionStatus } from '../enums/exam-version-status.enum';
+import { ExamAssignmentStatus } from '../enums/exam-assignment-status.enum';
+import { ExamAttemptStatus } from '../enums/exam-attempt-status.enum';
 import {
   ExamCodeAlreadyExistsError,
   ExamDraftAlreadyExistsError,
@@ -36,6 +41,7 @@ import {
 import type {
   CreateExamInput,
   CreateExamVersionInput,
+  EnrollmentExamSummarySnapshot,
   ExamPublishValidationIssue,
   ExamSnapshot,
   ExamVersionQuestionSnapshot,
@@ -74,9 +80,38 @@ export class ExamService {
     private readonly examVersionRepository: Repository<ExamVersionEntity>,
     @InjectRepository(ExamVersionQuestionEntity)
     private readonly examVersionQuestionRepository: Repository<ExamVersionQuestionEntity>,
+    @InjectRepository(ExamAssignmentEntity)
+    private readonly examAssignmentRepository: Repository<ExamAssignmentEntity>,
+    @InjectRepository(ExamAttemptEntity)
+    private readonly examAttemptRepository: Repository<ExamAttemptEntity>,
     private readonly parishService: ParishService,
+    private readonly enrollmentService: EnrollmentService,
     private readonly questionBankService: QuestionBankService,
   ) {}
+
+  async getEnrollmentExamSummary(rawEnrollmentId: string): Promise<EnrollmentExamSummarySnapshot> {
+    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
+    const assignmentsAvailable = await this.examAssignmentRepository.count({
+      where: [
+        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Scheduled },
+        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Open },
+        { classId: normalizeUuid(enrollment.classId), status: ExamAssignmentStatus.Closed },
+      ],
+    });
+    const gradedAttempts = await this.examAttemptRepository.find({
+      where: {
+        enrollmentId: normalizeUuid(enrollment.id),
+        status: ExamAttemptStatus.Graded,
+      },
+      order: { gradedAt: 'DESC' },
+    });
+
+    return {
+      assignmentsAvailable,
+      attemptsCompleted: gradedAttempts.length,
+      latestScorePercent: gradedAttempts[0]?.scorePercent ?? null,
+    };
+  }
 
   async createExam(rawParishId: string, input: CreateExamInput): Promise<ExamSnapshot> {
     const parishSnapshot = await this.parishService.assertParishActive(rawParishId);

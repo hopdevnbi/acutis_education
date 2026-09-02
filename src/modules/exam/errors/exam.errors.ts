@@ -328,3 +328,10 @@ export class InvalidExamAttemptQuestionIdError extends Error {
     this.name = 'InvalidExamAttemptQuestionIdError';
   }
 }
+
+export class ExamReviewNotAvailableError extends Error {
+  constructor() {
+    super('Exam review is not available for this attempt.');
+    this.name = 'ExamReviewNotAvailableError';
+  }
+}

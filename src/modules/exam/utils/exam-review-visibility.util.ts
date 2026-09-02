@@ -22,10 +22,34 @@ function isVisibilityMet(
   return assignmentClosed;
 }
 
+export function isExamReviewVisibilityMet(
+  visibility: ExamReviewVisibility,
+  attemptStatus: ExamAttemptStatus,
+  assignmentClosed: boolean,
+): boolean {
+  return isVisibilityMet(visibility, attemptStatus, assignmentClosed);
+}
+
 export function isExamScoreVisible(
   policy: ExamReviewPolicy,
   attemptStatus: ExamAttemptStatus,
   assignmentClosed: boolean,
 ): boolean {
   return isVisibilityMet(policy.scoreVisibility, attemptStatus, assignmentClosed);
+}
+
+export function isExamCorrectAnswerVisible(
+  policy: ExamReviewPolicy,
+  attemptStatus: ExamAttemptStatus,
+  assignmentClosed: boolean,
+): boolean {
+  return isVisibilityMet(policy.correctAnswerVisibility, attemptStatus, assignmentClosed);
+}
+
+export function isExamExplanationVisible(
+  policy: ExamReviewPolicy,
+  attemptStatus: ExamAttemptStatus,
+  assignmentClosed: boolean,
+): boolean {
+  return isVisibilityMet(policy.explanationVisibility, attemptStatus, assignmentClosed);
 }

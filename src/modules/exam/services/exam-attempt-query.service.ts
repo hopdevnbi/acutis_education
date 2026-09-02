@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import type { LocalizedQuestionDisplayPayload } from '../../localization/interfaces/localization.interface';
 import { TranslationResourceType } from '../../localization/enums/translation-resource-type.enum';
@@ -9,10 +9,8 @@ import { LocalizationService } from '../../localization/services/localization.se
 import type { LearnerQuestionProjection } from '../../question-bank/interfaces/question-bank.interface';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
 import { ExamAttemptAnswerEntity } from '../entities/exam-attempt-answer.entity';
-import { ExamAssignmentEntity } from '../entities/exam-assignment.entity';
 import { ExamAttemptEntity } from '../entities/exam-attempt.entity';
 import { ExamAttemptQuestionEntity } from '../entities/exam-attempt-question.entity';
-import { ExamAttemptStatus } from '../enums/exam-attempt-status.enum';
 import {
   ExamAttemptNotFoundError,
   ExamAttemptQuestionNotFoundError,
@@ -26,15 +24,13 @@ import type {
 } from '../interfaces/exam-attempt.interface';
 import { ExamAttemptAccessService } from './exam-attempt-access.service';
 import { ExamAttemptFinalizationService } from './exam-attempt-finalization.service';
+import { ExamAttemptResultQueryService } from './exam-attempt-result-query.service';
 import { ExamService } from './exam.service';
-import { isExamScoreVisible } from '../utils/exam-review-visibility.util';
 import { parseExamSelectedOptionIdsJson } from '../utils/exam-selected-options.util';
 
 @Injectable()
 export class ExamAttemptQueryService {
   constructor(
-    @InjectDataSource()
-    private readonly dataSource: DataSource,
     @InjectRepository(ExamAttemptEntity)
     private readonly examAttemptRepository: Repository<ExamAttemptEntity>,
     @InjectRepository(ExamAttemptQuestionEntity)
@@ -46,6 +42,7 @@ export class ExamAttemptQueryService {
     private readonly localizationService: LocalizationService,
     private readonly examAttemptAccessService: ExamAttemptAccessService,
     private readonly examAttemptFinalizationService: ExamAttemptFinalizationService,
+    private readonly examAttemptResultQueryService: ExamAttemptResultQueryService,
   ) {}
 
   async getAttemptDelivery(
@@ -61,23 +58,7 @@ export class ExamAttemptQueryService {
     );
 
     const version = await this.examService.getVersionById(attempt.examVersionId);
-    const assignment = await this.dataSource
-      .getRepository(ExamAssignmentEntity)
-      .findOne({ where: { id: attempt.examAssignmentId } });
-    const assignmentClosed =
-      assignment !== null && new Date().getTime() > assignment.closesAt.getTime();
-    const showScore = isExamScoreVisible(version.reviewPolicy, attempt.status, assignmentClosed);
-    const result =
-      showScore &&
-      (attempt.status === ExamAttemptStatus.Submitted ||
-        attempt.status === ExamAttemptStatus.Graded)
-        ? {
-            correctCount: attempt.correctCount,
-            scorePercent: attempt.scorePercent,
-            passed: attempt.passed,
-            autoSubmitReason: attempt.autoSubmitReason,
-          }
-        : null;
+    const result = await this.examAttemptResultQueryService.buildResultSnapshotForAttempt(attempt);
 
     const attemptQuestions = await this.examAttemptQuestionRepository.find({
       where: { examAttemptId: attempt.id },

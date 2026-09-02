@@ -73,11 +73,58 @@ export interface SaveExamAnswerInput {
   readonly selectedOptionIds: readonly string[];
 }
 
+export interface ExamAttemptQuestionReviewSnapshot {
+  readonly examAttemptQuestionId: string;
+  readonly sortOrder: number;
+  readonly prompt: string;
+  readonly questionType: QuestionType;
+  readonly selectedOptionIds: readonly string[];
+  readonly isCorrect: boolean | null;
+  readonly correctOptionIds: readonly string[] | null;
+  readonly explanation: string | null;
+  readonly explanationMediaJson: string | null;
+}
+
 export interface ExamAttemptResultSnapshot {
   readonly correctCount: number | null;
   readonly scorePercent: string | null;
   readonly passed: boolean | null;
   readonly autoSubmitReason: string | null;
+  readonly questions: readonly ExamAttemptQuestionReviewSnapshot[] | null;
+}
+
+export interface ExamAttemptResultReadSnapshot {
+  readonly id: string;
+  readonly examAssignmentId: string;
+  readonly enrollmentId: string;
+  readonly attemptNumber: number;
+  readonly status: ExamAttemptStatus;
+  readonly examId: string;
+  readonly examVersionId: string;
+  readonly examTitleDelivered: string;
+  readonly deliveredLocale: string;
+  readonly startedAt: Date;
+  readonly submittedAt: Date | null;
+  readonly gradedAt: Date | null;
+  readonly questionCount: number | null;
+  readonly result: ExamAttemptResultSnapshot | null;
+}
+
+export interface ExamAssignmentAttemptSummarySnapshot {
+  readonly attemptId: string;
+  readonly enrollmentId: string;
+  readonly studentId: string;
+  readonly attemptNumber: number;
+  readonly status: ExamAttemptStatus;
+  readonly submittedAt: Date | null;
+  readonly gradedAt: Date | null;
+  readonly scorePercent: string | null;
+  readonly passed: boolean | null;
+}
+
+export interface ListExamAssignmentAttemptSummariesResult {
+  readonly examAssignmentId: string;
+  readonly items: readonly ExamAssignmentAttemptSummarySnapshot[];
 }
 
 export interface ExamAttemptDeliverySnapshot extends ExamAttemptSnapshot {
