@@ -1,0 +1,930 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #005/6
+SCOPED LEARNER DELIVERY + CROSS-DOMAIN INTEGRATION
+
+1. Context
+----------
+Completed:
+- CURRICULUM #001 Domain Audit + Content Model Design
+- CURRICULUM #002 Schema + Entities + Migrations
+- CURRICULUM #003 Curriculum + Topic Services/API/RBAC
+- CURRICULUM #004 Lesson + Learning Content + Publish/Clone/Assignment
+
+Current:
+CURRICULUM/CONTENT #005 / 6
+
+Remaining after this:
+#006 Final audit + seed/Postman + FE/Mobile contract readiness
+
+Primary goal:
+Connect published curriculum delivery to Class / Enrollment / Guardian / Catechist scope
+without introducing cycles or draft leakage.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+- docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+- docs/CURRICULUM_003_CURRICULUM_TOPIC_SERVICES_API_RBAC_REPORT.md
+- docs/CURRICULUM_004_LESSON_CONTENT_PUBLISH_CLONE_ASSIGNMENT_REPORT.md
+- docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/parish/
+src/modules/class-domain-scope/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+3. Primary Objective
+--------------------
+Implement learner-facing, published-only delivery:
+
+A. Class curriculum tree delivery
+B. Enrollment curriculum tree delivery
+C. Published lesson content delivery
+D. Catechist assigned-class scope
+E. Parent linked-child scope
+F. Student self-enrollment scope if current user-linked student model supports it
+G. SUPER_ADMIN / PARISH_ADMIN admin access compatibility
+H. No draft leakage
+I. No cross-domain cycle
+J. FE/Mobile delivery contracts
+
+Do NOT implement:
+- LearningProgress
+- Question Bank
+- Localization/Google Translation
+- File/Media existence validation
+- FE/Mobile code
+- domain seed/Postman (belongs #006)
+
+4. Architecture Constraint — CRITICAL
+-------------------------------------
+Current direction:
+CurriculumModule
+LearningContentModule -> CurriculumModule
+EnrollmentModule -> StudentModule + ClassModule
+ClassDomainScopeModule wires scoped evidence
+
+Do NOT create:
+CurriculumModule -> EnrollmentModule
+CurriculumModule -> ClassModule
+LearningContentModule -> EnrollmentModule
+forwardRef
+
+Preferred:
+A new thin application-facing orchestration/scope module depends on:
+- CurriculumModule
+- LearningContentModule
+- ClassModule
+- EnrollmentModule
+- StudentModule as needed
+
+or use Enrollment-side controllers/services if that keeps graph acyclic.
+
+Choose cleanest approach.
+
+5. Delivery Ownership
+---------------------
+Published curriculum resolution is driven by operational context:
+
+Class:
+(parishId, academicYearId, catechismLevelId)
+→ CurriculumAssignment
+→ published curriculumVersion
+→ tree
+
+Enrollment:
+enrollment.classId
+→ ClassSnapshot triple
+→ assignment
+→ published version
+→ tree
+
+Therefore operational orchestration should live downstream of Curriculum.
+
+6. Class Delivery Route
+-----------------------
+Implement:
+
+GET /api/v1/classes/:classId/curriculum-tree
+
+Permission:
+curricula.read
+
+Flow:
+1. authenticate
+2. load ClassSnapshot
+3. assert caller can read class:
+   - SUPER_ADMIN
+   - PARISH_ADMIN active parish membership
+   - CATECHIST active class assignment
+   - PARENT only if linked child currently/relevantly enrolled in class
+   - STUDENT only if own linked student profile enrolled in class
+4. resolve curriculum assignment from class triple
+5. assignment target must be PUBLISHED
+6. return published tree only
+
+No draft/current admin shortcuts.
+
+7. Enrollment Delivery Route
+----------------------------
+Implement:
+
+GET /api/v1/enrollments/:enrollmentId/curriculum-tree
+
+Permission:
+curricula.read
+
+Flow:
+1. load enrollment snapshot
+2. assert caller can read enrollment
+3. resolve class snapshot/triple
+4. resolve assignment
+5. return PUBLISHED tree only
+
+Parent:
+must be guardian-linked to enrollment student.
+
+Student:
+must match user-linked student identity.
+
+Catechist:
+must be assigned to enrollment class.
+
+8. Published Lesson Content Route
+---------------------------------
+Need a learner-safe route.
+
+Preferred:
+GET /api/v1/lessons/:lessonId/published-content
+
+Permission:
+lesson-content.read
+
+Alternative:
+reuse GET /lessons/:lessonId/content but response behavior depends on scope.
+
+Prefer separation if it avoids accidental draft leakage:
+- admin editor route can read draft
+- learner route can read PUBLISHED only
+
+Recommended:
+KEEP existing admin/editor:
+GET /api/v1/lessons/:lessonId/content
+
+ADD:
+GET /api/v1/lessons/:lessonId/published-content
+
+or another explicit delivery route.
+
+Choose API clarity over convenience.
+
+9. Lesson Access Context
+------------------------
+A learner must not obtain published content merely by knowing lessonId.
+
+Resolve:
+lesson
+→ curriculumVersion
+→ curriculum root
+→ assignment(s)
+→ accessible class/enrollment evidence
+
+Access must prove the caller is connected to a class/enrollment using that exact published version.
+
+10. Published Content Scope
+---------------------------
+For a given lessonId:
+
+- version status must be PUBLISHED
+- lesson must belong to that version
+- assignment must target that exact version
+- caller must have access to a class/enrollment whose triple maps to that assignment
+
+This prevents:
+- random published curriculum enumeration
+- cross-parish lesson access
+- stale historical version access unless explicitly allowed
+
+11. Historical Published Version Policy
+---------------------------------------
+Important:
+A previous version may become ARCHIVED when superseded.
+
+Learner delivery should normally use ONLY the assignment's current target version.
+
+If class/year assignment points to an ARCHIVED version due policy mismatch:
+treat as invalid configuration or explicit historical admin path, not learner delivery.
+
+Do not silently serve arbitrary ARCHIVED content.
+
+12. Catechist Scope
+-------------------
+CATECHIST can read:
+- assigned class curriculum tree
+- published lesson content for curriculum assigned to that class
+
+Cannot:
+- read other classes
+- read arbitrary parish curriculum via admin routes unless separately parish-admin
+- read draft content
+
+13. Parent Scope
+----------------
+PARENT can read:
+- curriculum tree for linked child's enrollment/class
+- published lesson content reachable through that child/class assignment
+
+Cannot:
+- list parish curricula
+- read another child's class
+- read arbitrary lesson by ID
+
+Use ACTIVE guardian link only.
+
+14. Student Scope
+----------------
+If current platform has student account linking:
+
+STUDENT can read:
+- own enrollment/class curriculum tree
+- published lesson content reachable through own enrollment
+
+If student role/account flow is not sufficiently implemented:
+do not fake it.
+Document deferred behavior and test what exists.
+
+15. Parish Admin Scope
+----------------------
+PARISH_ADMIN:
+- admin routes stay parish-scoped
+- may read class/enrollment delivery within own parish
+
+No cross-parish.
+
+16. Super Admin
+---------------
+SUPER_ADMIN:
+global bypass remains explicit.
+
+17. Permission Matrix
+---------------------
+Finalize read capability seed:
+
+CATECHIST:
+- curricula.read
+- lesson-content.read
+
+PARENT:
+- curricula.read
+- lesson-content.read
+
+STUDENT:
+- curricula.read
+- lesson-content.read if STUDENT role exists
+
+Permissions alone never grant resource access.
+
+Add/update seed carefully.
+
+18. Admin vs Learner APIs
+-------------------------
+Separate concerns:
+
+Admin/editor APIs:
+- curriculum metadata
+- versions
+- topics
+- lessons
+- draft content
+
+Learner delivery:
+- class/enrollment curriculum tree
+- published content only
+
+Do not expose admin DTO metadata unnecessarily to learners.
+
+19. Learner Tree DTO
+--------------------
+Create minimal learner-safe response:
+
+{
+  curriculum: {
+    id,
+    name,
+    sourceLocale
+  },
+  version: {
+    id,
+    versionNumber
+  },
+  topics: [
+    {
+      id,
+      title,
+      description?,
+      sortOrder,
+      lessons: [
+        {
+          id,
+          canonicalLessonKey?,
+          title,
+          summary?,
+          sortOrder,
+          estimatedDurationMinutes?
+        }
+      ]
+    }
+  ]
+}
+
+Do not expose:
+- createdByUserId
+- publishedByUserId
+- admin-only labels if unnecessary
+- currentPublishedVersionId internals
+- assignment actor metadata
+
+20. canonicalLessonKey Exposure
+-------------------------------
+Decide whether learner clients need canonicalLessonKey now.
+
+For future Progress:
+it may be useful.
+
+Preferred:
+include stable `canonicalLessonKey` in learner lesson summary
+because Web/Mobile progress/offline cache will later need stable semantic identity.
+
+Document.
+
+21. Learner Content DTO
+-----------------------
+Return:
+
+lessonId
+canonicalLessonKey
+sourceLocale
+curriculumVersionId
+contentSchemaVersion
+contentHash
+blocks
+publishedAt/version metadata if useful
+
+No admin audit fields.
+
+22. Multilingual Readiness
+--------------------------
+Even though translation subsystem is not implemented:
+
+delivery DTO must include:
+- sourceLocale
+- resolvedLocale = sourceLocale for now
+- isFallback = false
+optional:
+- translationStatus = SOURCE
+
+Strongly consider this now so future i18n does not break response shape.
+
+Preferred learner content response:
+
+requestedLocale?: null/current
+sourceLocale
+resolvedLocale
+isFallback
+translationStatus
+
+At this phase:
+requested locale can be accepted/ignored safely or omitted until localization phase.
+
+Do NOT call Google Translation.
+
+23. Accept-Language Readiness
+-----------------------------
+Audit whether to parse `Accept-Language` now.
+
+Recommended:
+- do NOT implement translation resolution yet
+- but delivery layer should not reject Accept-Language
+- source response remains sourceLocale
+
+If adding metadata:
+requestedLocale may be parsed but no translation action.
+
+Keep scope small.
+
+24. Class/Enrollment Access Contracts
+-------------------------------------
+Use existing public services:
+ClassService
+ClassScopeService or downstream access abstraction
+EnrollmentService
+EnrollmentAccessService
+StudentAccessService/guardian evidence
+
+No repositories.
+
+25. Cycle Audit
+---------------
+Before coding:
+build exact module dependency graph.
+
+Final must be acyclic.
+
+No forwardRef.
+
+26. Scope Orchestration Module
+------------------------------
+If needed, create:
+CurriculumDeliveryModule
+or similar thin application module.
+
+Potential imports:
+CurriculumModule
+LearningContentModule
+ClassModule
+EnrollmentModule
+StudentModule
+ParishModule
+AuthModule
+AccessControlModule
+
+It should own:
+- delivery controllers
+- delivery application service
+
+No persistence.
+
+Do NOT make it a generic portal/BFF god module.
+
+27. CurriculumDeliveryService
+-----------------------------
+Possible responsibilities:
+
+getClassCurriculumTree(actor, classId)
+getEnrollmentCurriculumTree(actor, enrollmentId)
+getPublishedLessonContent(actor, lessonId, context?)
+
+Keep narrow.
+
+28. Lesson Published Content Context
+------------------------------------
+Direct `/lessons/:id/published-content` can be ambiguous because same published lesson might be assigned to multiple contexts.
+
+To prove scope safely, consider requiring context query:
+
+classId
+or enrollmentId
+
+Examples:
+
+GET /api/v1/classes/:classId/lessons/:lessonId/content
+GET /api/v1/enrollments/:enrollmentId/lessons/:lessonId/content
+
+This is arguably safer than global lesson published-content route.
+
+Preferred design:
+contextual routes.
+
+Recommended:
+
+GET /api/v1/classes/:classId/lessons/:lessonId/content
+
+GET /api/v1/enrollments/:enrollmentId/lessons/:lessonId/content
+
+Then verify lesson belongs to assigned version for that context.
+
+Choose this if cleaner.
+
+29. Contextual Content Validation
+---------------------------------
+For class route:
+- class accessible
+- assignment resolves version
+- lesson.curriculumVersionId == assigned version
+
+For enrollment:
+- enrollment accessible
+- class triple resolves version
+- lesson belongs same version
+
+30. Avoid Arbitrary Published Browsing
+--------------------------------------
+Do not add:
+GET /published-curricula
+GET /published-lessons
+anonymous catalog
+
+This is a minors platform.
+
+31. No Draft Leakage Tests
+--------------------------
+Must explicitly test:
+
+PARENT:
+draft version ID -> denied/not found
+draft lesson content -> denied
+
+CATECHIST:
+draft content -> denied
+
+STUDENT:
+draft content -> denied
+
+Even if caller knows UUID.
+
+32. Assignment Missing Behavior
+-------------------------------
+If class triple has no curriculum assignment:
+return a typed 404 or 409 configuration error.
+
+Preferred:
+404 `CURRICULUM_ASSIGNMENT_NOT_FOUND`
+for delivery.
+
+Do not fall back to currentPublishedVersionId because that may not be assigned to this academic year.
+
+33. Assignment Wrong Version
+----------------------------
+If assignment points to non-PUBLISHED due data corruption:
+fail safe.
+
+Do not serve.
+
+Typed 409/500 internal configuration error depending existing error policy.
+
+Prefer safe 409 configuration conflict if client can understand.
+
+34. Tree Performance
+--------------------
+Reuse CurriculumService.getVersionTree.
+
+No N+1.
+
+35. Content Performance
+-----------------------
+Single lesson/content lookup plus scope resolution.
+
+No scanning full curriculum JSON.
+
+36. Caching Readiness
+---------------------
+Published content immutable.
+
+DTO exposes:
+- curriculumVersionId
+- contentHash
+- sourceLocale
+
+This is sufficient for later ETag/mobile cache.
+
+Do not implement Redis/CDN now.
+
+37. Swagger
+-----------
+Document:
+- class curriculum tree
+- enrollment curriculum tree
+- contextual lesson content
+- sourceLocale
+- contentHash
+- learner-only published semantics
+- 403 scope
+- 404 assignment missing
+- no draft delivery
+
+38. Error Types
+---------------
+Potential:
+
+CurriculumAssignmentNotFoundError
+CurriculumDeliveryScopeDeniedError
+CurriculumAssignedVersionNotPublishedError
+LessonNotInAssignedCurriculumError
+PublishedLessonContentNotFoundError
+
+Reuse existing scope errors where possible.
+
+39. Unit Tests
+--------------
+Test delivery service:
+
+Class:
+- admin allowed own parish
+- catechist assigned class allowed
+- unassigned catechist denied
+- parent linked child class allowed
+- unrelated parent denied
+- student own class allowed if supported
+- no assignment
+- wrong version status
+- tree returned
+
+Enrollment:
+- parent linked child enrollment allowed
+- catechist assigned class allowed
+- unrelated denied
+
+Content:
+- lesson belongs assigned version allowed
+- wrong lesson/version denied
+- draft denied
+- content missing
+- metadata correct
+
+40. Integration Tests
+---------------------
+Use real MSSQL fixtures:
+
+- published curriculum assigned to class triple
+- second unassigned/different parish curriculum
+- parent linked student
+- catechist assigned class
+- unrelated user
+
+Verify delivery flows end-to-end.
+
+41. DB E2E
+----------
+Required:
+
+401 unauthenticated
+
+CATECHIST:
+assigned class tree 200
+unassigned class 403
+assigned lesson content 200
+draft content denied
+
+PARENT:
+linked child enrollment tree 200
+unrelated enrollment 403
+linked class lesson content 200
+unrelated lesson denied
+
+PARISH_ADMIN:
+own parish delivery 200
+other parish denied
+
+SUPER_ADMIN:
+allowed
+
+STUDENT:
+test if current role/user-link exists
+
+42. Learner Permission Seed
+---------------------------
+Update:
+CATECHIST -> lesson-content.read
+PARENT -> curricula.read + lesson-content.read
+STUDENT -> same if role exists
+
+Do NOT grant manage/publish.
+
+43. Admin API Regression
+------------------------
+All #003/#004 admin routes must continue PASS.
+
+44. Published Immutability Regression
+-------------------------------------
+No scope change may allow writes to published content.
+
+45. No Translation
+------------------
+Do NOT implement:
+LocalizationModule
+translation tables
+Google Cloud Translation
+glossary
+AI
+
+46. No Learning Progress
+------------------------
+No completion/bookmark/progress writes.
+
+47. No Media Validation
+-----------------------
+assetId existence remains future.
+
+48. quality:full Debt
+---------------------
+Previous phases:
+quality:full flake due auth-rbac/shared MSSQL test state.
+
+Attempt full.
+
+If flake persists:
+- ensure curriculum delivery suites pass sequentially
+- do not weaken tests
+- final #006 MUST resolve or explicitly block phase completion
+
+49. Docker
+----------
+Run:
+
+wsl docker build --target production -t catechism-api:curriculum-delivery .
+
+Required.
+
+50. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:curriculum-delivery .
+
+51. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(curriculum): add scoped learner delivery"
+
+Cursor must NOT execute it.
+
+52. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_005_SCOPED_LEARNER_DELIVERY_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #004
+3. Rules applied
+4. Pre-change dependency graph
+5. Selected delivery architecture
+6. Final dependency graph
+7. Cycle/forwardRef audit
+8. Files created
+9. Files modified
+10. CurriculumDeliveryModule/service if created
+11. Class curriculum tree route
+12. Enrollment curriculum tree route
+13. Published lesson content routes
+14. Contextual content access decision
+15. Learner tree DTO
+16. Learner content DTO
+17. canonicalLessonKey exposure
+18. sourceLocale/resolvedLocale readiness
+19. Class access policy
+20. Enrollment access policy
+21. Catechist scope
+22. Parent scope
+23. Student scope
+24. Parish admin scope
+25. Super admin scope
+26. Permission seed matrix
+27. No draft leakage controls
+28. Assignment resolution
+29. Wrong-version handling
+30. Tree performance
+31. Content performance
+32. Public contracts
+33. Swagger
+34. Error mapping
+35. Unit tests
+36. Integration tests
+37. DB e2e
+38. Admin regression
+39. Published immutability regression
+40. Multilingual readiness
+41. Security/privacy
+42. quality:full result
+43. Docker result
+44. Microservice extraction review
+45. Commands executed
+46. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- no cycle
+- no forwardRef
+- class tree
+- enrollment tree
+- contextual published content
+- catechist assigned allow
+- catechist unassigned deny
+- parent linked allow
+- parent unrelated deny
+- student own allow/explicitly deferred
+- parish admin own allow
+- parish admin cross-parish deny
+- super admin allow
+- draft tree denied
+- draft content denied
+- assignment missing safe error
+- wrong assigned version safe error
+- learner DTO no admin leakage
+- contentHash exposed
+- sourceLocale exposed
+- no translation subsystem
+- no cross-module repository/entity
+- #003/#004 regression
+
+47. Known issues/deferred
+48. Out-of-scope confirmation
+49. CURRICULUM #006 readiness
+50. Prompt count status
+51. Commit recommendation
+
+53. CURRICULUM #006 Readiness
+-----------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+CURRICULUM/CONTENT #006 — FINAL AUDIT + DOMAIN SEED + POSTMAN + FE/MOBILE CONTRACT READINESS
+
+#006 must:
+- resolve quality:full shared DB flake
+- final architecture/security audit
+- full demo curriculum seed
+- Postman
+- Swagger/OpenAPI contract audit
+- Web FE readiness
+- Mobile readiness
+- multilingual readiness
+- Docker
+- final phase completion decision
+
+54. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #005/6 complete
+approximately 1 prompt remains (#006)
+
+55. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM/CONTENT #005 status
+- class delivery PASS/FAIL
+- enrollment delivery PASS/FAIL
+- learner content PASS/FAIL
+- scope matrix PASS/FAIL
+- draft leakage PASS/FAIL
+- cycle/forwardRef status
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/CURRICULUM_005_SCOPED_LEARNER_DELIVERY_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(curriculum): add scoped learner delivery"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #006 automatically.

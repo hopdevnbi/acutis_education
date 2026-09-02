@@ -1,0 +1,893 @@
+CURSOR PROMPT — FILE/MEDIA #004/4
+FINAL HARDENING + DOCKER LOCAL VOLUME + CONTEXTUAL LEARNER MEDIA + S3 READINESS + POSTMAN + FE/MOBILE CONTRACT
+
+1. Context
+----------
+Completed:
+- FILE/MEDIA #001/4 — Domain Audit + Storage Provider Design
+- FILE/MEDIA #002/4 — Schema + MediaModule + Local/S3 Provider Foundation
+- FILE/MEDIA #003/4 — Upload/Read API + RBAC/Security + Curriculum Asset Validation
+
+Current:
+FILE/MEDIA #004 / 4
+
+This is the FINAL phase gate.
+
+#003 results:
+- Upload/read PASS
+- RBAC/security PASS
+- Curriculum asset validation PASS
+- quality:full pristine DB PASS
+- Docker NOT VERIFIED due host/WSL Unicode/path issue
+- BLOCKER/HIGH = 0
+
+Do NOT start next backend domain automatically.
+
+2. Permanent Git Rule — CRITICAL
+--------------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE command only:
+
+git commit -m "feat(media): finalize storage abstraction"
+
+Do not print any other Git mutation command.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/MEDIA_001_DOMAIN_AUDIT_AND_STORAGE_PROVIDER_DESIGN_REPORT.md
+docs/MEDIA_002_SCHEMA_LOCAL_S3_PROVIDER_FOUNDATION_REPORT.md
+docs/MEDIA_003_UPLOAD_READ_RBAC_CURRICULUM_INTEGRATION_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_005_SCOPED_LEARNER_DELIVERY_REPORT.md
+
+Inspect:
+src/modules/media/
+src/modules/learning-content/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/config/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+.env.example
+Dockerfile
+docker-compose*.yml
+README.md
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Close File/Media phase only if all critical gates pass.
+
+Required final outcomes:
+- Local provider fully usable without AWS
+- S3 provider config/code ready
+- provider-per-asset reads correct
+- no per-request S3→local fallback
+- Docker local volume persists files
+- Docker build verified
+- upload/read security hardened
+- Curriculum asset validation stable
+- learner Web/Mobile can safely fetch referenced lesson media
+- audio/video/Range decision explicit
+- Postman
+- Swagger/OpenAPI audit
+- FE readiness
+- Mobile readiness
+- safe future local→S3 migration foundation
+- pristine quality:full PASS
+- no BLOCKER/HIGH
+
+5. Final Architecture
+---------------------
+Expected:
+
+MediaModule
+  owns media_assets + providers/config
+  exports MediaAssetService only
+
+LearningContentModule -> MediaModule
+
+CurriculumDeliveryModule may depend on MediaModule for contextual media delivery.
+
+MediaModule MUST NOT depend on:
+CurriculumModule
+LearningContentModule
+ClassModule
+EnrollmentModule
+StudentModule
+
+No cycle.
+No forwardRef.
+No cross-module entity/repository access.
+
+6. Provider Selection
+---------------------
+Reconfirm:
+
+MEDIA_STORAGE_PROVIDER=local
+→ LOCAL for NEW writes
+
+MEDIA_STORAGE_PROVIDER=s3
+→ S3 for NEW writes
+
+MEDIA_STORAGE_PROVIDER=auto
+→ non-production only
+
+Each row stores storageProvider.
+Existing reads use row provider, not selected write provider.
+
+7. Production Fallback
+----------------------
+Production:
+- auto rejected
+- S3 failure never silently writes local
+- local explicit allowed with documented single-node limitation
+- MEDIA_STORAGE_ALLOW_LOCAL_FALLBACK=true rejected in production
+
+8. Development Fallback
+-----------------------
+Optional bootstrap-level fallback only.
+Never per-request fallback.
+
+9. Docker Local Volume — REQUIRED
+---------------------------------
+Add persistent compose volume using actual project conventions.
+
+Target:
+MEDIA_LOCAL_ROOT=/app/storage/uploads
+
+API service:
+volumes:
+  - media-uploads:/app/storage/uploads
+
+Top-level:
+volumes:
+  media-uploads:
+
+Uploads must not live in Docker image layer.
+
+10. Docker Permissions
+----------------------
+Ensure runtime user can write mount point.
+
+Audit Dockerfile USER.
+Create/chown mount directory as needed.
+
+Do not run app as root just to solve uploads.
+
+11. Docker Persistence Verification
+-----------------------------------
+If feasible:
+- start container/local mode
+- create/upload tiny asset
+- recreate API container without deleting volume
+- verify binary remains available
+
+At minimum verify:
+- mount configured
+- directory writable by app runtime user
+
+12. Docker Build — MUST CLOSE #003 GAP
+---------------------------------------
+#003 Docker was not verified because:
+- docker unavailable on PowerShell PATH
+- WSL build failed due workspace path encoding
+
+Resolve this.
+
+Preferred:
+run build from WSL-native path.
+
+If Windows-mounted repo path is problematic:
+create temporary WSL-native build context copy for verification only.
+
+Do NOT restructure repo.
+
+Required image:
+catechism-api:media-final
+
+Goal: PASS.
+
+13. Audio/Video Decision
+------------------------
+Recommended final MVP:
+
+ENABLED upload:
+- IMAGE
+- DOCUMENT/PDF
+
+DISABLED:
+- AUDIO
+- VIDEO
+
+Reason:
+current upload uses memory buffering and Range is not implemented.
+
+Do NOT enable video without:
+- streaming-safe upload
+- Range/206 support
+
+Document as future Media enhancement.
+
+14. Range Decision
+------------------
+Range support can be DEFERRED because AUDIO/VIDEO public upload remains disabled.
+
+Do not claim video playback readiness.
+
+15. Memory Upload Cap
+---------------------
+Current #003 FileInterceptor used global 100 MiB limit.
+
+That is too high when enabled categories max at:
+IMAGE 10 MB
+PDF 25 MB.
+
+Reduce multipart/interceptor hard cap to max ENABLED category:
+25 MB (+ very small protocol margin only if framework requires).
+
+Keep category-specific:
+IMAGE <= 10 MB
+DOCUMENT <= 25 MB
+
+This is important memory-DoS hardening.
+
+16. MIME Final Policy
+---------------------
+Enabled:
+image/jpeg
+image/png
+image/webp
+application/pdf
+
+Blocked:
+SVG
+HTML
+JS
+executables
+archives
+octet-stream
+audio/video uploads in MVP
+
+17. Delete Policy
+-----------------
+Keep public DELETE endpoint OMITTED unless a safe ownership/reference policy is now clearly available.
+
+Reason:
+published Curriculum may reference assetId.
+Media must not scan Curriculum repositories.
+
+Document future unlink/orphan lifecycle.
+
+18. Orphan Cleanup
+------------------
+Do NOT delete READY assets simply by age.
+
+Future cleanup should rely on explicit temporary/uncommitted state or owning-domain link lifecycle.
+
+19. Generic Private Media Access
+--------------------------------
+Current generic endpoints:
+GET /api/v1/media/assets/:id
+GET /api/v1/media/assets/:id/content
+
+Keep admin/uploader restricted.
+
+PARENT/CATECHIST must NOT gain arbitrary generic asset access.
+
+20. CRITICAL Learner Media Access Gap
+-------------------------------------
+Learner lesson content contains assetId.
+But PARENT/CATECHIST are intentionally denied generic media access.
+
+Therefore without contextual media access:
+Web/Mobile cannot render lesson images.
+
+This MUST be solved before phase completion.
+
+21. Selected Contextual Media Design
+------------------------------------
+Preferred routes:
+
+GET /api/v1/classes/:classId/lessons/:lessonId/media/:assetId/content
+
+GET /api/v1/enrollments/:enrollmentId/lessons/:lessonId/media/:assetId/content
+
+Implement inside CurriculumDeliveryModule/controller.
+
+Do NOT create learner generic media access.
+
+22. Contextual Class Media Flow
+-------------------------------
+1. authenticate
+2. existing class scope check
+3. resolve class triple
+4. resolve assigned PUBLISHED curriculum version
+5. ensure lesson belongs exact assigned version
+6. load lesson content
+7. ensure assetId is actually referenced in that lesson's document
+8. MediaAssetService.assertAssetReady(assetId)
+9. stream via MediaAssetService.openAssetContent(assetId)
+
+Wrong/unreferenced asset:
+deny 403/404 safely.
+
+23. Contextual Enrollment Media Flow
+------------------------------------
+Same pattern through existing Enrollment access:
+- guardian-linked parent
+- assigned catechist where existing scope allows
+- student/self-link if applicable
+
+Must verify lesson/version/asset reference.
+
+24. Media Reference Matching
+----------------------------
+Use structured block traversal.
+
+Valid:
+image_ref.assetId
+video_ref.assetId
+
+Since VIDEO upload disabled:
+existing READY VIDEO could theoretically be served if present, but no normal upload flow creates one.
+
+Do not scan unrelated lessons.
+
+25. No Media Authorization Leakage
+----------------------------------
+CurriculumDelivery owns contextual authorization.
+MediaAssetService remains provider/domain-neutral.
+
+Do NOT add Class/Enrollment logic into MediaModule.
+
+26. Learner Content URL Contract
+--------------------------------
+Make FE/Mobile usage clear.
+
+Preferred:
+learner lesson content response can include a derived `contentUrl` / `mediaContentPath` for each media block,
+OR provide a deterministic documented route convention.
+
+Do NOT persist URL into lesson JSON.
+
+Strong recommendation:
+response mapper enriches media blocks with contextual URL only in learner delivery DTO, leaving stored block schema unchanged.
+
+If changing learner block DTO is too invasive:
+document exact route construction contract and ensure OpenAPI exposes route.
+
+27. Admin Preview
+-----------------
+PARISH_ADMIN/SUPER_ADMIN continues generic media preview through admin/uploader media endpoint.
+
+28. S3 Read Behavior
+--------------------
+Backend proxy remains default for both Local and S3.
+
+Do NOT expose bucket/key.
+Do NOT require presigned URL.
+
+29. Presigned URL
+-----------------
+Defer for future large media optimization.
+
+Provider interface may remain ready.
+
+30. Optional Live S3 Verification
+---------------------------------
+If environment contains valid S3 configuration:
+perform safe smoke test:
+- put tiny synthetic object
+- get/read
+- verify bytes
+- delete
+
+Use dedicated smoke prefix.
+
+Never print credentials.
+
+If not configured:
+report exactly:
+S3 LIVE VERIFICATION: NOT CONFIGURED
+
+This does NOT block local-first phase completion.
+
+31. S3 Mock Tests
+-----------------
+Must remain PASS.
+
+32. S3 Code Readiness
+---------------------
+Evaluate:
+S3 PROVIDER CODE READY: YES/NO
+
+33. Local→S3 Migration Readiness
+--------------------------------
+Evaluate based on:
+- stable assetId
+- provider per row
+- checksum
+- provider registry
+- provider-neutral domain references
+- opaque storage key
+
+No migration job implementation.
+
+34. Upload Rate Limit
+---------------------
+Audit existing throttling infrastructure.
+Apply a reasonable route-level upload throttle if supported cleanly.
+
+Do not add new distributed rate limiter.
+
+35. Content-Disposition
+-----------------------
+Sanitize safely.
+No CRLF/header injection.
+
+Images:
+inline
+
+PDF:
+choose explicit policy.
+Recommended:
+attachment for generic document endpoint unless product needs inline preview.
+
+36. Cache Headers
+----------------
+PRIVATE remains conservative:
+private/no-store
+
+Do not introduce public caching for child platform.
+
+37. Swagger/OpenAPI
+-------------------
+Final audit:
+- upload multipart binary
+- metadata
+- admin generic content
+- contextual learner media routes
+- MIME/categories
+- limits
+- 401/403/404/413/415/503
+- no storage internals
+
+38. OpenAPI Client Readiness
+----------------------------
+Evaluate:
+OPENAPI MEDIA CLIENT READY: YES/NO
+
+39. Postman
+-----------
+Create:
+docs/postman/Acutis-Education-Media.postman_collection.json
+
+Flow:
+1 admin login
+2 upload image
+3 get metadata
+4 get content
+5 upload PDF
+6 reject SVG
+7 reject unsupported/mismatch
+8 write lesson draft referencing asset
+9 publish
+10 get class/enrollment lesson
+11 contextual media read
+12 parent/catechist generic media denied
+13 contextual media allowed when scoped
+14 local/S3 config notes
+
+Reuse local environment where possible.
+
+No real secrets.
+
+40. Tiny Fixtures
+-----------------
+If needed add original/synthetic tiny:
+PNG
+PDF
+
+Avoid huge binaries/base64.
+
+41. README
+----------
+Document:
+- local default
+- MEDIA_LOCAL_ROOT
+- Docker volume
+- enabled types
+- size limits
+- switching to S3
+- S3 required env
+- default credential chain
+- no production fallback
+- optional dev bootstrap fallback
+- S3 live smoke optional
+- AUDIO/VIDEO deferred
+
+42. Local Compose Default
+-------------------------
+Must start without AWS credentials.
+
+43. S3 Compose/Env
+------------------
+Switch provider via env only.
+No business code changes.
+
+44. Unit Tests — Contextual Media
+---------------------------------
+Test:
+- referenced asset allowed
+- asset not in lesson denied
+- wrong lesson/version denied
+- not-ready denied
+- content missing denied
+
+45. DB E2E — Contextual Media
+-----------------------------
+CATECHIST:
+assigned class + referenced asset -> 200
+unassigned -> 403
+
+PARENT:
+linked enrollment + referenced asset -> 200
+unrelated -> 403
+
+Generic:
+CATECHIST/PARENT arbitrary `/media/assets/:id/content` -> 403
+
+PARISH_ADMIN:
+own/admin generic -> allowed
+cross-parish/domain behavior remains safe
+
+46. Memory Limit Tests
+----------------------
+Multipart >25MB rejected early.
+IMAGE >10MB rejected category-wise.
+
+47. Curriculum Regression
+-------------------------
+- draft asset validation
+- publish asset validation
+- learner lesson content
+- contextual media
+
+PASS.
+
+48. Local Provider Regression
+-----------------------------
+put/get/delete/exists/path traversal/symlink/atomic write PASS.
+
+49. quality:full
+----------------
+Run pristine:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+
+50. Docker Runtime Smoke
+------------------------
+If practical:
+run production image with local media volume.
+Confirm app starts and mount writable.
+
+51. Security Final Audit
+------------------------
+PASS required:
+- no path traversal
+- no symlink escape
+- no SVG/HTML/executable
+- no MIME spoof
+- bounded upload memory
+- no public child assets
+- no arbitrary learner asset enumeration
+- no PII keys
+- no secret logs
+- no S3→local request fallback
+- no cross-domain repo access
+
+52. Multilingual
+----------------
+Media remains language-neutral.
+Unicode original filename works.
+Alt/caption remains in Curriculum content/localization.
+
+Evaluate:
+MEDIA MULTILINGUAL READY: YES/NO
+
+53. Web FE Readiness
+--------------------
+Evaluate:
+FE MEDIA CONTRACT READY: YES/NO
+
+Admin:
+upload -> assetId -> preview -> lesson editor
+
+Learner:
+lesson content -> contextual asset route -> binary
+
+54. Mobile Readiness
+--------------------
+Evaluate:
+MOBILE MEDIA CONTRACT READY: YES/NO
+
+Current base supports IMAGE/PDF.
+AUDIO/VIDEO explicitly deferred.
+
+Provider hidden from client.
+
+55. Future Question Bank Readiness
+----------------------------------
+Evaluate:
+QUESTION BANK MEDIA INTEGRATION READY: YES/NO
+
+Question Bank should later store assetId and use MediaAssetService.
+
+56. Future Microservice Extraction
+----------------------------------
+Final boundary:
+Media Service owns media_assets + storage providers.
+Domain modules own business authorization/linking.
+Delivery/BFF composes scoped reads.
+
+57. No Next Domain
+------------------
+Do NOT implement:
+Question Bank
+Practice
+Exam
+Chat
+Class Materials
+Localization
+FE
+Mobile
+
+58. Required Commands
+---------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:media-final .
+
+If Unicode/path issue:
+use a temporary WSL-native build context for verification and document exact steps.
+
+59. Required Report
+-------------------
+Create:
+
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #001–#003
+3 Rules applied
+4 Findings summary/severity
+5 Final dependency graph
+6 Cycle audit
+7 forwardRef audit
+8 Data ownership
+9 Public exports
+10 Provider selection
+11 Provider-per-asset
+12 Production fallback
+13 Development fallback
+14 Local/S3 coexistence
+15 Docker local volume
+16 Docker permissions
+17 Docker persistence/runtime check
+18 Docker production build
+19 Enabled upload categories
+20 AUDIO/VIDEO decision
+21 Range decision
+22 Upload memory cap
+23 MIME/security policy
+24 Delete policy
+25 Orphan policy
+26 Generic private media policy
+27 Learner media access gap
+28 Contextual media solution
+29 Class contextual media route
+30 Enrollment contextual media route
+31 Asset-reference validation
+32 Learner URL contract
+33 Admin preview
+34 S3 proxy/presigned decision
+35 S3 provider code readiness
+36 S3 live verification status
+37 Local→S3 migration readiness
+38 Upload throttling
+39 Content-Disposition
+40 Swagger/OpenAPI
+41 OpenAPI client readiness
+42 Postman
+43 README/local setup
+44 Unit tests
+45 Integration tests
+46 DB e2e
+47 Curriculum regression
+48 Media regression
+49 quality:full
+50 Docker runtime/build
+51 Security/privacy
+52 Multilingual readiness
+53 Web FE readiness
+54 Mobile readiness
+55 Question Bank media readiness
+56 Microservice extraction
+57 Files created
+58 Files modified
+59 Commands
+60 Explicit validation matrix
+61 Known/deferred
+62 Out-of-scope
+63 Final completion decision
+64 Next backend phase recommendation
+65 Prompt count
+66 Commit recommendation
+
+60. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker build
+- Docker local volume
+- Docker write permission
+- no cycle
+- no forwardRef
+- provider local
+- provider s3
+- provider-per-asset
+- production fallback denied
+- local default without AWS
+- image upload
+- PDF upload
+- AUDIO disabled
+- VIDEO disabled
+- request memory cap <=25MB
+- SVG denied
+- HTML denied
+- MIME spoof denied
+- generic admin media read
+- learner generic media denied
+- class contextual media allowed
+- enrollment contextual media allowed
+- unreferenced asset denied
+- wrong lesson/version denied
+- Curriculum publish asset validation
+- no cross-module repo/entity
+- Postman
+- Swagger
+- OpenAPI client ready
+- FE ready
+- Mobile ready
+- multilingual ready
+- S3 provider code ready
+- S3 live verification status
+- Local→S3 migration ready
+- Question Bank media readiness
+- prior regression
+- Git rule compliance
+
+61. Completion Decision
+-----------------------
+If and ONLY if no BLOCKER/HIGH remains:
+
+Print exactly:
+
+FILE / MEDIA STORAGE ABSTRACTION PHASE COMPLETE
+
+LOCAL STORAGE PROVIDER READY: YES
+
+S3 STORAGE PROVIDER READY: YES
+
+FE MEDIA CONTRACT READY: YES
+
+MOBILE MEDIA CONTRACT READY: YES
+
+SAFE LOCAL→S3 MIGRATION FOUNDATION READY: YES
+
+If not:
+
+FILE / MEDIA STORAGE ABSTRACTION PHASE NOT COMPLETE
+
+and list blockers.
+
+62. Next Backend Phase
+----------------------
+Only if COMPLETE recommend:
+
+QUESTION BANK / ASSESSMENT CONTENT FOUNDATION
+
+Reason:
+- Curriculum stable
+- Media stable
+- Question Bank can safely reference assetId
+- Practice/Exam depend on Question Bank
+
+Do NOT implement automatically.
+
+63. Prompt Count
+----------------
+State:
+FILE/MEDIA #004/4 complete
+Media phase complete or blocked
+
+64. Final Response
+------------------
+Respond concisely:
+
+- FILE/MEDIA #004 status
+- phase COMPLETE/NOT COMPLETE
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- contextual learner media PASS/FAIL
+- FE readiness
+- Mobile readiness
+- S3 readiness
+- unresolved BLOCKER/HIGH
+- next backend phase
+- report:
+  docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(media): finalize storage abstraction"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT start next phase automatically.

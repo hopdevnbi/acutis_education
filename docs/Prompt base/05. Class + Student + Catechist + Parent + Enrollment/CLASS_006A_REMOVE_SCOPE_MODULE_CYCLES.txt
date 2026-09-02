@@ -1,0 +1,580 @@
+CURSOR CORRECTIVE PROMPT — CLASS/PEOPLE/ENROLLMENT #006A
+ELIMINATE ALL CLASS-DOMAIN MODULE CYCLES / REMOVE forwardRef WITHOUT REGRESSING SCOPED AUTHORIZATION
+
+1. Context
+----------
+Main phase:
+CLASS/PEOPLE/ENROLLMENT
+
+Nominal completed prompts:
+#001 Domain Audit
+#002 Schema
+#003 Class API
+#004 Student + Guardian API
+#005 Catechist Assignment + Enrollment API
+#006 Scoped Authorization
+
+However CLASS #006 report still states:
+
+"forwardRef retained for Student ↔ Enrollment ↔ Class where scope wiring required additional cross-module exports."
+
+This violates permanent architecture rules:
+- acyclic module graph
+- no forwardRef as default cycle workaround
+- fix ownership/orchestration instead of hiding cycles
+- modular monolith with future microservice extraction
+- no god authorization service
+- no cross-module repository access
+
+Therefore #006A is a mandatory architecture gate before #007.
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_005_CATECHIST_ENROLLMENT_SERVICES_API_REPORT.md
+   docs/CLASS_006_SCOPED_RBAC_REPORT.md
+5. Inspect:
+   src/modules/student/
+   src/modules/class/
+   src/modules/enrollment/
+   src/modules/parish/
+   src/modules/auth/
+   src/modules/access-control/
+   src/modules/module-boundaries.spec.ts
+   test/integration/scoped-authorization.integration-spec.ts
+6. Search production source for:
+   forwardRef(
+   @Inject(forwardRef
+   StudentModule
+   EnrollmentModule
+   ClassModule
+7. Inspect git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Remove ALL forwardRef/circular dependencies among:
+
+- StudentModule
+- ClassModule
+- EnrollmentModule
+- ParishModule scope wiring
+
+while preserving:
+- existing HTTP routes
+- existing scoped authorization semantics
+- existing RBAC permissions
+- parent/catechist/parish-admin access rules
+- service/public contract boundaries
+- existing tests/API contracts
+
+Do NOT weaken authorization to make the graph easier.
+
+4. Required Final Dependency Direction
+--------------------------------------
+Target an acyclic graph close to:
+
+UsersModule
+   ↑
+StudentModule
+
+ParishModule
+   ↑
+ClassModule
+   ↑
+EnrollmentModule
+
+StudentModule
+   ↑
+EnrollmentModule
+
+ClassModule may depend on:
+- ParishModule
+- AcademicStructureModule
+- UsersModule
+
+EnrollmentModule may depend on:
+- StudentModule
+- ClassModule
+
+StudentModule should NOT depend on:
+- EnrollmentModule
+- ClassModule
+
+ParishModule should NOT depend on:
+- StudentModule
+- ClassModule
+- EnrollmentModule
+
+No reverse edges that create cycles.
+
+5. Scoped Authorization Design Principle
+----------------------------------------
+Capability:
+@RequirePermissions(...)
+
+Resource scope:
+domain-owned scope services / narrow access contracts
+
+Do NOT centralize everything into:
+AuthorizationGodService
+GlobalScopeService
+MegaPolicyService
+
+Instead keep:
+- ParishScopeService in ParishModule
+- ClassScopeService in ClassModule
+- StudentAccessService in StudentModule
+
+But their dependency direction must be acyclic.
+
+6. Identify Current Cycle Roots
+------------------------------
+Audit exact imports/injections introduced by #006.
+
+Likely cycle causes include:
+- StudentAccessService calling EnrollmentQueryService
+- ClassScopeService calling Student/Enrollment helpers
+- Enrollment controllers calling StudentAccessService
+- Student controllers calling EnrollmentQueryService
+- Parish read orchestration callbacks
+- ClassModule ↔ EnrollmentModule for scoped reads
+- StudentModule ↔ EnrollmentModule for parish student lists
+
+Document actual graph before fixing.
+
+7. Preferred Pattern — Higher-Layer Orchestration
+-------------------------------------------------
+If an HTTP route needs data from multiple domain modules:
+
+put orchestration in the module that already depends downstream,
+or in a thin application-facing controller/provider owned by the downstream module.
+
+Example:
+EnrollmentModule may call:
+- StudentService
+- ClassService
+- StudentAccessService
+because EnrollmentModule already depends on StudentModule and ClassModule.
+
+Do NOT make StudentModule import EnrollmentModule just because one student route needs enrollment-backed filtering.
+
+8. StudentAccessService Boundary
+--------------------------------
+StudentAccessService should own checks based on StudentModule evidence:
+
+- linked student user
+- guardian relationship
+- student lifecycle
+
+It should NOT query Enrollment repository.
+
+If it needs enrollment-derived access evidence:
+prefer one of:
+
+A. caller composes StudentAccessService + EnrollmentQueryService
+B. EnrollmentModule exposes a higher-level scoped query endpoint/service
+C. StudentAccessService accepts pre-resolved studentIds/context as input
+
+Do NOT create StudentModule -> EnrollmentModule.
+
+9. ClassScopeService Boundary
+-----------------------------
+ClassScopeService owns evidence from:
+
+- class snapshot
+- class catechist assignments
+- parish scope delegation
+
+It should NOT depend on EnrollmentModule unless absolutely necessary.
+
+For parent access to a class:
+preferred caller-side orchestration can combine:
+- StudentAccess/guardian evidence
+- EnrollmentQueryService child-class evidence
+- ClassScopeService class checks
+
+Do not force reverse module dependency.
+
+10. ParishScopeService Boundary
+-------------------------------
+ParishScopeService should depend only on:
+- ParishModule-owned persistence
+- Users/Auth-related safe identity/role context if needed
+
+Do NOT make ParishModule import Student/Class/Enrollment modules.
+
+If parish read access for catechist/parent needs non-parish evidence:
+perform that orchestration outside ParishModule.
+
+11. Parish Read Orchestration Utility
+-------------------------------------
+CLASS #006 report added:
+`assertParishReadScope()` util with delegate callbacks.
+
+Audit whether this util preserves dependency direction cleanly.
+
+If it causes hidden inversion or awkward callbacks:
+replace with a clearer application-layer orchestration pattern.
+
+Do not preserve complexity just because it avoids import syntax.
+
+12. Route Ownership Audit
+-------------------------
+Audit these routes:
+
+Class:
+GET /parishes/:parishId/classes
+GET /classes/:id
+mutations
+
+Student:
+GET /students
+GET /students/:id
+GET /parishes/:parishId/students
+guardian routes
+
+Enrollment:
+GET /classes/:classId/enrollments
+GET /students/:studentId/enrollments
+GET /enrollments/:id
+mutations
+
+Catechist assignment:
+GET /classes/:classId/catechists
+mutations
+
+For each:
+identify:
+- capability permission
+- scope evidence needed
+- best owner/controller without reverse dependency
+
+13. Preserve Security Invariants
+--------------------------------
+Must remain true:
+
+PARENT:
+- role alone grants nothing broad
+- can read only linked children
+- can read class/enrollment only through linked child evidence
+
+CATECHIST:
+- role alone grants nothing broad
+- can read only assigned classes
+- can read roster/enrollments only for assigned classes
+
+PARISH_ADMIN:
+- can manage only resources inside active parish membership
+
+SUPER_ADMIN:
+- global scope bypass allowed via explicit scope logic
+
+STUDENT:
+if implemented:
+- own student profile/enrollment only
+
+14. No Repository Shortcuts
+---------------------------
+To remove cycle, DO NOT:
+- inject Enrollment repository into StudentModule
+- inject Student repository into EnrollmentModule
+- inject Class repository into StudentModule
+- export repositories
+- export TypeOrmModule
+- export entities
+
+Use public services only.
+
+15. Public Contract Review
+--------------------------
+Expected exports may include:
+
+ParishModule:
+- ParishService
+- ParishScopeService
+
+ClassModule:
+- ClassService
+- ClassCatechistAssignmentService
+- ClassScopeService
+
+StudentModule:
+- StudentService
+- StudentGuardianService
+- StudentAccessService
+
+EnrollmentModule:
+- EnrollmentService
+- EnrollmentQueryService
+
+These exports are acceptable only if narrow and justified.
+
+Do not export internal repos/entities.
+
+16. Add Narrow Query APIs Instead of Reverse Imports
+----------------------------------------------------
+If orchestration needs efficient evidence, add narrow methods such as:
+
+EnrollmentQueryService:
+- listStudentIdsForClass(classId)
+- listClassIdsForStudent(studentId)
+- hasActiveEnrollment(studentId, classId)
+- hasGuardianLinkedStudentEnrollmentInClass(guardianUserId, classId) ONLY if it can be expressed without importing StudentModule persistence
+
+But avoid moving Student-owned logic into Enrollment module.
+
+Prefer IDs/snapshots.
+
+17. Static Cycle Test
+---------------------
+Add/strengthen module architecture tests to fail if source contains:
+
+forwardRef(() => StudentModule)
+forwardRef(() => EnrollmentModule)
+forwardRef(() => ClassModule)
+
+or @Inject(forwardRef(...)) in these bounded contexts.
+
+Also detect direct import patterns causing:
+StudentModule -> EnrollmentModule
+ClassModule -> EnrollmentModule
+ParishModule -> Student/Class/Enrollment
+
+Use lightweight source inspection if necessary.
+
+Do not add heavy dependency-analysis package unless clearly justified.
+
+18. forwardRef Audit
+--------------------
+After refactor:
+
+For Student/Class/Enrollment/Parish scoped domain:
+forwardRef count MUST be zero.
+
+If unrelated legacy forwardRef exists elsewhere:
+document it.
+Do not edit unrelated modules blindly.
+
+19. Preserve API Contract
+-------------------------
+Do not break route paths or response shapes.
+
+Existing Web/Mobile future contracts must remain stable.
+
+20. Preserve Permission Contract
+--------------------------------
+Do not rename:
+classes.*
+students.*
+student-guardians.*
+class-catechists.*
+enrollments.*
+
+No Auth/RBAC schema change.
+
+21. Existing Scoped Authorization Tests
+---------------------------------------
+All existing scoped auth tests from #006 must still PASS.
+
+Add cases specifically proving:
+
+- parent cannot read unlinked student
+- parent can read linked child
+- parent cannot read unrelated class/enrollment
+- catechist can read assigned class
+- catechist cannot read unassigned class
+- parish admin can manage own parish
+- parish admin cannot manage another parish
+- super admin bypass works
+
+22. Integration Tests for Final Graph
+-------------------------------------
+Add tests that exercise routes through final dependency graph without forwardRef.
+
+Nest application must bootstrap cleanly.
+
+23. No #007 Work Yet
+--------------------
+Do NOT add:
+- demo membership seed
+- demo guardian/catechist/enrollment seed
+- Postman collection
+- final phase declaration
+
+Those belong #007.
+
+24. quality:full Flake
+----------------------
+CLASS #006 still mentions pre-existing `auth-rbac-seed` / DB parallel flake.
+
+Attempt full:
+npm run quality:full
+
+If flake reproduces:
+- identify exact shared mutable DB state
+- if minimal safe isolation fix is straightforward, fix now
+- do not weaken assertions
+- do not mark PASS if command did not pass
+
+If not fixed:
+carry as explicit item to #007.
+
+25. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:scope-cycle-fix .
+
+26. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "refactor(scope): remove class domain module cycles"
+
+Cursor must NOT execute it.
+
+27. Required Report
+-------------------
+Create:
+
+docs/CLASS_006A_REMOVE_SCOPE_MODULE_CYCLES_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Violation inherited from #006
+3. Rules applied
+4. Previous dependency graph
+5. Exact cycle roots
+6. Selected refactor strategy
+7. Final dependency graph
+8. ParishScopeService boundary
+9. ClassScopeService boundary
+10. StudentAccessService boundary
+11. EnrollmentQueryService boundary
+12. Route ownership/orchestration changes
+13. Public export audit
+14. API compatibility
+15. Permission compatibility
+16. Parent scope behavior
+17. Catechist scope behavior
+18. Parish admin scope behavior
+19. Super admin behavior
+20. forwardRef audit
+21. Static cycle tests
+22. Integration scoped-auth tests
+23. quality:full result
+24. Docker result
+25. Files created
+26. Files modified
+27. Commands executed
+28. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- integration
+- DB e2e
+- quality:full
+- Docker
+- StudentModule -> EnrollmentModule absent
+- ClassModule -> EnrollmentModule absent unless explicitly justified and acyclic
+- ParishModule -> Student/Class/Enrollment absent
+- EnrollmentModule -> StudentModule valid
+- EnrollmentModule -> ClassModule valid
+- no forwardRef in class-domain modules
+- no circular dependency
+- API routes unchanged
+- permission names unchanged
+- parent scope preserved
+- catechist scope preserved
+- parish admin scope preserved
+- super admin scope preserved
+- no cross-module repository/entity
+- scoped authorization regression PASS
+
+29. Completion Decision
+-----------------------
+State exactly one:
+
+CLASS #006A CYCLE FIX COMPLETE
+
+or
+
+CLASS #006A CYCLE FIX NOT COMPLETE
+
+Do NOT declare COMPLETE with unresolved BLOCKER/HIGH.
+
+30. CLASS #007 Readiness
+------------------------
+Only if COMPLETE and no unresolved BLOCKER/HIGH:
+
+State:
+
+READY FOR CLASS #007/7 — FINAL AUDIT + DOMAIN SEED + POSTMAN + FE/MOBILE CONTRACT READINESS
+
+Do NOT implement #007 automatically.
+
+31. Prompt Position
+-------------------
+Main roadmap:
+#006/7 scoped auth functionally complete
+#006A corrective architecture gate
+then #007/7 final phase closure
+
+32. Final Response
+------------------
+Respond concisely:
+
+- CLASS #006A status
+- cycle removed YES/NO
+- forwardRef removed YES/NO
+- scoped auth regression PASS/FAIL
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/CLASS_006A_REMOVE_SCOPE_MODULE_CYCLES_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "refactor(scope): remove class domain module cycles"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #007 automatically.

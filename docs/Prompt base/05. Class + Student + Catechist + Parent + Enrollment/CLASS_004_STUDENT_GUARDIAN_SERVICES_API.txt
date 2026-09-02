@@ -1,0 +1,1016 @@
+CURSOR PROMPT — CLASS/PEOPLE/ENROLLMENT #004/7
+STUDENT + GUARDIAN RELATIONSHIP SERVICES + API
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- Parish/Academic Year/Catechism Level
+- CLASS #001 Domain Audit + Bounded Context Design
+- CLASS #002 Schema + Entities + Migrations
+- CLASS #003 Class Service + API + RBAC Foundations
+
+Current:
+- CLASS/PEOPLE/ENROLLMENT #004 / 7 — Student + Guardian Relationship Services + APIs
+
+Remaining:
+- #005 Catechist assignment + Enrollment history services/APIs
+- #006 Scoped authorization hardening + cross-domain integration
+- #007 Final audit + seed/Postman + FE contract readiness
+
+Frontend remains a separate ReactJS repository/source and communicates with BE via HTTP API only.
+Do NOT modify FE in this prompt.
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/CLASS_003_CLASS_SERVICE_API_RBAC_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+5. Inspect:
+   src/modules/student/
+   src/modules/users/
+   src/modules/parish/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/seeds/
+   test/
+   README.md
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Architecture Rules
+---------------------
+StudentModule owns:
+- students
+- student_guardians
+
+StudentModule may depend on:
+- UsersModule public API only
+- AuthModule / AccessControlModule only for controller/guard wiring
+
+Business services MUST NOT:
+- import UserEntity
+- inject user repository
+- import ClassModule
+- import EnrollmentModule
+- import ParishModule persistence
+- import Auth/AccessControl business dependencies
+
+No cross-module entity/repository access.
+
+4. Primary Objective
+--------------------
+Implement:
+
+- StudentService
+- Guardian relationship service or cohesive StudentService methods if cleaner
+- StudentSnapshot
+- GuardianLinkSnapshot
+- StudentController
+- GuardianController or nested student guardian controller
+- DTOs
+- student lifecycle
+- optional userId validation
+- guardian link lifecycle/history
+- primary guardian invariant handling
+- RBAC permissions
+- Swagger
+- unit tests
+- integration tests
+- DB-aware e2e
+
+Do NOT implement:
+- Enrollment behavior
+- Catechist assignment behavior
+- parish-scoped/resource-scoped authorization
+- domain seed
+- FE changes
+
+5. Student Identity Rules
+-------------------------
+Student is a domain profile.
+
+Student does NOT require a User account.
+
+Fields already exist:
+- id
+- userId nullable
+- fullName
+- status
+- timestamps
+
+Do NOT add new PII fields.
+
+No DOB.
+No gender.
+No notes.
+No address/contact.
+No sacramental/pastoral fields.
+
+6. StudentSnapshot
+------------------
+Create safe snapshot:
+
+StudentSnapshot:
+- id
+- userId: string | null
+- fullName
+- status
+- createdAt
+- updatedAt
+
+No entity exposure.
+
+7. GuardianLinkSnapshot
+-----------------------
+Create safe snapshot:
+
+GuardianLinkSnapshot:
+- id
+- studentId
+- guardianUserId
+- relationshipType
+- isPrimary
+- status
+- startsAt
+- endsAt
+- createdAt
+- updatedAt
+
+No UserEntity details embedded.
+
+8. StudentModule Public Export
+------------------------------
+Final exports:
+- StudentService
+
+If guardian-specific public validation is needed by future scope code, prefer StudentService methods such as:
+- assertGuardianLinked(...)
+- listActiveGuardians(...)
+
+Do NOT export:
+- TypeOrmModule
+- StudentEntity
+- StudentGuardianEntity
+- repositories
+
+Avoid exporting a second service unless separation clearly improves cohesion.
+
+9. Student Full Name Validation
+-------------------------------
+fullName:
+- trim
+- required
+- max 128
+- Unicode/Vietnamese supported
+
+Do not over-normalize.
+
+10. Student Status
+------------------
+Enum:
+ACTIVE
+INACTIVE
+
+Creation default:
+ACTIVE
+
+Allowed:
+ACTIVE -> INACTIVE
+INACTIVE -> ACTIVE
+
+Status is record lifecycle only.
+
+Operational class membership remains Enrollment authority.
+
+11. Optional userId
+-------------------
+On create/update, userId may be:
+- omitted/null
+- valid UUID referring to existing User
+
+Use UsersModule public service only.
+
+Audit existing UserAccountService methods.
+
+If needed, add narrow public method:
+findAccountSnapshotById
+or
+assertAccountExists
+
+Do NOT expose UserEntity.
+
+12. One Student Profile per User
+--------------------------------
+DB filtered unique already enforces:
+one non-null userId per student profile.
+
+Map duplicate conflict to:
+StudentUserAlreadyLinkedError
+or similarly precise domain error.
+
+HTTP:
+409.
+
+13. Create Student
+------------------
+Implement conceptually:
+
+createStudent(input)
+
+Input:
+- fullName
+- optional userId
+
+Flow:
+1. validate fullName
+2. if userId supplied:
+   - validate UUID
+   - validate user exists through UsersModule public API
+3. create ACTIVE student
+4. save
+5. map user uniqueness conflict
+6. return StudentSnapshot
+
+14. Get Student
+---------------
+Implement:
+getStudentById(id)
+
+- validate UUID
+- missing -> StudentNotFoundError
+- safe snapshot
+
+Also expose:
+assertStudentActive(studentId)
+
+for EnrollmentModule #005.
+
+15. Update Student
+------------------
+PATCH /api/v1/students/:id
+
+Allow:
+- fullName
+- userId
+
+At least one field.
+
+Need intentional user-link rules.
+
+Preferred:
+- userId may be linked when currently null
+- may be corrected to another existing user by admin if no conflict
+- may be cleared back to null if needed
+
+If this creates audit concerns, document and choose conservative rule.
+
+Do NOT make User ownership implicit.
+
+16. Student Status Endpoint
+---------------------------
+PATCH /api/v1/students/:id/status
+
+Body:
+{
+  status: ACTIVE | INACTIVE
+}
+
+Do not hard delete.
+
+17. Inactive Student Behavior
+-----------------------------
+Read:
+allowed
+
+Guardian history:
+allowed
+
+New guardian links:
+audit whether allowed.
+
+Preferred:
+block new guardian links when student INACTIVE.
+
+Reactivation allowed.
+
+Enrollment creation later should require ACTIVE student.
+
+18. Student List
+---------------
+Implement admin/general list:
+
+GET /api/v1/students
+
+Pagination per PROJECT_RULES.
+
+Filters:
+- status
+- search by fullName
+- linkedUserId optional if useful for admin
+
+Sort whitelist:
+- fullName
+- status
+- createdAt
+
+Do NOT implement parish student list in #004 because parish participation derives from Enrollment, which is not implemented yet.
+
+This route remains deferred to #005/#006.
+
+19. Guardian Relationship Semantics
+-----------------------------------
+Guardian relationship is historical.
+
+Fields:
+- studentId
+- guardianUserId
+- relationshipType
+- isPrimary
+- status
+- startsAt
+- endsAt
+
+Create defaults:
+- status ACTIVE
+- startsAt = now
+- endsAt = null
+
+20. Relationship Types
+----------------------
+Enum:
+PARENT
+GUARDIAN
+OTHER
+
+Do not add FATHER/MOTHER or sensitive family-detail enums.
+
+21. Link Guardian
+-----------------
+POST /api/v1/students/:studentId/guardians
+
+Input:
+- guardianUserId
+- relationshipType
+- isPrimary optional/default false
+
+Flow:
+1. student exists and ACTIVE
+2. guardianUserId valid/existing User
+3. reject guardian user linked to same student as currently ACTIVE
+4. if isPrimary=true:
+   ensure no existing ACTIVE primary guardian
+5. create new ACTIVE row
+6. return snapshot
+
+DB filtered indexes already enforce race safety.
+
+Map conflicts cleanly.
+
+22. Historical Re-link
+----------------------
+If same guardian had an ENDED link before:
+new ACTIVE row is allowed.
+
+Do NOT reactivate old historical row.
+
+History remains append-style.
+
+23. End Guardian Link
+---------------------
+PATCH /api/v1/student-guardians/:id/status
+
+Preferred request:
+{
+  status: "ENDED"
+}
+
+No generic ACTIVE reactivation of old row.
+
+ENDED is terminal.
+
+To re-link:
+create new row.
+
+On end:
+- status ENDED
+- endsAt = now
+
+24. Primary Guardian Ending
+--------------------------
+If ending primary guardian:
+just end it.
+
+Do not automatically choose another primary guardian.
+
+Admin can explicitly promote a different active guardian later.
+
+25. Promote/Demote Primary Guardian
+----------------------------------
+Need decide if required now.
+
+Recommended:
+allow PATCH to guardian relationship metadata:
+
+PATCH /api/v1/student-guardians/:id
+
+Allow:
+- relationshipType
+- isPrimary
+
+Only while ACTIVE.
+
+Setting isPrimary=true:
+- ensure no other ACTIVE primary guardian
+- DB unique index race safety
+
+Setting false:
+allowed.
+
+Do not modify studentId/guardianUserId.
+
+26. Guardian User Validation
+----------------------------
+Use UsersModule public API only.
+
+Do not query users table in StudentModule.
+
+27. Guardian Self Security
+-------------------------
+IMPORTANT:
+
+Do NOT implement parent self-access yet.
+
+Current #004 endpoints are admin/general capability endpoints.
+
+Role PARENT alone must NOT grant student access.
+
+Actual relationship-scoped self access is implemented/hardened in #006.
+
+Document explicitly.
+
+28. RBAC Permissions
+--------------------
+Add/wire:
+
+students.read
+students.manage
+
+student-guardians.read
+student-guardians.manage
+
+Permissions:
+GET student/list -> students.read
+POST/PATCH/status student -> students.manage
+
+GET guardians -> student-guardians.read
+POST/PATCH guardian -> student-guardians.manage
+
+No role-name checks.
+
+No SUPER_ADMIN bypass in business code.
+
+29. Dev Seed Permission Matrix
+------------------------------
+Extend auth-rbac seed intentionally.
+
+Recommended:
+
+SUPER_ADMIN:
+all
+
+PARISH_ADMIN:
+students.read/manage
+student-guardians.read/manage
+
+CATECHIST:
+do NOT grant broad students.read/manage unless already required by product
+Prefer no broad students permission yet because catechist access must later be assignment-scoped.
+
+PARENT:
+do NOT grant broad students.read
+do NOT grant broad student-guardians.read
+
+This is important.
+
+Parent/catechist self/resource access will use dedicated scoped endpoints in #006.
+
+If existing seed currently grants broad class access placeholders, do not copy that pattern to sensitive student data.
+
+30. Permission Privacy Review
+-----------------------------
+Student data is minor PII.
+
+Be conservative.
+
+Global permissions should be primarily:
+SUPER_ADMIN
+PARISH_ADMIN
+
+Relationship-scoped roles:
+CATECHIST
+PARENT
+should use scope services/endpoints later.
+
+31. Student HTTP Routes
+-----------------------
+Implement:
+
+POST   /api/v1/students
+GET    /api/v1/students
+GET    /api/v1/students/:id
+PATCH  /api/v1/students/:id
+PATCH  /api/v1/students/:id/status
+
+No DELETE.
+
+32. Guardian HTTP Routes
+------------------------
+Implement:
+
+POST   /api/v1/students/:studentId/guardians
+GET    /api/v1/students/:studentId/guardians
+GET    /api/v1/student-guardians/:id
+PATCH  /api/v1/student-guardians/:id
+PATCH  /api/v1/student-guardians/:id/status
+
+No DELETE.
+
+If GET single guardian is unnecessary, may omit with justification.
+
+33. Guardian List
+-----------------
+GET /students/:studentId/guardians
+
+Allow filters:
+- status
+- optional includeHistory flag if project conventions allow
+
+Default:
+ACTIVE only or all?
+
+Preferred admin/history behavior:
+default ACTIVE
+optional status filter.
+
+Document.
+
+34. HTTP Status
+---------------
+POST -> 201
+GET -> 200
+PATCH -> 200
+
+400 validation
+401 unauthenticated
+403 permission
+404 missing student/user/link
+409 active duplicate/primary conflict/user profile conflict
+
+Use global error envelope.
+
+35. DTOs
+--------
+Create:
+
+CreateStudentRequestDto
+UpdateStudentRequestDto
+UpdateStudentStatusRequestDto
+StudentListQueryDto
+StudentResponseDto
+StudentListResponseDto
+
+CreateGuardianLinkRequestDto
+UpdateGuardianLinkRequestDto
+UpdateGuardianLinkStatusRequestDto
+GuardianListQueryDto
+GuardianLinkResponseDto
+GuardianListResponseDto
+
+Use class-validator.
+
+36. FE Contract
+---------------
+StudentResponseDto must contain only safe fields.
+
+Do not expose:
+- entity metadata
+- internal User account details
+- email/password
+- guardian data nested automatically
+
+GuardianLinkResponseDto only exposes:
+IDs + relationship/status fields.
+
+No guardian email/name expansion in #004.
+
+Future FE can fetch display account info via explicit safe API if product requires.
+
+37. Repository Boundary
+-----------------------
+StudentService may inject:
+Repository<StudentEntity>
+Repository<StudentGuardianEntity>
+
+Both are owned by StudentModule.
+
+No external repositories.
+
+38. Transaction / Race Handling
+-------------------------------
+Guardian primary conflict:
+DB filtered unique index provides final invariant.
+
+Map unique violation to domain conflict.
+
+If updating isPrimary:
+use transaction if needed to avoid partial state.
+
+Do NOT auto-demote current primary unless product requirement explicitly chooses this.
+
+Preferred:
+return 409 and require explicit admin action.
+
+39. Student User Link Race
+--------------------------
+DB filtered unique index handles concurrent attempts to link same user to multiple student profiles.
+
+Map unique violation cleanly.
+
+40. Error Types
+---------------
+Create concise domain errors.
+
+Examples:
+
+InvalidStudentIdError
+InvalidStudentNameError
+StudentNotFoundError
+StudentInactiveError
+StudentUserAlreadyLinkedError
+InvalidGuardianLinkIdError
+GuardianLinkNotFoundError
+GuardianAlreadyLinkedError
+PrimaryGuardianAlreadyExistsError
+InvalidGuardianStatusTransitionError
+InvalidGuardianRelationshipTypeError
+
+Reuse UsersModule errors where appropriate without leaking internals.
+
+41. Swagger
+-----------
+Document:
+- routes
+- bearer auth
+- enums
+- pagination
+- request/response DTOs
+- no real PII examples
+
+Use synthetic examples only.
+
+42. Unit Tests — Student
+------------------------
+Test:
+- fullName validation
+- create default ACTIVE
+- optional null userId
+- valid userId
+- missing user rejection
+- duplicate linked user mapping
+- get/not found
+- update fullName/userId
+- status activate/deactivate
+- inactive behavior
+- list/search/filter
+- safe snapshot
+
+43. Unit Tests — Guardian
+-------------------------
+Test:
+- create link
+- guardian user validation
+- inactive student rejection
+- duplicate ACTIVE link
+- historical ENDED + new ACTIVE
+- primary guardian conflict
+- relationship update
+- set/unset primary
+- end link
+- ENDED terminal
+- list/filter
+- safe snapshot
+
+44. Integration Tests
+---------------------
+Against catechism_api_test:
+
+Students:
+- Vietnamese fullName
+- null userId
+- linked user
+- duplicate linked user conflict
+- update
+- status
+- pagination/search
+
+Guardians:
+- create active link
+- multiple guardians
+- only one primary
+- end + re-link
+- one guardian multiple students
+- update relationship/isPrimary
+- timestamp consistency
+
+Use UsersModule public service where practical.
+
+45. DB-Aware E2E
+----------------
+Test HTTP:
+
+Students:
+- 401
+- 403
+- 201 create
+- 200 list/get/update/status
+- 409 duplicate linked user
+- 400 invalid DTO
+
+Guardians:
+- 401
+- 403
+- 201 create
+- 200 list/get/update/end
+- duplicate -> 409
+- second primary -> 409
+- historical re-link succeeds
+
+Verify CATECHIST/PARENT without broad student permission receive 403 on admin student APIs if seed policy follows recommendation.
+
+46. Existing Regression
+-----------------------
+Run all existing:
+- Auth/RBAC
+- Parish
+- AcademicStructure
+- Class
+- schema/integration
+tests.
+
+47. quality:full Flake Tracking
+-------------------------------
+CLASS #003 reported occasional pre-existing DB e2e flake caused by parallel permission-seed cleanup.
+
+Do NOT ignore it.
+
+For this prompt:
+- attempt full `quality:full`
+- if it flakes, reproduce and distinguish infrastructure race from StudentModule defect
+- do not weaken tests
+- document exact failure
+- if a small safe test-isolation fix is obvious and does not change business behavior, fix it
+- otherwise carry it explicitly to #006/#007
+
+Do not declare a false clean PASS.
+
+48. No Enrollment Behavior
+--------------------------
+STRICTLY no:
+EnrollmentService
+enrollment API
+transfer operation
+
+49. No Catechist Assignment Behavior
+------------------------------------
+STRICTLY no assignment services/APIs.
+
+50. No Scoped Authorization
+---------------------------
+Do NOT implement:
+StudentAccessService
+ParishScopeService
+ClassScopeService
+parent self endpoints
+catechist roster scope
+
+Those belong #006.
+
+51. No Parish Student List Yet
+-----------------------------
+Do NOT implement:
+GET /parishes/:parishId/students
+
+It depends on Enrollment semantics and scope.
+
+52. No FE Changes
+-----------------
+Do not touch React repo.
+
+53. Security / Privacy Audit
+---------------------------
+Verify:
+- minimal child PII
+- no PII logging
+- no parent role-alone access
+- no catechist broad student access
+- no UserEntity leakage
+- no email/password/token exposure
+- no guardian data expansion beyond needed IDs/relationship fields
+
+54. Microservice Extraction Review
+----------------------------------
+StudentModule future service owns:
+- students
+- student_guardians
+
+Depends on:
+- User Service for user existence validation
+
+Future EnrollmentModule consumes:
+- StudentService.assertStudentActive
+- StudentSnapshot
+
+Future Parent APIs use:
+- StudentService.assertGuardianLinked
+
+No entity crossing.
+
+55. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:student-api .
+
+56. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(student): add student guardian APIs"
+
+Cursor must NOT execute it.
+
+57. Required Report
+-------------------
+Create:
+
+docs/CLASS_004_STUDENT_GUARDIAN_SERVICES_API_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #003
+3. Rules applied
+4. Files created
+5. Files modified
+6. StudentModule architecture
+7. Public exports
+8. StudentSnapshot
+9. GuardianLinkSnapshot
+10. Full name validation
+11. Student lifecycle
+12. Optional user link policy
+13. User validation through UsersModule
+14. Duplicate user link handling
+15. Student create/get/list/update/status
+16. Guardian relationship model
+17. Guardian create/link flow
+18. Historical re-link behavior
+19. Primary guardian invariant
+20. Guardian update/end lifecycle
+21. HTTP routes
+22. DTOs
+23. HTTP/error mapping
+24. RBAC permissions
+25. Dev permission seed changes
+26. Parent/catechist broad access policy
+27. Swagger/OpenAPI readiness
+28. Repository boundary
+29. Cross-module dependency audit
+30. Unit tests
+31. Integration tests
+32. DB-aware e2e
+33. quality:full flake audit
+34. Existing regression
+35. Security/privacy review
+36. Docker validation
+37. Microservice extraction review
+38. Commands executed
+39. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- create/list/get/update/status student
+- optional user link
+- duplicate user link 409
+- guardian create/list/update/end
+- guardian historical re-link
+- one active primary guardian
+- auth 401
+- permission 403
+- Parent broad student access denied
+- Catechist broad student access denied
+- no UserEntity/repository leakage
+- safe snapshots
+- minimal PII
+- prior regression
+
+40. Known issues/deferred
+41. Out-of-scope confirmation
+42. CLASS #005 readiness
+43. Prompt count status
+44. Commit recommendation
+
+58. CLASS #005 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+CLASS/PEOPLE/ENROLLMENT #005 — Catechist Assignment + Enrollment History Services + APIs
+
+#005 should implement:
+- class catechist assignment lifecycle/history
+- EnrollmentService
+- enroll student
+- complete/withdraw
+- transfer command transaction
+- one ACTIVE enrollment invariant
+- safe snapshots
+- RBAC
+- APIs
+- tests
+
+No scoped authorization hardening yet; #006.
+
+59. Prompt Count
+----------------
+State:
+#004/7 complete
+approximately 3 prompts remain (#005–#007)
+
+60. Final Response
+------------------
+Respond concisely:
+
+- CLASS/PEOPLE/ENROLLMENT #004 status
+- Student API PASS/FAIL
+- Guardian API PASS/FAIL
+- privacy/RBAC PASS/FAIL
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CLASS_004_STUDENT_GUARDIAN_SERVICES_API_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(student): add student guardian APIs"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #005 automatically.

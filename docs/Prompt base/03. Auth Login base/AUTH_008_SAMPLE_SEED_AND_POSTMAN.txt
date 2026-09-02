@@ -1,0 +1,1049 @@
+CURSOR PROMPT — AUTH/RBAC #008/9
+SAMPLE SEED DATA + POSTMAN VERIFICATION FLOW
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit: COMPLETE
+- AUTH/RBAC #002 — Schema + Entities + Migrations: COMPLETE
+- AUTH/RBAC #002B — Schema Boundary Hardening: COMPLETE
+- AUTH/RBAC #003 — User Account + Password Foundation: COMPLETE
+- AUTH/RBAC #004 — Login + Access JWT: COMPLETE
+- AUTH/RBAC #005 — Refresh Token + Session + Logout: COMPLETE
+- AUTH/RBAC #006 — Role + Permission + RBAC Guards: COMPLETE
+- AUTH/RBAC #007 — Security Hardening + Integration Audit: COMPLETE
+
+Current:
+- AUTH/RBAC #008 / 9 — Sample Seed Data + Postman Verification
+
+Remaining:
+- #009 Final Auth/RBAC Audit + Module Boundary Review
+
+This prompt is specifically for:
+- local/dev sample seed data
+- repeatable verification data
+- Postman collection / environment
+- manual end-to-end verification instructions
+
+Do NOT add production bootstrap credentials.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+   docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+   docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+   docs/AUTH_006_ROLE_PERMISSION_RBAC_REPORT.md
+   docs/AUTH_007_SECURITY_HARDENING_INTEGRATION_REPORT.md
+5. Inspect:
+   src/modules/users/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/
+   scripts/
+   package.json
+   README.md
+   .gitignore
+   test/
+6. Inspect Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Create a safe, explicit, repeatable local/dev seed workflow that provides realistic sample Auth/RBAC data.
+
+Then create a Postman collection and local environment that verifies:
+
+- login
+- /auth/me
+- RBAC allow
+- RBAC deny
+- permission change behavior if practical
+- refresh-token cookie flow
+- logout
+- refresh-after-logout rejection
+
+The seed must be:
+
+- explicit
+- idempotent
+- module-boundary compliant
+- local/dev only
+- never automatically run in production
+- never contain real production secrets
+
+4. Modular Boundary — CRITICAL
+------------------------------
+Seed logic must respect module ownership.
+
+Users:
+- seed account through UserAccountService
+
+AccessControl:
+- seed roles/permissions/assignments through AccessControlService
+
+Auth:
+- do NOT seed auth_sessions
+- sessions must be created through normal login
+
+Do NOT:
+- insert rows directly through foreign module repositories
+- import UserEntity into AccessControl seed logic
+- manipulate auth_sessions manually
+- bypass normalization/validation services without strong reason
+
+5. Seed Architecture
+--------------------
+Prefer one orchestration entry point, for example:
+
+scripts/seed-auth-rbac.ts
+
+or:
+src/database/seeds/auth-rbac.seed.ts
+plus a CLI script
+
+Choose a clean structure consistent with project conventions.
+
+The orchestrator may bootstrap Nest application context so it can resolve:
+
+- UserAccountService
+- AccessControlService
+
+This is preferred over duplicating business rules.
+
+6. Seed Execution Command
+-------------------------
+Add an explicit npm command.
+
+Preferred:
+
+npm run seed:auth-rbac
+
+or:
+npm run seed:dev:auth-rbac
+
+Choose a name that clearly communicates non-production intent.
+
+Do not overload migration scripts.
+
+7. Environment Guard
+--------------------
+CRITICAL:
+
+Seed command must fail when environment is unsafe.
+
+At minimum reject:
+
+NODE_ENV=production
+
+Also consider DB name guard.
+
+Preferred:
+allow only:
+- catechism_api
+- catechism_api_test if explicitly requested for test validation
+
+Never seed:
+- unknown DB
+- production DB
+- database without explicit allow-list
+
+Reuse existing database safety helpers if possible.
+
+8. Explicit Seed Opt-In
+-----------------------
+Do NOT run seed:
+- on app startup
+- in migration
+- in Docker container startup
+- in Bitbucket pipeline by default
+
+Seed is manually invoked.
+
+9. Sample Roles
+---------------
+Seed a small realistic set.
+
+Recommended:
+
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST
+PARENT
+
+Do NOT seed STUDENT yet unless needed for auth test.
+
+Reason:
+child/student account model is still future privacy/domain work.
+
+Role names/descriptions may be Vietnamese or English, but machine codes stay stable uppercase.
+
+10. Sample Permissions
+----------------------
+Seed a minimal catalog sufficient to test current RBAC.
+
+Recommended permissions:
+
+users.read
+users.manage
+classes.read
+classes.manage
+auth.test.read
+auth.test.manage
+
+But avoid inventing too many future-domain permissions.
+
+Preferred smallest meaningful set:
+
+users.read
+users.manage
+classes.read
+classes.manage
+
+If Postman needs a protected endpoint with permission:
+there is currently no real production business endpoint.
+
+Therefore evaluate adding a LOCAL/DEV-ONLY RBAC verification endpoint, or avoid production endpoint changes.
+
+Preferred:
+do NOT add fake production endpoints merely for Postman.
+
+Instead consider a dedicated diagnostic endpoint available only outside production IF strongly justified.
+
+Alternative:
+create a tiny `/api/v1/dev/rbac-check/...` controller gated by NODE_ENV != production.
+
+But this adds runtime surface.
+
+Evaluate carefully.
+
+Best option may be:
+use existing `/auth/me` for authentication verification
+and add a dedicated dev-only test controller only if Postman must demonstrate PermissionGuard manually.
+
+If added:
+- module should clearly be dev/test infrastructure
+- disabled entirely in production
+- no business logic
+- documented
+- final #009 will audit/remove/keep decision
+
+11. Preferred Postman RBAC Verification Strategy
+------------------------------------------------
+Because user explicitly wants to test RBAC on Postman:
+
+We need a real HTTP endpoint protected by:
+JwtAuthGuard + PermissionGuard.
+
+Create a minimal dev-only endpoint if no appropriate real feature endpoint exists.
+
+Example concept:
+
+GET /api/v1/dev/rbac/read
+requires:
+auth.test.read
+
+GET /api/v1/dev/rbac/manage
+requires:
+auth.test.manage
+
+This endpoint MUST:
+- be registered only when NODE_ENV !== production
+- have zero data mutation
+- return simple diagnostic response
+- not expose user roles/permissions in detail
+- not become permanent business API
+
+If adding this is architecturally ugly, document alternative.
+
+12. Dev-Only Endpoint Module Boundary
+-------------------------------------
+If dev-only controller added:
+
+Prefer:
+src/modules/access-control/dev/
+or
+src/dev/
+
+Do not pollute production AccessControl service.
+
+Use existing:
+JwtAuthGuard
+PermissionGuard
+@RequirePermissions
+
+No direct repository access.
+
+13. Sample Permission Codes for Verification
+--------------------------------------------
+If dev RBAC routes are added:
+
+Seed:
+auth.test.read
+auth.test.manage
+
+Assign:
+CATECHIST:
+- auth.test.read
+
+PARISH_ADMIN:
+- auth.test.read
+- auth.test.manage
+
+SUPER_ADMIN:
+- both
+
+PARENT:
+- no auth.test.* permissions
+
+This gives clean allow/deny behavior.
+
+14. Role Permission Assignments
+-------------------------------
+Recommended:
+
+SUPER_ADMIN:
+- all currently seeded permissions
+
+PARISH_ADMIN:
+- users.read
+- users.manage
+- classes.read
+- classes.manage
+- auth.test.read
+- auth.test.manage
+
+CATECHIST:
+- classes.read
+- classes.manage
+- auth.test.read
+
+PARENT:
+- classes.read only
+or no test permissions
+
+Keep this as sample/dev policy only.
+
+Do not treat this as final product authorization policy.
+
+15. Sample Users
+----------------
+Seed 3–4 local accounts.
+
+Recommended:
+
+admin@local.catechism.test
+catechist@local.catechism.test
+parent@local.catechism.test
+
+Optional:
+superadmin@local.catechism.test
+
+Passwords must be clearly local/dev-only.
+
+Do NOT use:
+admin123
+password
+123456
+
+Use strong test-only passwords.
+
+Example concept:
+LocalDev!Admin2026
+
+But actual values should be documented clearly as LOCAL ONLY.
+
+16. Password Strategy
+---------------------
+All sample users must be created through UserAccountService.
+
+Therefore:
+- email normalization used
+- password policy enforced
+- Argon2id hashing used
+- no plaintext stored in DB
+
+Seed script may contain local-only test plaintext passwords.
+
+This is acceptable ONLY because:
+- seed script is explicitly development-only
+- values are not production credentials
+
+Still:
+do not log passwords unnecessarily.
+
+17. Seed Credential Documentation
+---------------------------------
+Document sample credentials in:
+
+docs/AUTH_008_SAMPLE_SEED_AND_POSTMAN_REPORT.md
+
+Because docs/ is gitignored according to project workflow, this is appropriate.
+
+If README is tracked:
+do NOT publish plaintext sample passwords there unless project policy explicitly permits.
+
+Prefer README only references the seed command.
+
+18. Idempotency
+---------------
+Running seed multiple times must NOT create duplicates.
+
+Required:
+
+- roles reused by code
+- permissions reused by code
+- users reused by normalized email
+- assignments reused/idempotent
+
+Do NOT delete/recreate existing user rows.
+
+Do NOT reset passwords on every seed by default unless explicitly designed.
+
+Preferred behavior:
+- create missing sample user
+- if sample user exists, leave password unchanged
+- ensure expected role assignment exists
+
+Document this.
+
+19. Seed Reconciliation
+-----------------------
+For roles/permissions:
+
+If row exists:
+- verify/reconcile display name/description if safe
+
+For users:
+- avoid silently overwriting account status/password
+
+Seed should not unexpectedly mutate real local accounts sharing same email.
+
+Use unmistakably local test domains.
+
+20. Transaction Strategy
+------------------------
+Seed does not need one global cross-module transaction.
+
+Remember modular rule:
+avoid cross-module shared transactions.
+
+Use each module's service operations normally.
+
+If one step fails:
+report clearly.
+
+Idempotency makes re-run safe.
+
+21. Sample Role Assignment
+--------------------------
+Assign:
+
+superadmin user -> SUPER_ADMIN
+admin user -> PARISH_ADMIN
+catechist user -> CATECHIST
+parent user -> PARENT
+
+Do not assign multiple roles unless needed for demonstration.
+
+22. No Auth Session Seed
+------------------------
+Do NOT create session rows.
+
+Postman login creates them normally.
+
+23. Postman Collection
+----------------------
+Create a Postman collection file.
+
+Suggested location:
+docs/postman/Acutis-Education-Auth-RBAC.postman_collection.json
+
+Since docs/ is ignored, it remains developer handoff documentation unless project convention says otherwise.
+
+If user wants persistent tracked Postman artifacts later, that can be changed.
+
+Collection should follow Postman Collection schema.
+
+24. Postman Environment
+-----------------------
+Create:
+
+docs/postman/Acutis-Education-Local.postman_environment.json
+
+Variables:
+
+baseUrl
+email
+password
+accessToken
+
+Optional:
+adminEmail
+adminPassword
+catechistEmail
+catechistPassword
+parentEmail
+parentPassword
+
+Do NOT put JWT secrets or refresh hash secrets in Postman env.
+
+Refresh token should remain cookie-managed by Postman.
+
+25. Collection Folders
+----------------------
+Organize collection:
+
+1. Health / Setup
+2. Auth
+3. RBAC - Admin
+4. RBAC - Catechist
+5. RBAC - Parent
+6. Negative Cases
+
+Keep understandable.
+
+26. Postman Login Request
+-------------------------
+POST:
+{{baseUrl}}/api/v1/auth/login
+
+Body:
+email/password from environment.
+
+Post-response script:
+- store accessToken
+- optionally store userId
+
+Do NOT attempt to extract HttpOnly refresh cookie into environment variable.
+Let Postman cookie jar manage it.
+
+27. Auth Me Request
+-------------------
+GET:
+{{baseUrl}}/api/v1/auth/me
+
+Header:
+Authorization: Bearer {{accessToken}}
+
+Tests:
+- 200
+- id/email present
+
+28. Refresh Request
+-------------------
+POST:
+{{baseUrl}}/api/v1/auth/refresh
+
+No refresh token JSON.
+
+Postman cookie jar should automatically send:
+catechism_refresh_token
+
+Post-response:
+update accessToken with rotated access token.
+
+Tests:
+- 200
+- accessToken exists
+- Set-Cookie exists if appropriate
+
+29. Logout Request
+------------------
+POST:
+{{baseUrl}}/api/v1/auth/logout
+
+Header:
+Authorization: Bearer {{accessToken}}
+
+Expect:
+204
+
+Then test:
+POST /auth/refresh
+-> 401
+
+30. RBAC Admin Flow
+-------------------
+Using PARISH_ADMIN sample account:
+
+Login
+-> GET dev read endpoint -> 200
+-> GET dev manage endpoint -> 200
+
+If using SUPER_ADMIN:
+same.
+
+31. RBAC Catechist Flow
+-----------------------
+Using CATECHIST:
+
+Login
+-> read endpoint -> 200
+-> manage endpoint -> 403
+
+This demonstrates permission deny.
+
+32. RBAC Parent Flow
+--------------------
+Using PARENT:
+
+Login
+-> read/manage dev test endpoints -> expected 403 according to seeded permissions
+
+Keep exact expected behavior documented.
+
+33. Permission Change in Postman
+--------------------------------
+There is no admin RBAC HTTP API yet.
+
+Therefore Postman cannot dynamically assign permissions through API.
+
+Do NOT add admin CRUD APIs just for Postman.
+
+Instead:
+- use seeded roles to demonstrate allow/deny
+- integration tests already cover live permission changes
+
+Document this limitation.
+
+34. Negative Login Tests
+------------------------
+Collection should include:
+- wrong password -> 401
+- unknown email -> 401
+- malformed body -> 400
+
+Do not trigger excessive rate limits accidentally.
+
+35. Rate Limit Verification
+---------------------------
+Optional Postman folder:
+Rate Limit
+
+Do not automatically fire 10+ requests in collection runner unless user intentionally runs it.
+
+Document manual test instructions.
+
+36. Cookie Verification
+-----------------------
+Document how user can verify in Postman:
+
+- Cookies manager for baseUrl
+- catechism_refresh_token exists after login
+- cookie rotates after refresh
+- cookie removed/expired after logout
+
+Do not expose refresh token in scripts.
+
+37. Seed CLI Logging
+--------------------
+Seed command may print:
+- role created/existing
+- permission created/existing
+- user created/existing
+- assignment complete
+
+Do NOT print:
+- password
+- password hash
+- JWT secret
+- refresh secret
+
+38. Seed Exit Behavior
+----------------------
+Success:
+exit code 0
+
+Failure:
+exit non-zero
+with safe error message
+
+Ensure Nest app context closes.
+
+39. Seed Test
+-------------
+Add tests for seed logic if practical.
+
+At minimum validate:
+- first seed creates
+- second seed does not duplicate
+- sample role assignments correct
+- unsafe NODE_ENV rejected
+- unsafe DB rejected
+
+Prefer integration test against catechism_api_test.
+
+40. Local Seed Validation
+-------------------------
+Run seed against local development DB only after:
+- test DB validation PASS
+- environment guard confirmed
+
+If using development DB:
+make clear these are sample local records.
+
+If user has existing meaningful local data:
+idempotency should avoid destructive changes.
+
+41. Test DB Seed Validation
+---------------------------
+Prefer first test using:
+catechism_api_test
+
+Run:
+- reset test DB
+- migrations
+- seed with explicit test-safe override if needed
+- assert data
+
+Then development DB seed if safe.
+
+42. API Manual Verification
+---------------------------
+After seeding local dev DB:
+
+Start app using current local run command.
+
+Verify with curl or Postman-equivalent CLI:
+
+- health
+- login admin
+- me
+- refresh
+- logout
+- RBAC allow
+- RBAC deny
+
+If local app already running, reuse.
+
+Do not claim Postman GUI itself was run unless actually possible.
+Cursor can validate equivalent HTTP behavior using curl/supertest.
+
+43. Postman Collection Validation
+---------------------------------
+Parse both JSON files.
+
+Verify:
+- valid JSON
+- collection schema shape
+- no real secrets
+- no JWT secrets
+- no refresh hash secret
+- no hard-coded live access token
+
+44. README
+----------
+Update README minimally with:
+
+Local Auth/RBAC demo:
+1. migrations
+2. run seed command
+3. start API
+4. import Postman collection/environment
+
+Do NOT list plaintext passwords in tracked README.
+
+Point to report/docs for local sample credentials if necessary.
+
+45. .gitignore / docs
+---------------------
+Current project ignores docs/.
+
+Respect project policy.
+
+Do NOT change .gitignore simply to track Postman files unless explicitly required.
+
+The files should still be created under docs for user handoff.
+
+46. No Production Bootstrap
+---------------------------
+DO NOT implement:
+- automatic initial superadmin
+- production bootstrap password
+- production seed during deploy
+- environment-based default admin password
+
+Future production admin provisioning needs a separate secure design.
+
+47. No Business Domain Seed
+---------------------------
+Do not seed:
+- parishes
+- classes
+- students
+- catechism levels
+
+Only Auth/RBAC sample data.
+
+48. Module Boundary Audit
+-------------------------
+Seed orchestration may call:
+- UserAccountService
+- AccessControlService
+
+It must NOT:
+- inject UserRepository
+- inject RoleRepository
+- inject PermissionRepository
+- import entities for persistence writes unless required only for read assertions in tests
+
+Prefer service contracts.
+
+49. Security Review
+-------------------
+Verify:
+- sample credentials local/dev only
+- strong sample passwords
+- no production secret
+- no raw refresh token persisted
+- no session seed
+- production guard
+- DB allow-list
+- no destructive resets in seed command
+- no hidden auto-run
+
+50. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Seed:
+- test-safe seed validation
+- idempotent second run
+- unsafe production guard test
+
+Postman:
+- JSON parse validation
+- curl/equivalent flow verification
+
+Docker:
+production target build.
+
+51. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked code/config changes exist:
+print exactly ONE:
+
+git commit -m "feat(auth): add local RBAC seed workflow"
+
+Cursor must NOT execute it.
+
+Remember:
+docs/ may be ignored, so Postman/report files may not appear in git status.
+That is expected.
+
+52. Required Report
+-------------------
+Create:
+
+docs/AUTH_008_SAMPLE_SEED_AND_POSTMAN_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From AUTH #007
+
+3. Seed Architecture
+
+4. Environment / DB Safety Guards
+
+5. Seed Command
+
+6. Roles Seeded
+
+7. Permissions Seeded
+
+8. Role-Permission Matrix
+
+9. Sample Users
+
+10. User-Role Matrix
+
+11. Local Sample Credentials
+Clearly mark LOCAL/DEV ONLY.
+
+12. Idempotency Behavior
+
+13. Existing Data Reconciliation Rules
+
+14. Files Created
+
+15. Files Modified
+
+16. Dev-Only RBAC Endpoint Decision
+If added:
+- paths
+- permissions
+- production disable mechanism
+If not:
+- explain verification alternative
+
+17. Module Boundary Audit
+
+18. Postman Collection Structure
+
+19. Postman Environment Variables
+
+20. Cookie Handling in Postman
+
+21. Login Verification
+
+22. /auth/me Verification
+
+23. Refresh Verification
+
+24. Logout Verification
+
+25. RBAC Allow Verification
+
+26. RBAC Deny Verification
+
+27. Negative Cases
+
+28. Rate Limit Manual Test Note
+
+29. Seed Integration Tests
+
+30. First Seed Result
+
+31. Second Seed / Idempotency Result
+
+32. Unsafe Environment Rejection Test
+
+33. Local HTTP Verification
+
+34. Postman JSON Validation
+
+35. Existing Test Regression
+
+36. CI Compatibility
+
+37. Docker Validation
+
+38. Security Review
+
+39. Commands Executed
+
+40. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- auth/rbac DB e2e
+- quality:full
+- seed first run
+- seed second run idempotent
+- production guard
+- DB safety guard
+- sample roles
+- sample permissions
+- sample users
+- assignments
+- login
+- me
+- refresh
+- logout
+- RBAC allow
+- RBAC deny
+- Postman JSON parse
+- no production secrets
+- Docker production build
+
+41. Known Issues / Deferred Items
+
+42. Out-of-Scope Confirmation
+Confirm no:
+- production bootstrap admin
+- tenant/parish data
+- business-domain seed
+- admin CRUD APIs
+- permission cache
+
+43. AUTH #009 Readiness
+
+Only if all critical seed/verification checks pass:
+
+Recommend:
+AUTH/RBAC #009 — Final Auth/RBAC Audit + Module Boundary Review
+
+#009 should:
+- independently audit entire Auth/User/AuthSession/RBAC implementation
+- review schema, exports, tests, security, seeds, Postman docs
+- audit dev-only endpoint decision
+- remove temporary/test-only production risks
+- confirm microservice-ready boundaries
+- declare Auth/RBAC phase COMPLETE or NOT COMPLETE
+
+44. Commit Message Recommendation
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(auth): add local RBAC seed workflow"
+
+Cursor MUST NOT execute it.
+
+53. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #008 status
+- seed PASS/FAIL
+- Postman/curl flow PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_008_SAMPLE_SEED_AND_POSTMAN_REPORT.md
+- Postman files:
+  docs/postman/Acutis-Education-Auth-RBAC.postman_collection.json
+  docs/postman/Acutis-Education-Local.postman_environment.json
+
+Then print exactly ONE commit command if tracked changes exist:
+
+git commit -m "feat(auth): add local RBAC seed workflow"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to AUTH #009 automatically.

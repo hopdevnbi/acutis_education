@@ -1,0 +1,698 @@
+CURSOR PROMPT #006 — DATABASE INTEGRATION/E2E TESTING + QUALITY GATES
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm
+- MSSQL
+- TypeORM 0.3.x
+- @nestjs/typeorm 11.x
+- Docker / Docker Compose
+- Docker Engine running through WSL2
+- Bitbucket Pipelines later
+- Frontend is a separate ReactJS repository
+
+Completed foundation prompts:
+#001 Rules & repository hygiene
+#002 NestJS bootstrap & code quality
+#003 Application bootstrap infrastructure
+#004 MSSQL + TypeORM + migration architecture
+#005/#005B Docker + live MSSQL runtime validation
+
+Before changing anything:
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read docs/PROMPT_004_MSSQL_TYPEORM_MIGRATION_ARCHITECTURE_REPORT.md
+5. Read docs/PROMPT_005_DOCKER_LOCAL_MSSQL_RUNTIME_REPORT.md
+6. Read the most recent successful Prompt #005B Docker runtime validation report
+7. Inspect current test structure, Docker config, TypeORM DataSource, package scripts, and AppModule composition.
+
+Do not weaken existing engineering/security rules.
+
+2. Current Phase
+----------------
+Backend Foundation
+Prompt #006 / approximately 7 prompts
+
+Completed:
+- #001 Rules
+- #002 NestJS bootstrap
+- #003 Bootstrap infrastructure
+- #004 MSSQL + migrations
+- #005 Docker + live MSSQL runtime
+
+Current:
+- #006 Database Integration/E2E Testing + Quality Gates
+
+Remaining after this prompt:
+- #007 Final Foundation Audit + Hardening
+
+3. Primary Objective
+--------------------
+Establish a reliable database integration testing foundation and project-level quality gates BEFORE business modules begin.
+
+This prompt should:
+- define the test database strategy
+- add real MSSQL integration/e2e test capability
+- validate migrations against an isolated/disposable test database
+- prevent tests from touching the developer database
+- establish DB test lifecycle conventions
+- test real TypeORM connectivity in automated integration/e2e flows
+- define repository/data-access testing conventions for future modules
+- strengthen package scripts so quality checks can be run consistently
+- prepare scripts/conventions that can later be used by Bitbucket CI
+- preserve existing DB-free unit/e2e tests where appropriate
+- keep all catechism business modules OUT OF SCOPE
+
+Do NOT implement business entities simply to create integration tests.
+
+4. Core Principle — Test Isolation
+----------------------------------
+Automated DB tests must NEVER use the normal development DB:
+catechism_api
+
+Create/use a dedicated test database naming convention.
+
+Preferred:
+catechism_api_test
+
+or a dynamically unique database derived from that name when concurrency requires it.
+
+The test strategy must prevent accidental writes to:
+- development DB
+- production DB
+
+Do not rely on developers remembering to change DB_NAME manually.
+
+The automated test command should make the test DB explicit.
+
+5. Choose the Test Database Strategy
+------------------------------------
+Evaluate and implement the simplest robust strategy for this project.
+
+Preferred direction:
+- reuse the existing local MSSQL Docker service
+- create a dedicated catechism_api_test database
+- integration tests connect only to the dedicated test DB
+- test DB can be safely created/reset by test tooling
+- normal dev DB is untouched
+
+Possible implementation:
+- dedicated integration-test env/config
+- helper script to create/drop/reset test DB
+- dedicated Jest integration/e2e config
+- migration execution before DB tests
+
+Do NOT introduce Testcontainers unless there is a concrete need.
+We already have a validated Compose MSSQL runtime.
+
+Avoid adding infrastructure complexity without benefit.
+
+6. Test Database Creation
+-------------------------
+Create a deterministic mechanism that can:
+- create the test database if absent
+- drop/reset ONLY the test database when explicitly required
+- never drop the normal application DB
+- never operate on an arbitrary DB name from unsafe input
+
+Use a hard guard.
+
+For example:
+test DB name must end with:
+_test
+
+or exactly equal a configured safe test name.
+
+If the name does not satisfy the safety rule:
+FAIL immediately.
+
+This guard is mandatory before any destructive database operation.
+
+7. Test Database Environment
+----------------------------
+Add only the environment/config support necessary for DB integration testing.
+
+Do not pollute production configuration with dangerous flags.
+
+Preferred approaches:
+- test-only env file such as .env.test.example
+- Jest environment setup
+- explicit scripts that export/override DB_NAME for test process
+
+If using .env.test:
+- actual .env.test must be ignored
+- .env.test.example may be tracked
+- no real secrets
+
+Reuse DB host/user/password values safely for local integration tests while ensuring DB_NAME is the dedicated test DB.
+
+Do not introduce DISABLE_DATABASE=true or similar production escape hatches.
+
+8. Integration Test Categories
+------------------------------
+Clarify test layers.
+
+Recommended convention:
+
+A. Unit tests
+- no DB
+- fast
+
+B. Infrastructure e2e tests
+- existing DB-free bootstrap tests
+- health
+- error contract
+- request ID
+- Swagger
+
+C. Database integration tests
+- real TypeORM
+- real MSSQL
+- dedicated test DB
+- no HTTP required unless testing persistence wiring
+
+D. Full API e2e tests with DB
+- real Nest application
+- real TypeORM
+- dedicated test DB
+- future business endpoints
+
+At this foundation stage, add only enough real DB tests to prove the infrastructure.
+
+9. Do Not Create Business Entities
+----------------------------------
+There are no business entities yet.
+
+Do NOT create:
+- users
+- roles
+- parish
+- classes
+- students
+- parents
+- lessons
+- questions
+- exams
+- any fake catechism entity
+
+To validate persistence/migrations without business schema, use infrastructure-level tests.
+
+Valid approaches include:
+- DataSource initialize/destroy against test DB
+- raw query SELECT 1
+- verify current DB name
+- query migration metadata
+- run migrations programmatically/CLI
+- verify no business tables
+
+Do not create a dummy permanent entity/table just to have something to test.
+
+10. Migration Integration Testing
+---------------------------------
+Automated DB validation must prove that:
+- DataSource initializes against the test DB
+- migration infrastructure can connect
+- pending migrations can be inspected
+- migrations can run safely
+- current migration state is valid
+- synchronize remains false
+- migrationsRun remains false
+
+Because there are currently no business migrations:
+"No migrations are pending" is a valid state.
+
+Do not create a meaningless migration.
+
+11. Migration Test Command
+--------------------------
+Create a clear command that validates migration state against the TEST database.
+
+Examples conceptually:
+npm run test:db:migrations
+or
+npm run test:integration
+
+The script must:
+- point at the test DB explicitly
+- fail on connection/config errors
+- not silently point at catechism_api
+
+If shell scripting is required, account for:
+- Windows host
+- WSL Docker
+- Linux CI later
+
+Prefer Node.js scripts over OS-specific shell scripts where this improves portability.
+
+12. Portable Test Utilities
+---------------------------
+Because development currently uses:
+wsl docker compose ...
+
+do not hard-code WSL command wrappers into core test logic if future Bitbucket/Linux CI will run Docker directly.
+
+Separate:
+- application/integration-test logic
+from
+- local convenience wrappers
+
+Core package/test architecture must remain portable to Linux CI later.
+
+13. Database Test Utility Safety
+--------------------------------
+If adding a Node test DB management script, it must:
+- use centralized/config-compatible env parsing where practical
+- validate test DB name
+- quote identifiers safely
+- never concatenate untrusted SQL values into DDL unsafely
+- connect to a safe system DB (e.g. master) only for create/drop operations when necessary
+- close connections in finally blocks
+- produce useful non-secret errors
+- never print DB_PASSWORD
+
+14. Test DB Reset Strategy
+-------------------------
+Choose one predictable lifecycle.
+
+Preferred baseline:
+Before DB integration suite:
+- ensure test DB exists
+- ensure migration state is clean/current
+
+After suite:
+- either leave dedicated test DB for speed
+or
+- clean/drop it
+
+Choose intentionally.
+
+If dropping after tests:
+- strict _test guard required
+- handle active connections safely
+
+If preserving:
+- ensure tests do not become order-dependent
+- reset schema/state before each relevant suite
+
+Since there are no business tables yet, keep this simple.
+
+Document future convention for business-module integration tests.
+
+15. Real DB Integration Tests
+-----------------------------
+Add a focused integration suite.
+
+At minimum validate:
+
+1. Connection
+- TypeORM DataSource initializes against MSSQL test DB
+
+2. Server
+- SELECT 1 succeeds
+
+3. Database identity
+- SELECT DB_NAME() equals expected test DB
+- proves tests are NOT using development DB
+
+4. Configuration
+- synchronize=false
+- migrationsRun=false
+
+5. Migration metadata/state
+- migration tooling query works
+- no unexpected pending migrations / correct current state
+
+6. Cleanup
+- DataSource destroys cleanly
+
+These tests must actually run against live MSSQL.
+
+16. Full App DB E2E Smoke
+-------------------------
+Add ONE minimal DB-aware application e2e smoke test if it can be done without inventing business endpoints.
+
+Goal:
+- instantiate real AppModule
+- connect to dedicated test DB
+- apply normal bootstrap
+- verify GET /api/v1/health still returns 200
+
+This proves HTTP app + DatabaseModule + MSSQL can coexist under test.
+
+Do not change /health to query DB.
+
+17. Existing DB-Free Tests
+--------------------------
+Preserve existing fast infrastructure tests.
+
+Preferred:
+- npm test stays unit-only
+- existing npm run test:e2e remains fast/DB-free
+- add separate DB integration command
+
+Examples:
+- test:integration
+- test:e2e:db
+
+This separation is valuable for developer workflow and CI.
+
+18. Jest Configuration
+----------------------
+Create separate Jest configuration where appropriate.
+
+Possible:
+test/jest-integration.json
+test/jest-db-e2e.json
+
+Keep:
+- clear testMatch patterns
+- deterministic setup
+- sensible timeout for MSSQL connection
+- no excessive global timeout
+
+19. Database Availability Check
+-------------------------------
+Integration tests should fail clearly when MSSQL is unavailable.
+
+Do not silently skip DB tests.
+
+A clear message is preferable to a cryptic timeout.
+
+Do not automatically start Docker from inside Jest unless there is a strong reason.
+
+Recommended workflow:
+1. Docker stack running
+2. integration test script prepares test DB
+3. Jest executes
+4. cleanup as designed
+
+20. Compose Support for Integration Tests
+-----------------------------------------
+Evaluate whether docker-compose.yml needs a SMALL improvement for test DB usage.
+
+Prefer reusing existing MSSQL service.
+
+Do NOT duplicate a second MSSQL container unless necessary.
+
+21. Quality Gate Script
+-----------------------
+Add one canonical local quality command.
+
+Preferred:
+npm run quality
+or:
+npm run verify
+
+It should run the non-Docker baseline checks in deterministic order:
+- format:check
+- lint
+- typecheck
+- test
+- test:e2e
+- build
+
+Do NOT include Docker-required DB integration tests in the default quick quality command unless clearly separated.
+
+Add another complete command if useful:
+npm run quality:full
+
+which may include DB integration when MSSQL is available.
+
+22. Suggested Script Structure
+------------------------------
+A reasonable concept:
+
+quality
+- format:check
+- lint
+- typecheck
+- test
+- test:e2e
+- build
+
+test:integration
+- prepare test DB
+- run DB integration Jest config
+
+test:e2e:db
+- prepare test DB
+- run real AppModule DB e2e
+
+quality:full
+- quality
+- test:integration
+- test:e2e:db
+
+Exact scripts must actually work.
+Do not add scripts that merely echo placeholders.
+
+23. Sequential Execution
+------------------------
+Quality checks should stop on first failure.
+Use portable npm script chaining where possible.
+Do not introduce a task-runner dependency unless clearly justified.
+
+24. Coverage
+------------
+Do not chase arbitrary coverage percentages at this phase.
+Existing coverage must continue to work.
+For DB integration suites, coverage collection may be optional.
+
+25. Foundation Data-Access Testing Conventions
+---------------------------------------------
+Document conventions future modules must follow.
+
+Future repository/service persistence tests should generally include:
+- happy path persistence
+- uniqueness/constraint behavior
+- transaction behavior where relevant
+- FK behavior where relevant
+- migration coverage for schema changes
+- no dependency on test order
+- test data isolated per case/suite
+- no use of development DB
+- explicit cleanup strategy
+
+Do not implement future repositories now.
+
+26. Migration Convention for Future Features
+--------------------------------------------
+Document the future workflow:
+
+When adding/changing an entity:
+1. update entity
+2. generate/review migration
+3. run migration against local dev DB
+4. run migration against fresh test DB
+5. run integration/e2e tests
+6. ensure revert behavior is understood when applicable
+7. never use synchronize
+
+Do not create feature migrations in this prompt.
+
+27. Bitbucket CI Readiness
+-------------------------
+Do NOT create bitbucket-pipelines.yml yet.
+
+This prompt only prepares scripts/conventions that future CI can call.
+
+Ensure:
+- commands return correct exit codes
+- tests are non-interactive
+- scripts can work on Linux
+- no WSL-only assumption in core scripts
+- no Windows-only path
+
+Document what CI will eventually need:
+- Node 22.23.1
+- MSSQL service/container
+- test DB env
+- npm ci
+- quality command
+- DB integration command
+
+28. Docker Runtime
+-----------------
+Use the validated local stack safely.
+
+Allowed:
+- docker compose ps
+- targeted logs
+- integration tests
+- create/drop ONLY dedicated test DB
+- migration tests against dedicated test DB
+
+Do NOT:
+- docker compose down -v unless explicitly necessary
+- delete development DB
+- prune Docker
+- stop unrelated containers
+
+29. Development DB Protection
+-----------------------------
+Add an explicit automated assertion in test tooling:
+
+If effective DB_NAME equals:
+catechism_api
+
+or does not satisfy the safe test naming rule:
+ABORT destructive test DB preparation.
+
+This is critical.
+
+The test suite itself should also assert:
+DB_NAME() equals expected test DB.
+
+30. Secrets
+-----------
+Do not add real credentials.
+
+If test env files are created:
+- actual secret-bearing files ignored
+- example file tracked
+- no real passwords
+
+Do not print DB_PASSWORD in:
+- tests
+- scripts
+- reports
+- logs
+
+31. No Health Endpoint Redesign
+-------------------------------
+Keep:
+GET /api/v1/health
+as liveness only.
+
+32. Error Handling Regression
+-----------------------------
+Verify Prompt #003 global exception behavior remains intact.
+
+Do not add TypeORM/MSSQL internal error passthrough.
+
+33. Node / Docker Environment
+-----------------------------
+The validated development environment uses:
+- Windows host
+- WSL2 Ubuntu
+- Docker Engine inside WSL
+- Docker Compose via wsl docker compose ...
+
+Do not hard-code this into application architecture.
+
+Core npm/Jest scripts must remain portable.
+
+34. Required Validation
+-----------------------
+Run all relevant checks.
+
+A. Existing quality:
+- node --version
+- npm --version
+- npm run format
+- npm run format:check
+- npm run lint
+- npm run typecheck
+- npm test
+- npm run test:e2e
+- npm run test:cov
+- npm run build
+- npm audit --audit-level=moderate
+
+B. Docker/MSSQL:
+- confirm docker compose stack is healthy
+- confirm development DB remains intact
+
+C. New DB tests:
+- test DB prepare/create
+- DB integration tests
+- DB-aware AppModule e2e
+- migration state validation
+- assert DB_NAME() is test DB
+
+D. Quality gates:
+- canonical quality command
+- full quality command if introduced
+
+Every script introduced must be executed.
+
+35. Git Behavior
+----------------
+DO NOT commit.
+Do not run:
+git add
+git commit
+git push
+
+36. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_006_DATABASE_INTEGRATION_E2E_QUALITY_GATES_REPORT.md
+
+Include:
+
+1. Objective
+2. State Inherited From Prompt #005
+3. Test Layer Strategy
+4. Test Database Strategy
+5. Environment / Config Changes
+6. Files Created
+7. Files Modified
+8. Dependencies Added
+9. Test DB Management Utility
+10. Integration Test Architecture
+11. DB Integration Tests
+12. DB-Aware App E2E
+13. Migration Validation
+14. Development DB Protection
+15. Existing Test Preservation
+16. Package Scripts
+17. Quality Gate Design
+18. Future Data-Access Testing Conventions
+19. Future Migration Workflow
+20. Bitbucket CI Readiness
+21. Commands Executed
+22. Validation Results
+23. Database Safety Review
+24. Security Review
+25. Git Status / Scope Summary
+26. Rules Compliance Review
+27. Known Issues / Assumptions
+28. Out-of-Scope Confirmation
+29. Recommended Next Step
+
+Recommended next step:
+Prompt #007 — Final Backend Foundation Audit + Hardening
+
+That prompt should:
+- audit all Prompt #001–#006 foundation work
+- check configuration consistency
+- review Docker/WSL developer experience
+- review logging/security
+- review migrations/testing
+- remove foundation-level technical debt
+- decide whether to add readiness endpoint
+- prepare architecture handoff before Auth/Users/Roles phase
+- optionally make the FIRST Git commit only if explicitly instructed in that prompt
+
+Do NOT implement Prompt #007 now.
+
+37. Final Response
+------------------
+When finished, respond only with:
+- Prompt #006 status
+- DB integration/e2e PASS/FAIL
+- quality gates PASS/FAIL
+- report path:
+  docs/PROMPT_006_DATABASE_INTEGRATION_E2E_QUALITY_GATES_REPORT.md
+- blocker if any
+
+Do not proceed to Prompt #007 automatically.

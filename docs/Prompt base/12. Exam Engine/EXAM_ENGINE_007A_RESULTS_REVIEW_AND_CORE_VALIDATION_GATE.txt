@@ -1,0 +1,721 @@
+CURSOR PROMPT — EXAM ENGINE #007A
+FINAL CORE CORRECTIVE GATE — CLOSE #006A DEBT + VALIDATE RESULTS/REVIEW/LEARNING PROGRESS BEFORE FINAL PHASE
+
+CONTEXT
+-------
+Timeline:
+- EXAM #001 — domain audit/design
+- EXAM #002 — Student learner auth/self-scope
+- EXAM #003 — schema/module shell
+- EXAM #004 — authoring/publish/assignment
+- EXAM #005 — attempt generation/localized delivery
+- EXAM #006 — answer/save/submit/grade/time controls
+- EXAM #007 — results/review/parent+staff read/Learning Progress integration
+
+Corrective prompts #003A/#004A/#005A/#006A were requested but Cursor proceeded ahead without producing their reports.
+
+Therefore #007A is the LAST corrective gate before #008 finalization.
+
+Current #007 features:
+- GET exam-attempts/:attemptId/result
+- GET exam-assignments/:assignmentId/attempt-summaries
+- per-question review reveal by policy
+- Parent linked-child result read
+- Staff scoped result read
+- LearningProgress exam summary hook
+- PARENT/STUDENT exam.result.read
+- LearningProgressModule -> ExamModule public API only
+
+BUT unresolved validation debt remains:
+- cross-module FK/cascade/history safety
+- exact answer idempotency semantics
+- save-vs-submit concurrency
+- double-submit safety
+- lazy expiry/assignment-close correctness
+- full IDOR/RBAC e2e
+- result/review leakage tests
+- Learning Progress integration tests
+- pristine quality:full
+- Docker
+- npm audit
+
+Do NOT implement #008 demo/Postman/final completion until this gate passes.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read all Exam reports #001–#007
+- inspect actual schema and implementation
+- close ALL accumulated corrective debt
+- fix defects found
+- create detailed report
+- NOT do #008 demo/Postman finalization yet
+- NOT auto-proceed #008
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "fix(exam): validate results review and attempt core"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/EXAM_003_EXAM_SCHEMA_AND_MODULE_SHELL_REPORT.md
+docs/EXAM_004_AUTHORING_PUBLISH_ASSIGNMENT_APIS_REPORT.md
+docs/EXAM_005_ATTEMPT_GENERATION_LOCALIZED_DELIVERY_REPORT.md
+docs/EXAM_006_ANSWER_SAVE_SUBMIT_GRADE_REPORT.md
+docs/EXAM_007_RESULTS_REVIEW_LEARNING_PROGRESS_REPORT.md
+
+Inspect:
+src/modules/exam/
+src/modules/learning-progress/
+src/modules/question-bank/
+src/modules/localization/
+src/modules/student/
+src/modules/enrollment/
+src/modules/class/
+src/database/migrations/1788064000000-create-exam-schema.ts
+src/database/seeds/auth-rbac.seed.constants.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+Dockerfile
+
+PRIMARY OBJECTIVES
+------------------
+A. Close schema/cascade/history debt
+B. Finalize answer idempotency contract
+C. Validate save/submit concurrency
+D. Validate grading/result immutability
+E. Validate expiry/assignment-close finalization
+F. Validate result/review policy
+G. Validate Parent/Student/Catechist/ParishAdmin/SuperAdmin scopes
+H. Validate no leakage
+I. Validate Learning Progress integration
+J. Validate localization pinning
+K. Run full MSSQL integration + DB e2e
+L. Run pristine quality:full
+M. Run Docker
+N. Decide #008 readiness
+
+1. SCHEMA / HISTORY SAFETY — FINAL AUDIT
+----------------------------------------
+Audit all Exam FKs and cascades.
+
+Formal GRADED attempt history must survive:
+- exam root status changes
+- version archive
+- assignment close/cancel
+- class/enrollment later changes
+- new QB versions
+- new translation revisions
+
+No cascade may erase graded attempts/questions/answers/results.
+
+Classify all cross-module FKs:
+KEEP / REMOVE / JUSTIFIED EXCEPTION.
+
+Strong preference:
+cross-module scalar IDs.
+
+If current migration has dangerous cascade:
+FIX NOW.
+Treat as HIGH.
+
+2. ANSWER IDEMPOTENCY — FINAL CONTRACT
+--------------------------------------
+Explicitly state whether implementation uses:
+
+A. stable clientAnswerId per attempt-question resource
+or
+B. latest-request idempotency
+
+Required tests:
+- first save
+- same key + same semantic selection replay
+- same key + different selection conflict
+- new edit semantics
+- older replay after newer edit
+- UUID casing normalization
+- duplicate options
+- concurrent saves
+
+Do not claim unsupported historical replay.
+
+3. ANSWER VALIDATION
+--------------------
+Validate against pinned question version via public QuestionBankService.
+
+Do not rely only on deliveredOptionOrderJson if that is insufficient.
+
+Ensure:
+- IDs belong to pinned version
+- cardinality appropriate for question type
+- duplicate selection rejected/normalized
+- empty selection behavior defined
+- no correctness returned during active attempt
+
+4. ANSWER CLEARING POLICY
+-------------------------
+Explicitly document whether learner can clear saved answer.
+
+If allowed:
+deterministic persistence + grading semantics.
+
+If denied:
+stable validation error.
+
+5. SAVE / SUBMIT CONCURRENCY
+----------------------------
+Mandatory real MSSQL race tests.
+
+Save vs submit:
+- if save commits first, score includes it
+- if submit locks first, later save denied
+- never save after GRADED
+- no inconsistent score
+
+Double save:
+- one current row
+- deterministic behavior
+- no raw DB error
+
+6. SUBMIT IDEMPOTENCY
+---------------------
+Double submit:
+- first grades once
+- replay returns same persisted result
+- no score drift
+- no duplicate side effects
+
+7. GRADING ROLLBACK SAFETY
+--------------------------
+If one grade operation fails:
+- no partial persisted result
+- no permanently stranded broken SUBMITTED state unless recoverable by explicit design
+
+Audit transaction boundary.
+
+8. RESULT SNAPSHOT
+------------------
+Persisted and immutable after GRADED:
+questionCount
+correctCount
+scorePercent
+passed nullable
+submittedAt
+gradedAt
+finalizationReason
+
+Validate:
+correctCount <= questionCount
+score 0..100
+passing threshold from pinned version
+null threshold => passed null
+
+9. LAZY EXPIRY
+--------------
+Verify trigger paths:
+GET
+save
+submit
+
+At expiration:
+- lock
+- grade saved answers
+- unanswered incorrect
+- set GRADED
+- idempotent repeat
+
+No late answer persisted.
+
+10. DEADLINE BOUNDARY
+---------------------
+Define exact rule:
+now >= deadlineAt means expired preferred.
+
+Use same rule across GET/save/submit.
+
+Test exact boundary.
+
+11. ASSIGNMENT CLOSE
+--------------------
+If assignment closes before normal duration:
+finalize due to ASSIGNMENT_CLOSED.
+
+Define deterministic precedence versus TIME_EXPIRED.
+
+12. RESULT VISIBILITY
+---------------------
+Score visibility:
+NEVER
+AFTER_SUBMIT
+AFTER_ASSIGNMENT_CLOSE
+
+Correct answer visibility independently:
+NEVER
+AFTER_SUBMIT
+AFTER_ASSIGNMENT_CLOSE
+
+Explanation visibility independently:
+NEVER
+AFTER_SUBMIT
+AFTER_ASSIGNMENT_CLOSE
+
+No coupling mistakes.
+
+13. PER-QUESTION REVIEW
+-----------------------
+Review DTO must:
+- use pinned questionVersionId
+- use pinned translationRevisionId/deliveredLocale
+- reveal learner answer
+- reveal correctness only when allowed
+- reveal correct answer only when policy allows
+- reveal explanation only when policy allows
+- preserve realized option order
+
+Do not use latest translation/version.
+
+14. ACTIVE ATTEMPT LEAKAGE
+--------------------------
+IN_PROGRESS must never expose:
+correctOptionIds
+isCorrect
+answerDefinition
+explanation
+score
+passed
+correctCount
+expected answers
+
+15. GRADED BUT HIDDEN REVIEW
+----------------------------
+If policy hides score/correct/explanation:
+do not leak them through alternate endpoints or nested DTOs.
+
+16. PARENT ACCESS
+-----------------
+Parent:
+- exam.result.read YES
+- only linked child attempt
+- only released fields according to policy
+- no class roster summary
+- no attempt start/save/submit
+
+Guardian relationship via public access service only.
+
+17. STUDENT RESULT ACCESS
+-------------------------
+Student:
+- own attempts only
+- own result/review only
+- same release policy
+
+No cross-student access.
+
+18. CATECHIST ACCESS
+--------------------
+Assigned Catechist:
+- assignment summaries for assigned class only
+- individual results for class scope if current design supports
+- no attempt mutation
+- monitoring bypass semantics explicitly tested
+
+If staff bypasses reveal timing:
+must not leak outside staff scope.
+
+19. PARISH ADMIN / SUPER ADMIN
+------------------------------
+ParishAdmin:
+own parish result monitoring.
+
+SuperAdmin:
+global monitoring.
+
+Neither can impersonate learner attempt mutation.
+
+20. ASSIGNMENT SUMMARY
+----------------------
+Validate endpoint:
+GET exam-assignments/:assignmentId/attempt-summaries
+
+Fields should be minimal:
+student/enrollment identifiers only as permitted
+attempt status/count
+score where staff monitoring permits
+no raw answer/correct-answer content
+
+Parent must never access this endpoint.
+
+Pagination required if list may grow.
+
+21. LEARNING PROGRESS INTEGRATION
+---------------------------------
+Current:
+ExamService.getEnrollmentExamSummary(enrollmentId)
+
+Learning Progress:
+exam = {
+  assignmentsAvailable,
+  attemptsCompleted,
+  latestScorePercent
+}
+
+Validate:
+- own/service scope
+- no direct Exam repo import
+- no cycle
+- no Exam writes to LearningProgress
+- correct zero/null behavior
+- assignmentsAvailable definition explicit
+- attemptsCompleted counts GRADED only
+- latestScorePercent ordering explicit (gradedAt preferred)
+- historical enrollment handling explicit
+
+22. MODULE BOUNDARY
+-------------------
+Expected:
+LearningProgress -> Exam public ExamService only
+Exam does NOT import LearningProgress
+Exam does NOT import Practice
+Localization does NOT import Exam
+
+No forwardRef/cycles.
+ExamService only public Exam export.
+
+23. LOCALIZATION REGRESSION
+---------------------------
+Attempt/review must use:
+pinned questionVersionId
+pinned sourceContentHash
+pinned translationRevisionId
+pinned deliveredLocale
+
+Newer translation must not change existing attempt/review.
+
+No provider on GET.
+
+Exam header remains source-locale snapshot MVP.
+
+24. AUTHORING REGRESSION
+------------------------
+Real MSSQL:
+- create/draft/configure/publish/clone
+- prior published archive
+- assignment create/update/cancel
+
+25. ATTEMPT START REGRESSION
+----------------------------
+- Student own assignment
+- start
+- start retry
+- concurrent start
+- max attempts
+- one active
+- deadline
+- shuffle persistence
+- localization pin
+
+26. ANSWER/SUBMIT REGRESSION
+----------------------------
+- save
+- edit
+- clear/empty policy
+- replay
+- conflict
+- submit
+- double submit
+- unanswered grading
+- passing threshold
+- expiry
+- assignment close
+
+27. RESULTS/REVIEW INTEGRATION TESTS
+------------------------------------
+Real MSSQL:
+- score hidden NEVER
+- score AFTER_SUBMIT
+- score AFTER_ASSIGNMENT_CLOSE
+- correct answer independent policy
+- explanation independent policy
+- pinned translated review
+- Student own result
+- Parent linked child
+- Parent foreign child denied
+- Catechist assigned class
+- Catechist foreign class denied
+- ParishAdmin own parish
+- cross-parish denied
+- SuperAdmin global
+
+28. LEARNING PROGRESS INTEGRATION TESTS
+---------------------------------------
+Real MSSQL:
+- no exams => sensible zero/null
+- available assignment count
+- graded attempt count
+- latest score
+- multiple attempts
+- no direct repo coupling
+
+29. DB E2E — MANDATORY
+----------------------
+HTTP:
+- Student login
+- own result
+- Parent own-child result
+- Parent foreign child denied
+- Parent assignment summary denied
+- Catechist assigned summary
+- Catechist foreign class denied
+- ParishAdmin parish result
+- cross-parish 403
+- SuperAdmin global
+- active attempt result denied
+- hidden review fields absent
+- released review fields present
+- no alternate endpoint leakage
+- learner attempt mutation still self-only
+
+30. SCHEMA GUARDS
+-----------------
+Real DB prove:
+- exactly 7 Exam tables
+- one published version
+- one active attempt
+- idempotency indexes
+- JSON/range/hash checks
+- no dangerous cascades
+- no forbidden cross-module FK
+- no DB UUID defaults
+
+31. ERROR CONTRACT
+------------------
+Stable:
+401 unauthenticated
+403 access/scope
+404 not found
+409 lifecycle/idempotency
+422 publish/domain validation
+ExamReviewNotAvailable mapped appropriately
+
+No raw DB/provider errors.
+
+32. PERFORMANCE
+---------------
+Audit:
+- result attempt detail no N+1
+- assignment summaries bounded/paginated
+- Learning Progress summary query bounded
+- review per question avoids unnecessary repeated QB/localization calls when batch possible
+
+Do not over-optimize, but report N+1 risks.
+
+33. SECURITY / PRIVACY
+----------------------
+Verify:
+- no answer content logs
+- no correct answer logs
+- no cross-child result leak
+- no parent class roster
+- no staff attempt mutation
+- no raw QB correctness in active DTOs
+- no provider secrets
+- no source content logging by default
+
+34. PRISTINE QUALITY:FULL
+------------------------
+Run exactly:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+35. DOCKER
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-results-core ."
+
+PASS required.
+
+36. NPM AUDIT
+-------------
+npm audit --audit-level=moderate
+
+No unresolved HIGH.
+
+37. REQUIRED COMMANDS
+---------------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+Docker build.
+
+38. REQUIRED REPORT
+-------------------
+Create:
+
+docs/EXAM_007A_RESULTS_REVIEW_AND_CORE_VALIDATION_GATE_REPORT.md
+
+Required sections:
+1 Objective
+2 Why #007A was required
+3 State inherited #003–#007
+4 Files created
+5 Files modified
+6 FK/cascade history audit
+7 Answer idempotency final model
+8 Answer semantic hash
+9 Answer validation
+10 Answer clearing
+11 Save/submit concurrency
+12 Double save
+13 Double submit
+14 Grading rollback
+15 Result snapshot
+16 Lazy expiry
+17 Deadline boundary
+18 Assignment-close finalization
+19 Score visibility
+20 Correct-answer visibility
+21 Explanation visibility
+22 Per-question review
+23 Active leakage
+24 Hidden graded leakage
+25 Parent access
+26 Student result access
+27 Catechist access
+28 ParishAdmin/SuperAdmin access
+29 Assignment summaries
+30 Learning Progress Exam summary
+31 Module boundary
+32 Localization pinning
+33 Authoring regression
+34 Attempt-start regression
+35 Answer-submit regression
+36 Result/review integration
+37 Learning Progress integration
+38 DB e2e
+39 Schema guards
+40 Error contract
+41 Performance
+42 Security/privacy
+43 pristine quality:full
+44 Docker
+45 npm audit
+46 Commands
+47 Validation matrix
+48 Risks/deferred
+49 BLOCKER/HIGH/MEDIUM/LOW
+50 EXAM #008 readiness
+51 Prompt count
+52 Commit recommendation
+
+39. REQUIRED VERDICTS
+---------------------
+EXAM SCHEMA/HISTORY SAFE: YES/NO
+ANSWER IDEMPOTENCY MODEL READY: YES/NO
+SAVE/SUBMIT CONCURRENCY SAFE: YES/NO
+GRADING RESULT IMMUTABLE: YES/NO
+EXPIRY FINALIZATION READY: YES/NO
+RESULT/REVIEW POLICY READY: YES/NO
+ACTIVE/HIDDEN LEAKAGE SAFE: YES/NO
+PARENT RESULT ACCESS SAFE: YES/NO
+STAFF RESULT ACCESS SAFE: YES/NO
+LEARNING PROGRESS INTEGRATION READY: YES/NO
+LOCALIZATION SNAPSHOT STABLE: YES/NO
+MODULE BOUNDARY READY: YES/NO
+PRISTINE QUALITY:FULL: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+40. EXAM #008 GATE
+------------------
+Proceed to #008 only if:
+- BLOCKER=0
+- HIGH=0
+- history safe
+- answer idempotency explicit
+- concurrency safe
+- grading stable
+- expiry stable
+- review policies correct
+- Parent/staff scopes safe
+- Learning Progress ready
+- no leakage
+- pristine quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+EXAM #008/8 —
+FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION
+
+Do not auto-proceed.
+
+41. PROMPT COUNT
+----------------
+Main plan remains 8 prompts.
+This is corrective #007A.
+After #007A only #008 remains.
+
+42. FINAL RESPONSE
+------------------
+Respond concisely:
+- #007A status
+- history safety
+- answer idempotency
+- concurrency
+- grading/expiry
+- review/access
+- Learning Progress
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #008 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(exam): validate results review and attempt core"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #008 automatically.

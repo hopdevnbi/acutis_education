@@ -1,0 +1,1071 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #004/6
+LESSON + LEARNING CONTENT + PUBLISH / CLONE / ASSIGNMENT
+
+1. Context
+----------
+Completed:
+- CURRICULUM #001 Domain Audit + Content Model Design
+- CURRICULUM #002 Schema + Entities + Migrations
+- CURRICULUM #003 Curriculum + Topic Services/API/RBAC
+
+Current:
+CURRICULUM/CONTENT #004 / 6
+
+Remaining after this:
+#005 Cross-domain integration + scoped learner delivery
+#006 Final audit + seed/Postman + FE/Mobile contract readiness
+
+This is the heaviest implementation prompt in the Curriculum phase.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+- docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+- docs/CURRICULUM_003_CURRICULUM_TOPIC_SERVICES_API_RBAC_REPORT.md
+- docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/parish/
+src/modules/academic-structure/
+src/modules/access-control/
+src/modules/auth/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status with read-only commands.
+
+3. Primary Objective
+--------------------
+Implement:
+
+A. LessonService + Lesson APIs
+B. LearningContentService + content APIs
+C. JSON block document v1 validation
+D. contentHash SHA-256
+E. publish curriculum version command
+F. deep clone published version -> new DRAFT
+G. archive/supersede behavior where needed
+H. curriculum assignment command
+I. `curricula.publish` endpoint wiring
+J. lesson-content permissions
+K. transactions, concurrency, immutability
+L. unit/integration/DB e2e tests
+
+Do NOT implement learner-facing scoped delivery yet.
+That belongs #005.
+
+4. Architecture Rules
+---------------------
+CurriculumModule owns:
+- curriculums
+- curriculum_versions
+- topics
+- lessons
+- curriculum_assignments
+
+LearningContentModule owns:
+- lesson_contents
+
+Dependency:
+LearningContentModule -> CurriculumModule via public service contracts only
+
+NO:
+- CurriculumModule -> LearningContentModule cycle
+- cross-module repositories
+- cross-module entities
+- forwardRef
+- god service
+- entity export
+
+If publish/clone requires orchestration across both modules, solve with clean one-way dependency or an application orchestration pattern that preserves acyclic graph.
+
+5. Critical Cycle Design for Clone
+----------------------------------
+CURRICULUM #001 suggested Curriculum may orchestrate LearningContent copy.
+
+But current dependency target is:
+LearningContentModule -> CurriculumModule
+
+That means CurriculumModule must NOT import LearningContentModule.
+
+Therefore deep clone must be designed without creating:
+CurriculumModule <-> LearningContentModule
+
+Preferred approaches:
+
+A. Create a thin application/orchestration module/provider at AppModule layer
+that depends on both modules and coordinates clone/publish.
+
+OR
+
+B. Let CurriculumService clone structure and return lesson mapping,
+then LearningContentService clones content in a separate orchestration command
+owned by a higher-level application service.
+
+Do NOT use forwardRef.
+
+Choose the cleanest minimal design and document.
+
+6. Lesson Snapshot
+------------------
+Create:
+
+LessonSnapshot:
+- id
+- curriculumVersionId
+- topicId
+- canonicalLessonKey
+- code
+- title
+- summary
+- sortOrder
+- estimatedDurationMinutes
+- createdAt
+- updatedAt
+
+No entity leakage.
+
+7. Lesson Create
+----------------
+POST /api/v1/topics/:topicId/lessons
+
+Permission:
+curricula.manage
+
+Input:
+- code?
+- title
+- summary?
+- estimatedDurationMinutes?
+- sortOrder optional
+
+Rules:
+- topic exists
+- parent version DRAFT
+- curriculum ACTIVE
+- code optional normalized lowercase kebab
+- title required, Unicode, max 256
+- summary max 1024
+- duration 1..1440
+- if no sortOrder -> append
+- new canonicalLessonKey UUID v4
+- duplicate optional code within topic -> 409
+- return snapshot
+
+8. Lesson List
+--------------
+GET /api/v1/topics/:topicId/lessons
+
+Permission:
+curricula.read
+
+Order:
+sortOrder ASC, createdAt ASC
+
+No content embedded.
+
+9. Lesson Get
+-------------
+GET /api/v1/lessons/:id
+
+Permission:
+curricula.read
+
+Return safe snapshot.
+
+10. Lesson Update
+-----------------
+PATCH /api/v1/lessons/:id
+
+Permission:
+curricula.manage
+
+Allow:
+- code
+- title
+- summary
+- estimatedDurationMinutes
+
+Do NOT allow:
+- curriculumVersionId
+- topicId
+- canonicalLessonKey
+- sortOrder directly if dedicated reorder is implemented
+
+DRAFT only.
+
+11. Lesson Reorder
+------------------
+PATCH /api/v1/topics/:topicId/lessons/reorder
+
+Input:
+{
+  lessonIds: string[]
+}
+
+Rules:
+- exact set
+- no duplicates
+- same topic
+- DRAFT only
+- transaction
+- rewrite sortOrder 0..n-1
+
+12. Lesson Delete
+-----------------
+DELETE /api/v1/lessons/:id
+
+Allowed only:
+- DRAFT version
+- curriculum ACTIVE
+
+Delete behavior:
+- if lesson content exists, delete it only if both are still DRAFT-owned and operation stays consistent
+- compact remaining sort order
+
+Since LearningContent owns content persistence, do NOT directly delete lesson_contents repository from CurriculumModule.
+
+Use orchestration/public service pattern.
+
+Published lessons are never deleted.
+
+13. LearningContentSnapshot
+---------------------------
+Return:
+
+- id
+- lessonId
+- contentSchemaVersion
+- contentHash
+- document
+- createdAt
+- updatedAt
+
+Do not return raw string if service has parsed JSON document.
+
+14. Content Document v1
+-----------------------
+Implement strict discriminated union.
+
+Document:
+{
+  schemaVersion: 1,
+  blocks: [...]
+}
+
+Initial block types:
+
+heading:
+- type: "heading"
+- level: 1|2|3
+- text
+
+paragraph:
+- type: "paragraph"
+- text
+
+bullet_list:
+- type: "bullet_list"
+- items: string[]
+
+numbered_list:
+- type: "numbered_list"
+- items: string[]
+
+scripture_ref:
+- type: "scripture_ref"
+- citation: string
+- text?: string
+
+callout:
+- type: "callout"
+- variant: "info"|"tip"|"important"
+- text
+
+image_ref:
+- type: "image_ref"
+- assetId: UUID
+- alt
+
+video_ref:
+- type: "video_ref"
+- assetId: UUID
+- title?
+
+15. Content Validation
+----------------------
+Strict validation:
+- schemaVersion must be 1
+- blocks array
+- reject unknown block type
+- reject unknown keys
+- text trimmed where appropriate
+- no raw HTML
+- no script URLs
+- no embedded executable markup
+- max block count, e.g. 500
+- max JSON payload ~256KB
+- sensible per-field max lengths
+
+Do not add a new validator library unless justified.
+Use current project conventions if possible.
+
+16. Empty Content Policy
+------------------------
+Draft lesson may temporarily have no content row.
+
+Publish requires:
+- every lesson has content
+- content blocks non-empty
+
+So:
+lesson content row 0..1 during draft
+mandatory 1 at publish validation time
+
+17. Content Write
+-----------------
+PUT /api/v1/lessons/:lessonId/content
+
+Permission:
+lesson-content.manage
+
+Rules:
+- lesson exists
+- lesson belongs DRAFT version
+- curriculum ACTIVE
+- validate document v1
+- canonical serialize document
+- calculate SHA-256 hex
+- upsert content row
+- return snapshot
+
+18. contentHash
+---------------
+Use SHA-256 hex lowercase, 64 chars.
+
+Hash must be deterministic.
+
+Do NOT hash timestamps/id wrapper.
+Hash the canonical source document payload only.
+
+If JSON property ordering could affect hash:
+use stable canonical serialization.
+
+Do not add heavy dependency if a small deterministic serializer is enough.
+
+19. Content Read
+----------------
+GET /api/v1/lessons/:lessonId/content
+
+Permission:
+lesson-content.read
+
+At #004:
+admin/editor path only.
+
+Do not yet implement parent/student/catechist learner delivery semantics.
+
+May read DRAFT for authorized admin editor.
+Published read authorization comes #005.
+
+20. Content Delete
+------------------
+Avoid public DELETE content endpoint unless product needs it.
+
+Preferred:
+PUT replaces content.
+Deleting lesson in DRAFT handles owned content via orchestration.
+
+21. LearningContent Permissions
+-------------------------------
+Add:
+lesson-content.read
+lesson-content.manage
+
+Suggested seed:
+
+SUPER_ADMIN:
+read/manage
+
+PARISH_ADMIN:
+read/manage
+
+CATECHIST:
+do not grant manage
+read may be deferred to #005
+
+PARENT:
+none
+
+STUDENT:
+none
+
+Be conservative until learner delivery scope exists.
+
+22. Publish Command
+-------------------
+POST /api/v1/curriculum-versions/:id/publish
+
+Permission:
+curricula.publish
+
+This is a command, not generic status PATCH.
+
+23. Publish Preconditions
+-------------------------
+Require:
+- version exists
+- status DRAFT
+- parent curriculum ACTIVE
+- at least 1 topic
+- each topic has at least 1 lesson? Recommended yes
+- every lesson has valid content row
+- every content document validates schema v1
+- no duplicate/invalid ordering state
+- sourceLocale valid
+- actor has parish manage/publish scope
+
+Return 422 for publish validation failures where appropriate.
+
+24. Publish Transaction
+-----------------------
+Need atomic behavior:
+
+- lock curriculum/version
+- validate DRAFT
+- validate all structure/content
+- set version status PUBLISHED
+- set publishedAt=now
+- set publishedByUserId
+- set curriculum.currentPublishedVersionId = versionId
+
+If policy is one current published:
+previous published remains PUBLISHED historically or becomes ARCHIVED?
+
+Selected approach:
+- previous PUBLISHED version may remain PUBLISHED historical until superseded/assignment policy
+OR
+- previous current PUBLISHED becomes ARCHIVED atomically.
+
+Choose consistent model.
+
+Preferred simpler:
+when publishing new current version:
+previous current PUBLISHED -> ARCHIVED
+new DRAFT -> PUBLISHED
+currentPublishedVersionId -> new version
+
+This gives exactly one current PUBLISHED pointer and preserves history.
+
+Document carefully.
+
+25. Published Immutability
+--------------------------
+After publish:
+- topic mutations reject
+- lesson mutations reject
+- content PUT rejects
+- version label mutation reject if policy says immutable
+- delete reject
+
+Tests required.
+
+26. Clone Published -> Draft
+----------------------------
+Command:
+POST /api/v1/curriculum-versions/:id/clone-to-draft
+or
+POST /api/v1/curricula/:id/versions with sourceVersionId
+
+Choose API consistent with existing #003 design.
+
+Preferred explicit:
+POST /api/v1/curriculum-versions/:id/clone-to-draft
+
+Permission:
+curricula.manage
+
+27. Clone Preconditions
+-----------------------
+- source version PUBLISHED or ARCHIVED if historical clone is allowed
+- parent curriculum ACTIVE
+- no existing DRAFT
+- actor parish manage scope
+
+28. Deep Clone Semantics
+------------------------
+Transactionally:
+
+1. lock curriculum
+2. compute next versionNumber
+3. create DRAFT version
+4. copy topics with new IDs, same metadata/order/code
+5. copy lessons with new IDs
+6. preserve canonicalLessonKey
+7. map oldTopicId -> newTopicId
+8. copy lesson content rows to new lesson IDs
+9. recompute/preserve contentHash exactly
+10. return new draft summary
+
+29. Cross-Module Clone Atomicity
+--------------------------------
+CRITICAL.
+
+Because CurriculumModule and LearningContentModule own different repos,
+do not fake a distributed transaction with unrelated repositories.
+
+In modular monolith with same MSSQL/TypeORM DataSource:
+a higher-level application service may own a QueryRunner transaction and pass EntityManager-scoped public operations to both module-owned services.
+
+But module ownership must remain respected:
+- each module service performs writes to its own entities
+- orchestrator controls transaction boundary
+- no direct cross-repo manipulation
+
+If this pattern is too invasive:
+design an application orchestration service inside a dedicated small module.
+
+No forwardRef.
+
+30. Assignment Command
+----------------------
+Implement:
+PUT /api/v1/parishes/:parishId/academic-years/:yearId/catechism-levels/:levelId/curriculum-assignment
+
+Permission:
+curricula.manage
+
+Body:
+{
+  curriculumVersionId: UUID
+}
+
+31. Assignment Preconditions
+----------------------------
+Require:
+- parish exists
+- year belongs parish
+- level belongs parish
+- target curriculum version PUBLISHED
+- target curriculum root parishId == route parishId
+- target curriculum catechismLevelId == route levelId
+- year suitable for delivery (PLANNED or ACTIVE according to academic rules)
+- curriculum ACTIVE
+
+32. Assignment Upsert
+---------------------
+One row per:
+(parishId, academicYearId, catechismLevelId)
+
+Behavior:
+- create if absent
+- update curriculumVersionId if exists
+- assignedByUserId = actor
+- assignedAt = now
+- preserve createdAt
+
+No assignment history table yet.
+
+33. Assignment Read
+-------------------
+Add:
+GET /api/v1/parishes/:parishId/academic-years/:yearId/catechism-levels/:levelId/curriculum-assignment
+
+Permission:
+curricula.read
+
+Admin path at #004.
+Learner delivery resolution #005.
+
+34. Assignment Snapshot
+-----------------------
+Return:
+- id
+- parishId
+- academicYearId
+- catechismLevelId
+- curriculumVersionId
+- assignedByUserId
+- assignedAt
+- createdAt
+- updatedAt
+
+35. Assignment Concurrency
+--------------------------
+Concurrent upsert for same triple:
+- must end with one row
+- DB unique final protection
+- map conflicts safely
+- transaction/locking as needed
+
+36. CurriculumService Public Contracts for #005
+-----------------------------------------------
+Add narrow methods:
+
+getPublishedVersionForAssignment(parishId, academicYearId, catechismLevelId)
+getVersionTree(versionId)
+assertVersionPublished(versionId)
+getLessonById(lessonId)
+getLessonCurriculumContext(lessonId)
+
+Return snapshots/IDs only.
+
+No entities.
+
+37. Tree API
+------------
+Implement admin-safe tree:
+
+GET /api/v1/curriculum-versions/:id/tree
+
+Permission:
+curricula.read
+
+Response:
+- version metadata
+- ordered topics
+- ordered lesson summaries
+- no content documents embedded
+
+Avoid N+1.
+
+38. Tree Performance
+--------------------
+Use efficient queries:
+- topics by version
+- lessons by version or topic set
+- group in application memory
+
+No one-query-per-topic.
+
+39. Version Consistency
+-----------------------
+Validate:
+lesson.curriculumVersionId == topic.curriculumVersionId
+
+At service create/update/clone.
+
+Reject internal inconsistency if encountered.
+
+40. Lesson Code Validation
+--------------------------
+Optional:
+lowercase kebab
+max 32
+
+Unique per topic when non-null.
+
+41. Lesson Title/Summary Validation
+-----------------------------------
+Title:
+required
+trim
+Unicode
+max 256
+
+Summary:
+optional
+max 1024
+
+42. Publish Validation Error Shape
+----------------------------------
+Prefer a structured 422 response with issue list:
+
+code
+message
+resourceId?
+path?
+
+Example:
+LESSON_CONTENT_MISSING
+TOPIC_EMPTY
+
+Do not expose SQL/internal stack.
+
+43. Admin Parish Scope
+----------------------
+Use ParishScopeService for:
+- lesson mutations
+- content mutations
+- publish
+- clone
+- assignment
+
+Resolve parish through CurriculumService context.
+
+No Class/Enrollment dependency.
+
+44. Swagger
+-----------
+Document:
+- Lesson CRUD/reorder
+- Content document v1
+- publish
+- clone
+- assignment
+- tree
+- 422 publish errors
+- sourceLocale inherited semantics
+- contentHash response
+
+45. Unit Tests — Lesson
+-----------------------
+Test:
+- create
+- append order
+- code validation
+- duplicate code
+- update
+- DRAFT guard
+- reorder
+- delete
+- canonical key generation
+- canonical key immutability
+
+46. Unit Tests — Content
+------------------------
+Test every block type.
+Test:
+- invalid schema version
+- unknown type
+- unknown key
+- oversized content
+- invalid assetId
+- hash deterministic
+- same doc same hash
+- modified doc different hash
+- DRAFT-only upsert
+- content get
+
+47. Unit Tests — Publish
+------------------------
+Test:
+- no topics
+- empty topic
+- missing lesson content
+- invalid content
+- inactive curriculum
+- publish success
+- previous current version archival policy
+- immutable after publish
+
+48. Unit Tests — Clone
+----------------------
+Test:
+- source not published/archived reject
+- existing draft reject
+- next version number
+- topic IDs new
+- lesson IDs new
+- canonicalLessonKey preserved
+- content copied
+- hash preserved/recomputed consistently
+- rollback on content copy failure
+
+49. Unit Tests — Assignment
+---------------------------
+Test:
+- published only
+- correct parish/level
+- wrong year/parish/level reject
+- upsert
+- concurrency conflict mapping
+
+50. Integration Tests
+---------------------
+Against MSSQL:
+- lesson CRUD/reorder
+- content JSON + SHA-256
+- publish validation
+- publish immutability
+- clone full tree/content
+- canonical key preservation
+- assignment upsert
+- tree query
+- no N+1 if measurable structurally
+- transaction rollback
+
+51. DB E2E
+----------
+Test:
+401 unauthenticated
+403 permission/scope
+lesson flow
+content flow
+publish permission
+publish validation 422
+publish success
+post-publish mutation 409
+clone
+assignment create/update
+tree
+cross-parish admin denial
+
+52. Multilingual Readiness
+--------------------------
+Confirm:
+- sourceLocale remains root-level canonical source language
+- lesson/topic/content text inherits sourceLocale
+- contentHash populated
+- no translation APIs/tables
+- future translation can key by version/lesson/contentHash
+- no country assumption
+- block schema itself language-neutral
+
+53. No Localization Implementation
+----------------------------------
+Do NOT implement:
+LocalizationModule
+TranslationService
+GoogleCloudTranslationProvider
+glossary
+translation records/jobs
+
+54. No Learner Delivery Yet
+--------------------------
+Do NOT implement:
+GET /classes/:classId/curriculum-tree
+GET /enrollments/:id/curriculum-tree
+parent/student/catechist learner scope
+
+#005.
+
+55. No Progress
+---------------
+Do not write LearningProgress.
+
+56. No Media Service
+--------------------
+assetId validates UUID only.
+Do not check storage existence yet.
+
+57. quality:full Flake
+----------------------
+Attempt:
+npm run quality:full
+
+If parallel DB race persists:
+- distinguish from #004 regressions
+- run sequential integration/e2e
+- do not weaken tests
+- carry to #006 if unresolved
+
+58. Docker — REQUIRED
+---------------------
+#003 skipped Docker because Windows host lacked docker CLI.
+
+This prompt MUST attempt via WSL:
+
+wsl docker build --target production -t catechism-api:curriculum-content .
+
+Do not silently SKIP if WSL Docker is available.
+
+If unavailable:
+report exact reason.
+
+59. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:curriculum-content .
+
+60. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(curriculum): add lesson content publishing"
+
+Cursor must NOT execute it.
+
+61. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_004_LESSON_CONTENT_PUBLISH_CLONE_ASSIGNMENT_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #003
+3. Rules applied
+4. Architecture/cycle audit
+5. Clone orchestration design
+6. Files created
+7. Files modified
+8. CurriculumModule changes
+9. LearningContentModule changes
+10. Public exports
+11. LessonSnapshot
+12. Lesson CRUD
+13. Lesson reorder/delete
+14. canonicalLessonKey behavior
+15. Content document v1
+16. Block validation
+17. contentHash
+18. Content API
+19. Publish command
+20. Publish validation
+21. Publish transaction
+22. Previous-current archival policy
+23. Published immutability
+24. Clone command
+25. Clone transaction
+26. Clone canonical-key preservation
+27. Cross-module transaction ownership
+28. Assignment API
+29. Assignment validation
+30. Assignment concurrency/upsert
+31. Assignment snapshot
+32. Tree API
+33. Tree query efficiency
+34. Public contracts for #005
+35. Parish scope
+36. RBAC permissions
+37. HTTP routes
+38. DTOs
+39. Error mapping
+40. Swagger
+41. Unit tests
+42. Integration tests
+43. DB e2e
+44. Multilingual readiness
+45. Security/privacy
+46. Existing regression
+47. quality:full
+48. Docker
+49. Microservice extraction
+50. Commands executed
+51. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- no module cycle
+- no forwardRef
+- lesson CRUD
+- lesson reorder
+- lesson delete
+- canonicalLessonKey immutable
+- content v1 validation
+- contentHash SHA-256
+- publish validation
+- publish success
+- published immutability
+- clone
+- clone rollback
+- canonical key preserved on clone
+- content copied on clone
+- assignment create/update
+- assignment validation
+- tree API
+- auth 401
+- permission/scope 403
+- publish 422
+- no translation subsystem
+- no learner delivery
+- no cross-module repository/entity
+- prior regression
+
+52. Known issues/deferred
+53. Out-of-scope confirmation
+54. CURRICULUM #005 readiness
+55. Prompt count status
+56. Commit recommendation
+
+62. CURRICULUM #005 Readiness
+-----------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+CURRICULUM/CONTENT #005 — Scoped Learner Delivery + Cross-Domain Integration
+
+#005 should implement:
+- classId -> assignment -> published tree
+- enrollmentId -> published tree
+- catechist assigned-class read
+- parent linked-child read
+- student own-enrollment read if applicable
+- published lesson content delivery
+- admin vs learner DTO separation if needed
+- no draft leakage
+- acyclic orchestration with Class/Enrollment
+- FE/Mobile delivery contracts
+- tests
+
+63. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #004/6 complete
+approximately 2 prompts remain (#005–#006)
+
+64. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM/CONTENT #004 status
+- Lesson API PASS/FAIL
+- Content API PASS/FAIL
+- publish PASS/FAIL
+- clone PASS/FAIL
+- assignment PASS/FAIL
+- cycle/forwardRef status
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/CURRICULUM_004_LESSON_CONTENT_PUBLISH_CLONE_ASSIGNMENT_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(curriculum): add lesson content publishing"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #005 automatically.

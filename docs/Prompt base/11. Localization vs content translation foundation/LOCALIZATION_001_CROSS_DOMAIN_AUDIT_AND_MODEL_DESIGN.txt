@@ -1,0 +1,672 @@
+CURSOR PROMPT — LOCALIZATION / CONTENT TRANSLATION FOUNDATION #001/6
+CROSS-DOMAIN AUDIT + OWNERSHIP + TRANSLATION MODEL DESIGN
+
+CONTEXT
+-------
+Completed major backend phases:
+- Backend Foundation
+- CI/CD Foundation
+- Auth/User/RBAC
+- Parish + Academic Structure
+- Class + Student + Enrollment
+- Curriculum + Topic + Lesson + Learning Content
+- Media
+- Question Bank
+- Practice Engine
+- Learning Progress
+
+Learning Progress final gate:
+- PHASE COMPLETE
+- FE/Mobile READY
+- multilingual foundation READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+Recommended next phase:
+LOCALIZATION / CONTENT TRANSLATION FOUNDATION
+
+Current:
+LOCALIZATION #001 / 6
+
+Provisional plan:
+#001 Cross-domain audit + ownership + translation model design
+#002 Locale/preferences + translation persistence/schema foundation
+#003 Provider abstraction + jobs/workflow + glossary foundation
+#004 Curriculum/Learning Content + Question Bank localized read integration
+#005 Admin/review/fallback contracts + FE/Mobile/API hardening
+#006 Final audit + demo/Postman + quality/full + Docker + completion
+
+This prompt is AUDIT/DESIGN ONLY.
+DO NOT implement production code/schema/API.
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect current code deeply
+- create detailed report under docs/
+- not modify production source/schema
+- not auto-proceed to #002
+- NEVER run git add / commit / push
+- NEVER suggest git add
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect relevant User/Auth/Parish reports for locale/country/preference state.
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/curriculum-delivery/
+src/modules/media/
+src/modules/question-bank/
+src/modules/practice/
+src/modules/learning-progress/
+src/modules/users/ or actual user module
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/
+src/common/
+src/config/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+PRIMARY AUDIT QUESTIONS
+-----------------------
+Determine:
+1. What content is translatable today?
+2. Which module owns each source-of-truth?
+3. What should Localization own?
+4. Which tables are required?
+5. How sourceLocale is modeled.
+6. Locale resolution/fallback precedence.
+7. Translation version/staleness model.
+8. Human review/approval policy.
+9. Catholic glossary model.
+10. Provider abstraction (Google Cloud Translation Advanced later).
+11. Sync vs async/job strategy.
+12. API response metadata.
+13. Curriculum/Learning Content integration.
+14. Question Bank integration.
+15. What Practice/Learning Progress must NOT own.
+16. FE/Mobile consumption model.
+17. Exact 5/6/7 prompt implementation plan.
+
+No implementation.
+
+CORE PRINCIPLES
+---------------
+- Business modules own original/source content.
+- Localization owns translation metadata/workflow/resolution.
+- Localization must NOT become a god module.
+- Country != language != locale.
+- Use BCP47 locale values.
+- Do not translate on every GET.
+- Human-approved translation overrides machine translation.
+- Translation must be tied to source version/hash.
+- Stale translations must be detectable.
+- Google/provider credentials backend only.
+- Do not send PII/private chat/pastoral data to translation provider by default.
+- Backend localizes domain content; FE/Mobile own UI/static strings.
+
+LOCALE MODEL
+------------
+Audit and design:
+countryCode: VN/US/FR
+languageCode: vi/en/fr
+locale: vi-VN/en-US/fr-FR
+
+Recommended locale resolution:
+1 explicit endpoint/query override where allowed
+2 user preferredLocale
+3 Accept-Language
+4 parish defaultLocale
+5 system default vi-VN
+
+Audit feasibility from current schemas.
+
+SOURCE LOCALE
+-------------
+Audit current sourceLocale support:
+- Question Bank already likely has sourceLocale
+- Curriculum?
+- Learning Content?
+- Media metadata?
+- User/Parish preferences?
+
+Identify exact additive schema gaps.
+
+TRANSLATABLE RESOURCE MATRIX
+----------------------------
+Produce exact matrix:
+module
+resource/entity
+stable resource key
+version key
+sourceLocale location
+translatable fields
+existing hash/version
+priority
+
+At minimum:
+Curriculum metadata
+Topic metadata
+Lesson metadata
+Learning Content structured blocks
+Question prompt
+Question explanation
+Question option text
+Media caption/alt/transcript if present
+
+Practice:
+no translation ownership.
+
+Learning Progress:
+wire statuses/counters locale-neutral.
+
+STRUCTURED CONTENT
+------------------
+Translation must preserve:
+- IDs
+- block IDs
+- option IDs
+- ordering
+- media asset IDs
+- correctness semantics
+- non-translatable fields
+
+Do not translate raw opaque HTML if current content is structured.
+
+TRANSLATION PERSISTENCE DESIGN
+------------------------------
+Compare:
+A generic translations table
+B domain-specific tables
+C Localization-owned generic resource/revision records + resource adapters
+
+Recommend exact model.
+
+Strong candidate:
+translation resource/revision per resource-version + target locale with structured payload validated by adapter.
+
+Do not implement.
+
+VERSION / STALENESS
+-------------------
+Design:
+sourceContentHash
+sourceVersionId
+sourceLocale
+targetLocale
+translation status
+
+If current source hash != translation source hash:
+STALE.
+
+Approved translation must not be silently overwritten.
+
+TRANSLATION STATUS
+------------------
+Evaluate final enum, potentially:
+MISSING
+QUEUED
+TRANSLATING
+MACHINE_TRANSLATED
+REVIEWED
+APPROVED
+STALE
+FAILED
+
+Simplify only with justification.
+
+TRANSLATION REVISIONS
+---------------------
+Audit whether immutable revision history is required.
+Strong preference:
+preserve revision history for machine output/human edits/approval.
+
+PROVIDER ABSTRACTION
+--------------------
+Design interface around provider, not Google SDK in business modules.
+
+Future initial provider:
+Google Cloud Translation Advanced.
+
+Localization owns:
+provider integration
+job state
+glossary mapping
+cost dedupe
+failure handling
+
+No provider call in ordinary content GET.
+
+JOBS / QUEUE
+------------
+Audit existing Redis/BullMQ/SQS/job infra.
+
+If absent:
+do not force new queue infrastructure unnecessarily.
+
+Potential MVP:
+DB-backed translation_jobs + worker/command abstraction.
+
+Normal GET never waits for provider.
+
+FALLBACK
+--------
+Requested translation unavailable/stale/failed:
+fallback to source content.
+
+Expose metadata:
+requestedLocale
+resolvedLocale
+sourceLocale
+translationStatus
+isFallback
+optional translationRevisionId
+
+GET must not fail solely because translation is missing.
+
+CATHOLIC GLOSSARY
+-----------------
+Design controlled glossary:
+- system/global Catholic glossary first
+- source/target locale pair
+- versioned terms
+- human governed
+- provider glossary mapping
+- parish overrides deferred unless required
+
+Do not hardcode sample terms as final business data.
+
+QUESTION BANK
+-------------
+Correctness must remain language-neutral.
+
+Translations must never change:
+option IDs
+correctOptionIds
+grading semantics
+option internal codes
+
+Audit current sourceContentHash and reuse if correct.
+
+Practice grading remains exact IDs.
+
+CURRICULUM / LEARNING CONTENT
+-----------------------------
+Audit:
+sourceLocale gaps
+hash gaps
+structured translation unit
+version identity
+locale-aware learner delivery strategy
+
+Do not create reverse dependency cycles.
+
+DEPENDENCY DIRECTION
+--------------------
+Audit safe architecture carefully.
+
+Avoid:
+Localization -> Curriculum
+AND Curriculum -> Localization cycles.
+
+Compare:
+- Localization wrapper endpoints
+- localized delivery facade
+- source modules passing source snapshots into LocalizationService
+- CurriculumDelivery integration
+- adapter registry
+
+Recommend exact dependency graph.
+
+PUBLIC READ CONTRACT
+--------------------
+Clients should not need to manually call:
+source API + translation API.
+
+Final learner-facing content read should ideally resolve locale automatically.
+
+Need exact architecture without cycles.
+
+ACCEPT-LANGUAGE
+---------------
+Prefer Accept-Language for consumer reads.
+Optional `locale` query for admin preview/testing.
+
+Audit validation/normalization library.
+
+USER / PARISH SETTINGS
+----------------------
+Audit:
+preferredLocale ownership
+parish defaultLocale
+supportedLocales if needed
+
+Likely:
+User/Profile owns preferredLocale.
+Parish owns defaultLocale.
+Localization defines resolution/validation.
+
+Do not move user/parish ownership.
+
+MIGRATION / BACKFILL
+--------------------
+Audit likely #002 migration needs:
+- Localization tables
+- preferredLocale if absent
+- parish defaultLocale if absent
+- sourceLocale additions to Curriculum/LearningContent if absent
+
+Do NOT blindly backfill all production content as vi-VN unless evidence supports it.
+
+Design safe nullable/backfill strategy.
+
+UNICODE / STORAGE
+-----------------
+Audit MSSQL translatable fields:
+nvarchar / nvarchar(max)
+ISJSON where structured payload stored
+text size limits
+no truncation
+
+PII / PRIVACY
+-------------
+Initial translation scope:
+authored educational/public content only.
+
+Do NOT translate by provider:
+user names
+private chat
+pastoral notes
+Practice answers
+Learning Progress data
+auth/account fields
+
+Private chat translation requires future privacy review.
+
+CACHE / COST
+------------
+Design cache/dedupe key:
+resourceType
+resourceVersion/sourceHash
+sourceLocale
+targetLocale
+provider/model
+glossaryVersion
+
+Do not retranslate unchanged source.
+Support batch/admin-triggered translation.
+Avoid cost abuse.
+
+FE / MOBILE
+-----------
+FE/Mobile:
+- UI strings localized client-side
+- domain content from backend locale-aware endpoints
+- cache key must include locale + source/translation revision
+- status metadata can support fallback/admin UX
+
+No client-side provider secrets.
+
+FUTURE PRACTICE / EXAM
+----------------------
+Audit future requirement:
+Practice localized session should snapshot translationRevisionId or equivalent for reproducibility.
+
+Future Exam should snapshot:
+question version
+locale
+translation revision
+
+Never on-demand translate during active exam.
+
+No implementation now.
+
+RBAC / ADMIN
+------------
+Design potential permissions:
+localization.read
+localization.manage
+localization.approve
+
+Audit parish/tenant ownership before role grants.
+
+Admin use cases:
+list missing/stale
+request translation
+review/edit
+approve
+retry failed
+bulk translate
+
+No implementation #001.
+
+SECURITY THREAT MODEL
+---------------------
+Audit:
+cross-parish leakage
+provider credentials
+prompt/content injection
+script/HTML injection
+translation semantic corruption
+job/cost abuse
+oversized payload
+locale abuse
+logging full content
+
+TEST STRATEGY
+-------------
+Plan:
+unit
+migration
+integration
+DB e2e
+provider mock
+fallback
+staleness
+approval
+glossary
+locale resolution
+tenant scope
+structured ID preservation
+no correctness mutation
+
+CI must not require live Google credentials.
+
+PROMPT COUNT
+------------
+Recommend exact:
+5 / 6 / 7 prompts.
+
+Provisional:
+#001 audit/design
+#002 locale + persistence
+#003 provider/jobs/glossary
+#004 source adapters + localized reads
+#005 admin/review + FE/Mobile hardening
+#006 final gate
+
+Adjust only if audit justifies.
+
+STRICT NO IMPLEMENTATION
+------------------------
+Do NOT create/modify production:
+entities
+migrations
+controllers
+services
+providers
+permissions
+seeds
+dependencies
+Docker
+Postman
+
+Only docs/report.
+
+VALIDATION
+----------
+Run:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+REQUIRED REPORT
+---------------
+Create:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+
+Required sections:
+1 Objective
+2 Current roadmap position
+3 Why Localization now
+4 Existing locale/country/language inventory
+5 User preference inventory
+6 Parish locale configuration inventory
+7 Translatable resource inventory
+8 Curriculum translatable fields
+9 Learning Content translatable fields
+10 Question Bank translatable fields
+11 Practice localization impact
+12 Learning Progress localization impact
+13 Media metadata localization impact
+14 Business source ownership
+15 Localization bounded context
+16 What Localization must NOT own
+17 Locale terminology model
+18 BCP47 validation
+19 Default locale policy
+20 Locale resolution precedence
+21 sourceLocale ownership
+22 Current sourceLocale gaps
+23 Stable resource identity
+24 Generic vs domain-specific translation persistence
+25 Final translation unit model
+26 Structured payload design
+27 Resource adapter strategy
+28 sourceContentHash strategy
+29 Question Bank hash reuse
+30 Curriculum/LearningContent hash requirements
+31 Translation status lifecycle
+32 Translation revisions
+33 Human review/approval
+34 Staleness policy
+35 Provider abstraction
+36 Google Cloud Translation Advanced mapping
+37 Credentials/config
+38 Translation jobs
+39 Queue/worker infrastructure audit
+40 Sync vs async decision
+41 GET/read-path policy
+42 Fallback policy
+43 Response metadata
+44 Accept-Language/query locale contract
+45 Dependency graph options
+46 Final dependency-direction decision
+47 Existing endpoint integration strategy
+48 Admin translation API concept
+49 RBAC/authorization concept
+50 Parish/tenant scope
+51 Cross-parish reuse decision
+52 Catholic terminology glossary
+53 Glossary versioning/provider mapping
+54 PII/provider privacy
+55 Machine translation content scope
+56 Question correctness preservation
+57 Practice snapshot future impact
+58 Exam snapshot future impact
+59 Learning Progress behavior
+60 Translation cache design
+61 Cost controls
+62 Unicode/MSSQL audit
+63 Text size/storage audit
+64 Backfill/migration strategy
+65 FE contract impact
+66 Mobile/offline contract impact
+67 Search/export/import deferred decisions
+68 Security threat model
+69 Testing strategy
+70 Demo/seed strategy
+71 Performance/scalability
+72 Microservice extraction
+73 Risks/open questions
+74 BLOCKER/HIGH/MEDIUM/LOW
+75 Required schema changes
+76 Required source-module additive changes
+77 Files created
+78 Files modified
+79 Commands
+80 Validation
+81 Out-of-scope
+82 Final prompt count recommendation
+83 LOCALIZATION #002 readiness
+84 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+LOCALIZATION DOMAIN DESIGN READY: YES/NO
+LOCALE RESOLUTION MODEL READY: YES/NO
+SOURCE LOCALE MODEL READY: YES/NO
+TRANSLATION PERSISTENCE MODEL READY: YES/NO
+TRANSLATION VERSION/STALENESS MODEL READY: YES/NO
+RESOURCE ADAPTER MODEL READY: YES/NO
+PROVIDER ABSTRACTION MODEL READY: YES/NO
+CATHOLIC GLOSSARY MODEL READY: YES/NO
+CURRICULUM INTEGRATION MODEL READY: YES/NO
+QUESTION BANK INTEGRATION MODEL READY: YES/NO
+FE/MOBILE LOCALIZATION CONTRACT FOUNDATION READY: YES/NO
+PERSISTENCE REQUIRED NOW: YES/NO
+FINAL RECOMMENDED PROMPT COUNT: 5 / 6 / 7
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+#002 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH.
+
+Likely:
+LOCALIZATION #002 — LOCALE PREFERENCES + TRANSLATION PERSISTENCE FOUNDATION
+
+Base exact scope on #001 findings.
+Do not auto-proceed.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- LOCALIZATION #001 status
+- sourceLocale gaps
+- persistence model
+- translation unit model
+- locale resolution
+- provider/job strategy
+- glossary decision
+- recommended prompt count
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed automatically.

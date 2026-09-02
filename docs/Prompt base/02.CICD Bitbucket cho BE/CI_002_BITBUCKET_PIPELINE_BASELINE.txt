@@ -1,0 +1,711 @@
+CURSOR PROMPT — CI/CD BE #002/4
+IMPLEMENT BITBUCKET PIPELINES BASELINE
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend Foundation is COMPLETE.
+
+Current CI/CD phase:
+CI/CD Bitbucket for Backend
+Prompt #002 / 4
+
+Completed:
+- CI #001 — Audit + Pipeline Conventions
+
+Current:
+- CI #002 — Bitbucket Pipeline Baseline
+
+Remaining after this prompt:
+- CI #003 — MSSQL Integration + Docker Build Gates
+- CI #004 — Final CI Audit + Hardening
+
+Important current repository fact:
+- Git remote is currently GitHub, not Bitbucket.
+- This does NOT block authoring/reviewing `bitbucket-pipelines.yml`.
+- Pipeline execution will require the repository to exist/mirror on Bitbucket later.
+
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/CI_001_BITBUCKET_PIPELINE_AUDIT_AND_CONVENTIONS_REPORT.md
+5. Read:
+   docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+6. Inspect:
+   package.json
+   package-lock.json
+   .npmrc if present
+   .gitignore
+   README.md
+   Dockerfile
+   current Git status
+7. Confirm current Node/package manager expectations.
+
+Do not re-audit the whole foundation unless necessary.
+
+2. Primary Objective
+--------------------
+Implement the FIRST Bitbucket Pipelines baseline.
+
+This prompt should create a clean, minimal, maintainable:
+
+bitbucket-pipelines.yml
+
+with:
+
+- exact Node.js 22.23.1 runtime
+- npm cache
+- deterministic `npm ci`
+- fast PR quality gate
+- default-branch quality gate
+- npm audit gate
+- no MSSQL service yet
+- no Docker build service yet
+- no deployment
+- no registry push
+- no staging
+- no production logic
+
+The goal is to establish a working CI baseline that CI #003 will extend with DB integration and Docker production build validation.
+
+3. Scope Boundary
+-----------------
+STRICTLY DO NOT add in this prompt:
+
+- MSSQL service container
+- Docker service
+- Docker build step
+- `quality:full`
+- DB integration tests
+- DB-aware e2e
+- migration validation against live MSSQL
+- staging deployment
+- production deployment
+- Docker registry push
+- deployment credentials
+- Bitbucket deployment environments
+- branch-based auto-deploy
+- auth/business modules
+
+Those belong to later prompts.
+
+4. Git Policy — CRITICAL
+------------------------
+Cursor must NEVER run:
+
+git add
+git commit
+git push
+
+This is a permanent user rule.
+
+If this prompt changes code/config/permanent docs:
+Cursor MUST print exactly ONE recommended command at the end:
+
+git commit -m "<concise conventional commit message>"
+
+Cursor must NOT execute it.
+
+Do not print multiple commit options.
+
+5. Verify Baseline
+------------------
+Before edits, run read-only Git commands:
+
+git status --short
+git branch --show-current
+git log -5 --oneline
+git remote -v
+
+Confirm:
+- working tree state
+- current branch
+- foundation commit
+- CI #001 did not modify tracked files
+- remote is still GitHub unless user changed it
+
+Do not alter Git remotes.
+
+6. Bitbucket YAML File
+----------------------
+Create:
+
+bitbucket-pipelines.yml
+
+at repository root.
+
+Use clear YAML structure.
+
+Preferred top-level runtime:
+
+image: node:22.23.1-bookworm-slim
+
+Do NOT use:
+- node:latest
+- node:22
+- lts
+- floating major/minor tags
+
+Use the exact Node image already aligned with the Dockerfile/runtime baseline.
+
+7. npm Cache
+------------
+Define/use Bitbucket npm cache.
+
+Preferred approach:
+
+definitions:
+  caches:
+    npm: ~/.npm
+
+Then use:
+
+caches:
+  - npm
+
+inside appropriate steps.
+
+Do NOT cache:
+- node_modules
+- dist
+- coverage
+- secrets
+- .env
+- test DB state
+
+Every CI run must still execute:
+
+npm ci
+
+8. PR Pipeline
+--------------
+Create a Pull Request pipeline.
+
+Preferred:
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: Quality
+          ...
+
+Commands:
+
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+Requirements:
+- non-interactive
+- fail on first command failure
+- no mutation commands
+- no auto-fix lint/format
+- no DB
+- no Docker
+
+Use a reasonable max-time based on CI #001 audit.
+
+Preferred:
+max-time: 15
+
+Do not overcomplicate with parallel steps yet.
+
+9. Default Branch Pipeline
+--------------------------
+Current branch observed during audit:
+master
+
+Create a default-branch pipeline for:
+
+master
+
+Baseline behavior in CI #002:
+
+- same Quality step as PR
+
+Commands:
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+Do NOT yet append MSSQL or Docker steps.
+
+CI #003 will extend `master` pipeline.
+
+If repository configuration suggests a different default branch since CI #001:
+- inspect and document it
+- use the actual current default branch only if clearly known
+- do not guess
+
+10. Avoid Duplicated YAML
+-------------------------
+Prefer Bitbucket YAML anchors/aliases ONLY if they genuinely improve maintainability and remain easy to read.
+
+A simple shared step definition such as:
+
+definitions:
+  steps:
+    - step: &quality-step
+        ...
+
+may be appropriate.
+
+Then reuse it for:
+- pull requests
+- master/default branch
+
+Do not overuse anchors.
+
+Keep the file understandable for a normal backend developer.
+
+11. Custom Pipeline Decision
+----------------------------
+CI #001 suggested an optional:
+
+custom:
+  full-ci
+
+Do NOT create a fake heavy `full-ci` pipeline that does not yet include MSSQL/Docker.
+
+Choose one of these two valid approaches:
+
+A. Preferred:
+Do NOT add `full-ci` yet.
+Add it in CI #003 when it can actually perform full validation.
+
+OR
+
+B. Add a custom pipeline only if it is immediately useful and honest.
+
+Do not add placeholder steps that only echo TODO.
+
+Document the decision in the report.
+
+12. engine-strict Review
+------------------------
+CI #001 reported that `engine-strict` may not currently be enforced.
+
+Inspect `.npmrc`.
+
+If `.npmrc` already contains:
+engine-strict=true
+
+do nothing.
+
+If it does NOT exist:
+evaluate whether adding:
+
+engine-strict=true
+
+is appropriate now.
+
+Preferred:
+- enforce exact Node engine mismatch failures
+- keep behavior consistent locally and CI
+
+But do NOT create conflicting configuration.
+
+If added:
+- validate `npm ci` under Node v22.23.1
+- document it
+- this counts as a config change for commit recommendation
+
+13. npm Version
+---------------
+Do NOT install or globally pin another npm version unless necessary.
+
+Use npm bundled with:
+node:22.23.1-bookworm-slim
+
+Current local validation used npm 10.9.x.
+
+The pipeline should rely on `package-lock.json` + `npm ci`.
+
+If actual official Node image npm version differs slightly but remains compatible:
+document it rather than adding global npm install.
+
+14. CI Environment Variable
+---------------------------
+Consider setting:
+
+CI=true
+
+for the Quality step.
+
+If Bitbucket already exposes a CI environment automatically, do not redundantly complicate YAML.
+
+If you set it explicitly:
+use step variables/environment safely.
+
+No secrets are required in CI #002.
+
+Do NOT introduce DB variables yet.
+
+15. No .env Generation
+----------------------
+CI #002 must NOT generate:
+- .env
+- .env.test
+
+The fast quality gate does not require them.
+
+This keeps the baseline secret-free.
+
+16. npm Audit
+-------------
+Keep:
+
+npm audit --audit-level=moderate
+
+as a separate command after quality.
+
+Do NOT:
+- npm audit fix
+- npm audit fix --force
+
+Any future vulnerability failure should fail CI and be investigated explicitly.
+
+17. Coverage Decision
+---------------------
+CI #001 found `test:cov` optional.
+
+For this first pipeline baseline:
+
+Preferred:
+Do NOT add an extra `npm run test:cov` command if it would duplicate unit test execution in `quality`.
+
+Reason:
+- keep v1 pipeline fast
+- coverage artifact policy can be refined later
+
+However, if the existing project already expects coverage as a mandatory quality gate, preserve that policy.
+
+Document the decision.
+
+Do not create arbitrary coverage thresholds.
+
+18. Pipeline Validation
+-----------------------
+Bitbucket may not be connected yet, so actual hosted pipeline execution may be impossible.
+
+Still perform strong local/static validation.
+
+At minimum:
+
+A. YAML syntax validation
+- parse `bitbucket-pipelines.yml` with an available YAML parser if practical
+- or use another safe syntax check
+
+B. Inspect exact YAML structure.
+
+C. Locally execute the step commands in the same order:
+
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+D. If Docker is available, optionally verify exact Node image:
+
+docker run --rm node:22.23.1-bookworm-slim node --version
+
+This is optional if Docker environment is unavailable.
+
+Do not claim Bitbucket-hosted PASS unless it actually ran in Bitbucket.
+
+19. Validate No DB Dependency
+-----------------------------
+Confirm CI #002 pipeline commands succeed without:
+- MSSQL
+- Docker Compose
+- `.env`
+- `.env.test`
+
+This is a key requirement for the PR Quality gate.
+
+20. Validate No Secret Requirement
+----------------------------------
+Confirm:
+- `bitbucket-pipelines.yml` contains no password
+- no token
+- no registry secret
+- no DB secret
+- no `.env` creation
+- no environment dump
+
+CI #002 must be entirely secret-free.
+
+21. README Decision
+-------------------
+The foundation README already exists.
+
+Add a SMALL CI section to README.md ONLY if it provides real developer value now.
+
+Possible concise content:
+- CI baseline uses Bitbucket Pipelines
+- PR/master run `npm run quality`
+- MSSQL/Docker gates will be added later
+
+However:
+- remote is still GitHub
+- pipeline is not active until repo is on Bitbucket
+
+Do NOT clutter README with future speculative CI details.
+
+If README change is unnecessary:
+leave it unchanged.
+
+22. Remote Mismatch
+-------------------
+Do NOT modify:
+
+git remote
+
+Do NOT migrate/mirror repository.
+
+The report must note:
+
+Current remote is GitHub.
+
+`bitbucket-pipelines.yml` will only execute after:
+- repository is hosted on Bitbucket
+or
+- an equivalent Bitbucket mirror/workflow is configured.
+
+This is not a code blocker.
+
+23. No Placeholder TODO Pipeline Steps
+-------------------------------------
+Do not create:
+
+- "Database tests — TODO"
+- "Docker build — TODO"
+
+as executable steps.
+
+Comments in YAML may be used sparingly, but preferred:
+keep CI #002 file only with actually working steps.
+
+CI #003 will add real DB/Docker steps.
+
+24. YAML Maintainability
+------------------------
+Keep names concise.
+
+Preferred step name:
+Quality
+
+Avoid verbose names such as:
+"Install Dependencies And Run All Code Quality Validation Checks"
+
+Use consistent indentation.
+
+No duplicate command blocks if anchors can cleanly reuse them.
+
+25. Expected Baseline Concept
+-----------------------------
+Conceptually, final YAML should be similar in structure to:
+
+image: node:22.23.1-bookworm-slim
+
+definitions:
+  caches:
+    npm: ~/.npm
+
+  steps:
+    - step: &quality
+        name: Quality
+        caches:
+          - npm
+        max-time: 15
+        script:
+          - npm ci
+          - npm run quality
+          - npm audit --audit-level=moderate
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *quality
+
+  branches:
+    master:
+      - step: *quality
+
+This is a conceptual reference, NOT an instruction to copy blindly.
+
+Validate actual Bitbucket Pipelines syntax supported by the current platform/tooling before finalizing.
+
+26. Do Not Add Docker Service
+-----------------------------
+Do NOT add:
+
+services:
+  - docker
+
+in this prompt.
+
+Do NOT add:
+
+definitions:
+  services:
+    mssql:
+
+That is CI #003.
+
+27. Do Not Add Deployment
+-------------------------
+No:
+
+deployment:
+environment:
+trigger: manual
+
+unless required by a genuinely useful custom CI-only pipeline.
+
+Preferred:
+no deployment-related syntax at all in CI #002.
+
+28. Required Validation Commands
+--------------------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+Also validate YAML syntax.
+
+Use read-only Git commands:
+git status --short
+git diff -- bitbucket-pipelines.yml
+git diff --stat
+
+If `.npmrc` or README changes:
+include them in diff review.
+
+Do NOT run Git write operations.
+
+29. Required Report
+-------------------
+Create:
+
+docs/CI_002_BITBUCKET_PIPELINE_BASELINE_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From CI #001
+
+3. Files Created
+
+4. Files Modified
+
+5. Bitbucket Pipeline Architecture
+
+6. Node Runtime
+Document exact image.
+
+7. Cache Strategy
+
+8. PR Pipeline
+Document trigger and exact commands.
+
+9. Default Branch Pipeline
+Document branch and exact commands.
+
+10. Custom Pipeline Decision
+Explain whether `full-ci` was deferred.
+
+11. engine-strict Decision
+Document current `.npmrc` and any change.
+
+12. npm / Lockfile Behavior
+
+13. Coverage Decision
+
+14. Secret / Environment Review
+Confirm no secret required.
+
+15. Remote / Activation Note
+Confirm GitHub remote and Bitbucket activation limitation.
+
+16. YAML Validation
+Explain how syntax was checked.
+
+17. Local Command Validation
+
+18. Validation Results
+Explicit PASS/FAIL:
+- Node
+- npm
+- npm ci
+- quality
+- npm audit
+- YAML syntax
+- pipeline has no DB service
+- pipeline has no Docker service
+- pipeline has no deployment
+- pipeline has no secrets
+
+19. Git Diff / Scope Summary
+
+20. Known Issues / Assumptions
+
+21. Out-of-Scope Confirmation
+
+22. Recommended CI #003 Plan
+
+Recommend:
+CI #003 — MSSQL Integration + Docker Build Gates
+
+That prompt should:
+- add MSSQL service container
+- solve DataSource CI env-only/bootstrap requirement
+- add test DB readiness/wait mechanism
+- run `quality:full`
+- add Docker service
+- build production Docker target
+- extend master/default branch
+- add real custom `full-ci` if useful
+- still no deploy/registry push
+
+Do NOT implement CI #003 now.
+
+23. Commit Message Recommendation
+
+Because this prompt is expected to create `bitbucket-pipelines.yml`,
+print exactly ONE recommended command:
+
+git commit -m "ci: add Bitbucket quality pipeline"
+
+If additional small config/docs changes are included, keep ONE concise message only.
+
+Cursor must NOT execute it.
+
+30. Final Response
+------------------
+When finished, respond concisely with:
+
+- CI #002 completion status
+- baseline pipeline validation PASS/FAIL
+- report path:
+  docs/CI_002_BITBUCKET_PIPELINE_BASELINE_REPORT.md
+
+Then print exactly ONE recommended command if tracked changes exist:
+
+git commit -m "ci: add Bitbucket quality pipeline"
+
+Cursor MUST NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to CI #003 automatically.

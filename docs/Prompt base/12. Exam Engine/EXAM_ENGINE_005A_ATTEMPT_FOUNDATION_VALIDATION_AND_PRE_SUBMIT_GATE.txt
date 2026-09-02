@@ -1,0 +1,631 @@
+CURSOR PROMPT — EXAM ENGINE #005A
+CORRECTIVE HARDENING — CLOSE #004A DEBT + VALIDATE ATTEMPT GENERATION BEFORE ANSWER/SUBMIT
+
+CONTEXT
+-------
+Timeline:
+- EXAM #001 — domain audit/design
+- EXAM #002 — Student learner auth/self-scope foundation
+- EXAM #003 — schema/module shell
+- EXAM #003A corrective was required but skipped
+- EXAM #004 — authoring/publish/class assignment APIs
+- EXAM #004A corrective was required but skipped
+- EXAM #005 — attempt generation + localized delivery implemented
+
+Current #005 state:
+- STUDENT has exam.attempt
+- Parent denied learner attempt flow
+- available assignments/start/resume endpoints exist
+- questionVersion/source hash/translation revision pinned
+- deadline + one-active + max-attempt behavior implemented
+- exam header source-locale snapshot used
+- no answer save/submit/grade yet
+- only targeted typecheck/lint/tests/build reported
+- no pristine quality:full
+- no full migration/integration/DB e2e
+- no Docker production build evidence
+- schema/cascade/idempotency debt remains unresolved from #004A
+
+Before EXAM #006 answer/save/submit/grade, close all gates.
+
+This is a CORRECTIVE prompt.
+Do NOT implement answer save/submit/grade yet.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001–#005 reports
+- inspect actual schema/migrations and attempt implementation
+- close #004A debt first
+- harden #005 attempt generation/delivery
+- create detailed report
+- NOT implement answer-save/submit/grade
+- NOT auto-proceed #006
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "fix(exam): harden attempt foundation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/EXAM_003_EXAM_SCHEMA_AND_MODULE_SHELL_REPORT.md
+docs/EXAM_004_AUTHORING_PUBLISH_ASSIGNMENT_APIS_REPORT.md
+docs/EXAM_005_ATTEMPT_GENERATION_LOCALIZED_DELIVERY_REPORT.md
+
+Inspect:
+src/modules/exam/
+src/modules/student/
+src/modules/enrollment/
+src/modules/question-bank/
+src/modules/localization/
+src/modules/class/
+src/modules/access-control/
+src/database/migrations/1788064000000-create-exam-schema.ts
+src/database/seeds/auth-rbac.seed.constants.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+Dockerfile
+
+OBJECTIVES
+----------
+A. Close cross-module FK/cascade debt from #004A
+B. Finalize answer idempotency semantics before #006
+C. Prove schema guards on real MSSQL
+D. Prove authoring/publish/assignment behavior on real MSSQL
+E. Prove Student attempt generation/resume/localization on real MSSQL
+F. Audit security/IDOR/no-leak behavior
+G. Audit concurrency/idempotency/max-attempt/deadline behavior
+H. Run pristine quality:full
+I. Run Docker production build
+
+CROSS-MODULE FK / CASCADE AUDIT
+-------------------------------
+Audit current FKs:
+- parish
+- user
+- class
+- enrollment
+- student
+- QuestionBank
+- Localization
+
+Classify KEEP / REMOVE / JUSTIFIED EXCEPTION.
+
+Strong preference:
+cross-module scalar IDs, validation through public services.
+
+Audit internal cascades:
+Formal graded attempt history must never be deletable through authoring-root cascade.
+
+If deleting exam/version/assignment can cascade-delete historical attempts:
+FIX NOW and mark prior state HIGH severity.
+
+Historical attempts/questions/answers/results must survive authoring lifecycle changes.
+
+ANSWER IDEMPOTENCY — FINAL DECISION BEFORE #006
+------------------------------------------------
+Current Exam schema has one mutable answer row per attempt question.
+
+Choose exact MVP semantics now:
+
+OPTION A — stable clientAnswerId per attempt-question resource
+or
+OPTION B — latest-request idempotency only
+
+Do NOT add history table unless absolutely required.
+
+Document:
+- exact client behavior
+- same request replay
+- stale old request replay
+- semantic hash behavior
+- concurrent edits
+- mobile reconnect behavior
+- conflict response
+
+This must be READY before #006 implementation.
+
+ANSWER SEMANTIC HASH CONTRACT
+-----------------------------
+Define utility/contract if needed now, even if save API is #006.
+
+Canonicalize selected option IDs:
+- lowercase UUID
+- dedupe
+- sort for set semantics
+- stable canonical JSON
+- SHA-256 hash
+
+No timestamps/clientRequest metadata in semantic hash.
+
+SCHEMA DB GUARDS
+----------------
+Real MSSQL tests must prove:
+- exactly 7 Exam tables
+- one PUBLISHED version per Exam
+- one IN_PROGRESS attempt per enrollment+assignment
+- unique attemptNumber
+- filtered clientRequestId uniqueness
+- JSON checks
+- enum checks
+- duration/maxAttempts/passingScore checks
+- assignment window check
+- deadline >= startedAt
+- score range
+- source hash format
+- UUID app-generated
+- no forbidden cross-module FKs
+- no dangerous cascade paths
+
+AUTHORING / PUBLISH REGRESSION
+------------------------------
+Real MSSQL:
+- create root
+- create draft version
+- configure/reorder questions
+- publish
+- pin current published QB questionVersionId
+- archive previous published
+- clone-to-draft
+- assignment create/update/cancel
+- cross-parish denied
+- inactive root blocked where required
+- unpublished QB question rejected
+- published version immutable
+
+STUDENT ATTEMPT RBAC
+--------------------
+Verify:
+STUDENT:
+- exam.attempt YES
+- can only act as own linked student
+- no admin permissions
+
+PARENT:
+- exam.attempt NO
+
+CATECHIST:
+- exam.attempt NO
+
+PARISH_ADMIN:
+- exam.attempt NO or permission alone insufficient to act as learner
+
+SUPER_ADMIN:
+- must not bypass learner self-scope to take exam
+
+Attempt endpoints must use BOTH:
+- exam.attempt permission
+- LearnerSelfScopeService
+
+No guardian path.
+
+AVAILABLE ASSIGNMENTS ENDPOINT
+------------------------------
+Audit:
+GET enrollments/:enrollmentId/exam-assignments
+
+Must:
+- require linked STUDENT self-scope
+- derive active enrollment
+- only return same class/parish
+- only current eligible assignment states
+- no assignment from other learner
+- no answers/results
+- stable pagination/sort if applicable
+
+START ATTEMPT
+-------------
+Audit flow:
+- assignment exists
+- effective status OPEN
+- exam root ACTIVE
+- version PUBLISHED
+- active enrollment/student/class
+- student self-scope
+- attempt limit
+- one active
+- clientRequestId
+- exact question config
+- exact question/order/option-order realization
+- sourceContentHash pin
+- localization pin
+- deadline
+- atomic transaction
+
+START IDEMPOTENCY
+-----------------
+Test:
+- same clientRequestId + same semantics -> existing attempt
+- same clientRequestId + conflicting semantics -> 409
+- two simultaneous starts -> only one IN_PROGRESS row
+- retry without clientRequestId while active -> resume existing attempt according to contract
+- max attempts cannot be bypassed by race
+
+ATTEMPT NUMBER
+--------------
+Verify attemptNumber allocation concurrency-safe.
+
+At most one slot consumed per successful start.
+No duplicate attempt number.
+
+MAX ATTEMPTS
+------------
+Until grading exists, IN_PROGRESS should count as occupied slot.
+
+Audit behavior once previous GRADED attempts exist through fixture/direct service setup.
+
+DEADLINE
+--------
+Verify:
+deadlineAt = min(startedAt + duration, assignment.closesAt)
+
+Use UTC/server time.
+
+Tests:
+- duration earlier than close
+- assignment close earlier than duration
+- exact boundary
+- no client-provided deadline
+
+ASSIGNMENT STATUS
+-----------------
+Attempt start must use effective status, not stale stored status alone.
+
+CANCELLED always denied.
+SCHEDULED before opensAt denied.
+CLOSED after closesAt denied.
+
+QUESTION SNAPSHOT
+-----------------
+At start persist:
+- questionId
+- questionVersionId
+- sourceContentHash
+- realized sortOrder
+- deliveredOptionOrderJson
+- translationRevisionId nullable
+- deliveredLocale
+
+No correctness fields.
+
+QUESTION RANDOMIZATION
+----------------------
+Test shuffle flags:
+- shuffle off preserves published order
+- shuffle on produces realized order persisted
+- GET replay preserves same realized order
+- option order persisted
+- no reshuffle on GET/resume
+
+Tests should avoid flaky randomness; inject/deterministic seed if needed.
+
+LOCALIZATION PINNING
+--------------------
+ExamModule imports LocalizationModule; Localization must NOT import ExamModule.
+
+Per question:
+- approved translation -> pin revision
+- missing translation -> source fallback and null revision
+- newer approved revision later does NOT change existing attempt
+- GET uses exact pinned revision
+- no provider call on GET
+
+EXAM HEADER LOCALIZATION DECISION
+---------------------------------
+#005 stores title/instructions in source locale on attempt row to avoid cycle.
+
+Audit and document final MVP decision:
+- exam header source-locale snapshot only
+- question content localized
+- no Localization -> Exam cycle
+
+This may remain MEDIUM/deferred if source fallback acceptable.
+Do NOT introduce a cycle to translate header now.
+
+GET / RESUME ATTEMPT
+--------------------
+Must return:
+serverTime
+startedAt
+deadlineAt
+status
+attemptNumber
+maxAttempts
+exam title/instructions
+question list in realized order
+pinned localized question display
+answers[] currently empty/prepared
+translation metadata
+
+Must NOT expose:
+correctOptionIds
+answerDefinition
+isCorrect
+explanation
+score
+passed
+correctCount
+grading metadata
+
+EXACT REVISION FAILURE
+----------------------
+If pinned translation revision unexpectedly unavailable:
+fallback to source safely.
+Do not make attempt unusable.
+Do not switch to latest revision.
+
+CROSS-PARISH / CROSS-STUDENT IDOR
+---------------------------------
+DB e2e:
+- Student A cannot list/start/get Student B enrollment/attempt
+- Parent denied
+- Catechist denied attempt endpoints
+- ParishAdmin/SuperAdmin cannot impersonate learner
+- foreign parish attempt GET denied
+
+EXPIRY PRE-#006 BEHAVIOR
+------------------------
+#006 will implement lazy finalization.
+
+Before #006:
+define exact current behavior after deadline.
+
+Strong preference:
+attempt GET/start must not incorrectly allow mutations.
+If current GET returns IN_PROGRESS after expiry because finalizer not implemented yet, document temporary state and ensure no answer API exists.
+
+#006 must close it.
+
+HTTP ERROR CONTRACT
+-------------------
+Verify:
+400 invalid input
+401 unauthenticated
+403 self-scope/access
+404 assignment/attempt
+409 idempotency/active/max attempt/lifecycle where appropriate
+422 domain validation as designed
+
+No raw DB error exposure.
+
+MODULE BOUNDARY
+---------------
+Expected:
+Exam -> QuestionBank
+Exam -> Enrollment
+Exam -> Student
+Exam -> Class
+Exam -> Localization
+Exam -> Parish/Auth/AccessControl as needed
+
+Forbidden:
+Exam -> Practice
+Localization -> Exam
+Practice -> Exam
+LearningProgress -> Exam repositories
+
+No forwardRef.
+ExamService sole public export.
+
+INTEGRATION TESTS — REQUIRED
+----------------------------
+Real MSSQL:
+- authoring/publish/assignment regression
+- Student available assignments
+- Student start attempt
+- idempotent replay
+- concurrent start
+- max attempts
+- deadline calculation
+- shuffle persistence
+- approved localization pin
+- missing fallback
+- newer translation not changing old attempt
+- resume exact snapshot
+- cross-student/service-level scope denial
+
+DB E2E — REQUIRED
+-----------------
+HTTP:
+- Student login/context
+- available exam assignments
+- start attempt
+- retry start
+- GET attempt
+- Parent 403
+- Catechist 403
+- ParishAdmin learner attempt denied
+- cross-student 403
+- cross-parish 403
+- active attempt no leakage
+- admin authoring regression
+
+PRISTINE QUALITY:FULL
+---------------------
+Run exactly:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-attempt-foundation ."
+
+PASS required.
+
+NPM AUDIT
+---------
+npm audit --audit-level=moderate
+No unresolved HIGH.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+Docker build.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/EXAM_005A_ATTEMPT_FOUNDATION_VALIDATION_AND_PRE_SUBMIT_GATE_REPORT.md
+
+Required sections:
+1 Objective
+2 Why #005A was required
+3 State inherited #003–#005
+4 Files created
+5 Files modified
+6 Cross-module FK audit
+7 Cascade/history retention
+8 Answer idempotency final decision
+9 Answer semantic hash
+10 Schema DB guards
+11 Authoring/publish regression
+12 Student RBAC
+13 Parent/staff impersonation denial
+14 Available assignments
+15 Start attempt flow
+16 Start idempotency
+17 Start concurrency
+18 Attempt numbering
+19 Max attempts
+20 Deadline
+21 Assignment effective status
+22 Question snapshot
+23 Shuffle realization
+24 Localization pinning
+25 Exam header localization decision
+26 Resume GET
+27 Exact revision replay/fallback
+28 Leakage prevention
+29 Cross-student IDOR
+30 Cross-parish IDOR
+31 Current pre-#006 expiry behavior
+32 Error contract
+33 Module boundary
+34 Integration tests
+35 DB e2e
+36 Regression
+37 pristine quality:full
+38 Docker
+39 npm audit
+40 Commands
+41 Validation matrix
+42 Risks/deferred
+43 BLOCKER/HIGH/MEDIUM/LOW
+44 EXAM #006 readiness
+45 Prompt count
+46 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+EXAM SCHEMA FOUNDATION READY: YES/NO
+HISTORICAL ATTEMPT RETENTION SAFE: YES/NO
+ANSWER IDEMPOTENCY MODEL READY: YES/NO
+AUTHORING/PUBLISH/ASSIGNMENT REGRESSION READY: YES/NO
+STUDENT ATTEMPT ACCESS READY: YES/NO
+START IDEMPOTENCY READY: YES/NO
+START CONCURRENCY SAFE: YES/NO
+QUESTION SNAPSHOT READY: YES/NO
+LOCALIZATION PINNING READY: YES/NO
+ACTIVE ATTEMPT LEAKAGE SAFE: YES/NO
+PRISTINE QUALITY:FULL: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+EXAM #006 GATE
+--------------
+Proceed to #006 only if:
+- BLOCKER=0
+- HIGH=0
+- schema/history safe
+- answer idempotency explicit
+- Student self-scope correct
+- start concurrency/idempotency proven
+- question/localization snapshot proven
+- no leakage
+- pristine quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+EXAM #006/8 —
+ANSWER SAVE + SUBMIT + GRADING + EXPIRY FINALIZATION
+
+#006 should implement:
+- save/update answer
+- clientAnswerId semantics exactly as decided
+- answer validation against pinned QB version
+- no correctness feedback while IN_PROGRESS
+- submit
+- QuestionBankService.gradeAnswer only
+- unanswered=incorrect
+- result snapshot
+- deadline lazy auto-finalize
+- assignment-close finalize
+- double-submit idempotency
+- save-vs-submit locking
+- no result/review reveal beyond policy gate yet
+
+Do not auto-proceed.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #005A status
+- schema/history safety
+- answer idempotency decision
+- Student attempt foundation
+- localization pinning
+- leakage safety
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(exam): harden attempt foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.

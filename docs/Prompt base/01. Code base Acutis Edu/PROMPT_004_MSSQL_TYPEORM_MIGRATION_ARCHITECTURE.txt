@@ -1,0 +1,924 @@
+CURSOR PROMPT #004 — MSSQL + TYPEORM DATA ACCESS + MIGRATION ARCHITECTURE
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm
+- MSSQL
+- Docker / Docker Compose for local development in the NEXT prompt
+- Bitbucket Pipelines later
+- Frontend is a separate ReactJS repository
+
+Completed foundation prompts:
+
+Prompt #001
+- mandatory project rules
+- repository hygiene
+- Cursor always-apply rules
+- docs/ ignored
+
+Prompt #002
+- NestJS application bootstrap
+- Node/npm pinning
+- TypeScript strict
+- ESLint
+- Prettier
+- Jest/e2e baseline
+- GET /api/v1/health
+
+Prompt #003
+- @nestjs/config
+- Joi env validation
+- typed AppConfigService
+- global ValidationPipe
+- global exception filter / API error contract
+- structured logging with nestjs-pino
+- request/correlation ID
+- Swagger/OpenAPI
+- environment-driven HTTP port
+- shared application bootstrap for production/e2e
+
+Before making ANY change:
+
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all .cursor/rules/*.mdc.
+4. Read:
+   docs/PROMPT_001_PROJECT_RULES_REPORT.md
+5. Read:
+   docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+6. Read:
+   docs/PROMPT_003_APPLICATION_BOOTSTRAP_INFRASTRUCTURE_REPORT.md
+7. Inspect the current repository structure and package versions.
+
+Do not weaken existing quality/security rules.
+
+2. Current Phase
+----------------
+Backend Foundation
+Prompt #004 / approximately 7 prompts
+
+Completed:
+- #001 Rules & repository hygiene
+- #002 NestJS bootstrap & code quality
+- #003 Application bootstrap infrastructure
+
+Current:
+- #004 MSSQL + ORM/Data Access + Migration Architecture
+
+Remaining after this prompt:
+- #005 Docker + Docker Compose + MSSQL local
+- #006 DB integration/e2e + testing conventions + quality gates
+- #007 Final foundation audit + hardening
+
+3. Primary Objective
+--------------------
+Establish a clean and production-oriented MSSQL data-access foundation.
+
+This prompt should:
+
+- deliberately confirm the ORM/data-access choice
+- integrate MSSQL with NestJS
+- add database environment configuration
+- establish a reusable database module
+- configure TypeORM DataSource correctly
+- establish migration generation/run/revert tooling
+- establish naming and entity discovery conventions
+- prevent schema auto-sync
+- prepare the application for real domain entities later
+- test configuration and database bootstrap logic without requiring Docker/MSSQL to be running
+- keep all business/domain tables OUT OF SCOPE
+
+This prompt must NOT create catechism entities or business tables.
+
+4. ORM / Data Access Decision
+-----------------------------
+The preferred direction for this project is:
+
+- TypeORM
+- @nestjs/typeorm
+- mssql driver
+
+Reasoning:
+- strong NestJS integration
+- mature MSSQL support
+- straightforward repository/unit-of-work patterns
+- migration support
+- appropriate for a modular NestJS application
+
+Before installation, verify current stable versions compatible with:
+- NestJS 11.2.3
+- Node.js 22.23.1
+- TypeScript 5.9.x
+- MSSQL
+
+Do NOT upgrade NestJS major version.
+
+If a serious compatibility blocker is discovered, STOP and document it rather than silently switching ORM.
+
+Do NOT introduce:
+- Prisma
+- MikroORM
+- Sequelize
+- Drizzle
+
+unless the report demonstrates a genuine blocker and the user explicitly approves a change.
+
+5. Dependencies
+---------------
+Expected production dependencies:
+
+- @nestjs/typeorm
+- typeorm
+- mssql
+
+Add only packages required by the selected setup.
+
+Review exact installed versions and document them.
+
+Do not add Docker-related packages.
+
+6. Database Configuration
+-------------------------
+Extend the existing centralized configuration architecture.
+
+Do NOT read process.env directly from application/database business code.
+
+Add typed database configuration through the existing:
+- @nestjs/config
+- Joi validation
+- AppConfigService / typed config architecture
+
+Expected environment variables:
+
+DB_HOST
+DB_PORT
+DB_NAME
+DB_USER
+DB_PASSWORD
+
+Also deliberately support MSSQL TLS behavior needed for local vs production environments.
+
+Evaluate variables such as:
+
+DB_ENCRYPT
+DB_TRUST_SERVER_CERTIFICATE
+
+Recommended semantics:
+
+Production:
+- encryption should be supported and safe
+- trustServerCertificate should default to false
+
+Local development:
+- trustServerCertificate may be configurable because local MSSQL containers often use self-signed certificates
+
+Do not make insecure production defaults just to simplify local development.
+
+Optional pool configuration may be added ONLY if there is a concrete reason.
+
+Avoid speculative environment variables.
+
+7. Environment Validation
+-------------------------
+Extend Joi startup validation.
+
+Requirements:
+
+DB_HOST
+- required non-empty hostname/string when database integration is enabled
+
+DB_PORT
+- integer
+- valid TCP port
+- sensible MSSQL default: 1433
+
+DB_NAME
+- required non-empty value
+
+DB_USER
+- required non-empty value
+
+DB_PASSWORD
+- required
+- do not log it
+- do not embed a real password in source
+
+DB_ENCRYPT
+- predictable boolean parsing
+
+DB_TRUST_SERVER_CERTIFICATE
+- predictable boolean parsing
+
+Important:
+Configuration validation must remain deterministic.
+
+If application startup now requires DB configuration even before an actual connection succeeds, ensure .env.example clearly documents the values required.
+
+8. .env.example
+---------------
+Update the tracked .env.example.
+
+Add the required DB variables.
+
+Do not add a real secret.
+
+Use a clearly non-production placeholder for DB_PASSWORD.
+
+Example style:
+
+DB_PASSWORD=change-me-locally
+
+Make it explicit in comments that:
+- this is not a production secret
+- developers must override it locally
+- production secrets must come from the deployment secret store
+
+Do not commit .env.
+
+9. Database Config Types
+------------------------
+Add explicit typed database configuration.
+
+Prefer a clear model such as:
+
+interface DatabaseConfig {
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password: string;
+  encrypt: boolean;
+  trustServerCertificate: boolean;
+}
+
+Adapt naming to existing conventions.
+
+Do not expose password values through logs or error responses.
+
+10. Database Module
+-------------------
+Create a dedicated database module with one clear responsibility:
+
+- configure TypeORM for NestJS
+- own database connection configuration
+- prepare infrastructure for future feature entities
+
+Example direction:
+
+src/database/
+  database.module.ts
+  database.constants.ts
+  database.config.ts
+  typeorm-options.factory.ts
+  data-source.ts
+
+Exact structure should follow existing repository conventions and stay minimal.
+
+Do NOT create generic:
+- repositories/
+- entities/
+- base/
+- utils/
+
+unless actually needed.
+
+11. TypeORM NestJS Integration
+------------------------------
+Use an async TypeORM setup driven by the centralized config service.
+
+Preferred direction:
+TypeOrmModule.forRootAsync(...)
+
+Requirements:
+- type: 'mssql'
+- host
+- port
+- username
+- password
+- database
+- encryption options
+- trustServerCertificate option
+- entities discovered in a predictable way
+- synchronize: false
+- migrationsRun: false by default
+- logging intentionally configured
+
+Do not enable:
+synchronize: true
+
+under any environment.
+
+Schema changes must be migration-driven.
+
+12. TypeORM Naming Conventions
+------------------------------
+PROJECT_RULES.md requires one consistent database naming convention.
+
+For MSSQL, use an explicit convention now.
+
+Preferred database naming direction:
+
+- table names: snake_case plural
+- column names: snake_case
+- foreign key/index/unique names: deterministic and understandable
+
+Examples:
+users
+academic_years
+student_guardians
+
+created_at
+updated_at
+student_id
+
+Do not rely on inconsistent automatic casing.
+
+Evaluate using a maintained TypeORM naming strategy package OR implement a small explicit project strategy only if necessary.
+
+Do NOT introduce a dependency just for aesthetics without checking maintenance/compatibility.
+
+If TypeORM's default naming can violate the desired convention, solve it now and document how.
+
+13. Entity Conventions
+----------------------
+Do NOT create real business entities.
+
+However, document and/or establish conventions future entities must follow.
+
+Future entity expectations should include:
+
+- UUID primary keys unless explicitly overridden by a later domain decision
+- explicit column types
+- explicit nullability
+- created_at / updated_at convention where appropriate
+- no synchronize reliance
+- explicit indexes where query behavior requires them
+- foreign-key delete behavior must be intentional
+- do not expose entities directly as API DTOs
+
+Do NOT create speculative BaseEntity inheritance just to save a few fields.
+
+We will introduce entity abstractions only when real duplication exists.
+
+14. UUID Strategy
+-----------------
+Define the intended ID strategy for future business entities.
+
+Preferred direction:
+- application-generated UUID
+or
+- database-generated UUID
+
+Evaluate which is more predictable with TypeORM + MSSQL.
+
+Do not create a table just to test UUID generation.
+
+Document the decision for future modules.
+
+15. Migration Architecture
+--------------------------
+Establish TypeORM migration tooling.
+
+Required capabilities:
+
+- generate migration from entity/schema differences
+- create empty migration when deliberately needed
+- run pending migrations
+- revert the most recent migration
+- show/list migration status where supported
+
+Package scripts should provide clear commands.
+
+Examples conceptually:
+
+npm run migration:create -- <name>
+npm run migration:generate -- <name>
+npm run migration:run
+npm run migration:revert
+npm run migration:show
+
+The exact implementation must actually work with the chosen TypeORM CLI invocation.
+
+Do not add fake scripts.
+
+16. Migration Source / Build Strategy
+-------------------------------------
+Design migrations so they work predictably in:
+
+A. local TypeScript development
+B. compiled production code
+
+Avoid a setup where:
+- development finds .ts migrations
+- production accidentally searches only .ts files in dist
+or vice versa.
+
+Choose and document a reliable pattern.
+
+For example:
+- source migrations under src/database/migrations
+- compiled migrations under dist/database/migrations
+- DataSource glob handles current runtime extension safely
+
+Be careful not to execute both .ts and .js duplicates.
+
+17. DataSource for CLI
+---------------------
+Create a TypeORM DataSource entry point suitable for migration CLI operations.
+
+Important requirements:
+
+- It must use the same database configuration semantics as the NestJS app.
+- Avoid duplicating parsing rules between NestJS runtime and CLI.
+- It may load dotenv for CLI execution if necessary.
+- Do not create two conflicting configuration systems.
+
+If CLI cannot use Nest DI directly, share pure configuration-building functions safely.
+
+Document the architecture.
+
+18. Database Connection Behavior
+--------------------------------
+Do not silently connect with unsafe defaults.
+
+Configure MSSQL options intentionally.
+
+Review:
+- encrypt
+- trustServerCertificate
+- connection timeout if needed
+- request timeout if needed
+
+Only add timeout values if there is a clear reason.
+
+Do not prematurely add retries, circuit breakers, read replicas, or advanced pool tuning.
+
+NestJS/TypeORM retry behavior should be explicit.
+
+For local boot later under Docker, startup should be resilient enough to normal container readiness, but Prompt #005 will validate that behavior.
+
+Do not over-optimize it here.
+
+19. Database Logging
+--------------------
+Choose safe TypeORM logging behavior.
+
+Recommended baseline:
+
+development:
+- errors/warnings
+- optionally schema/migration logs
+
+test/production:
+- conservative logging
+
+Do not globally log:
+- bound sensitive values
+- passwords
+- full personal data
+
+Do not enable verbose SQL logging in production by default.
+
+Document the chosen levels/options.
+
+20. Migration Table
+-------------------
+Set an explicit migration metadata table name rather than relying on accidental defaults.
+
+Preferred:
+typeorm_migrations
+
+or another clear snake_case project name.
+
+Document it.
+
+21. Schema
+----------
+Use the default MSSQL schema unless there is a concrete project reason to introduce a custom schema.
+
+Do NOT invent multi-schema architecture now.
+
+If TypeORM requires an explicit schema value for stable migration behavior, document and configure it intentionally.
+
+22. Initial Migration
+---------------------
+Do NOT create a meaningless migration merely to prove the tooling works.
+
+Because there are no business entities yet, it is acceptable for:
+
+src/database/migrations/
+
+to exist empty.
+
+Migration tooling should be ready for the first real schema change later.
+
+If TypeORM requires a small technical migration for its own infrastructure, explain why before introducing it.
+
+23. Database Health Check
+-------------------------
+Do NOT change the public health endpoint to depend on MSSQL yet.
+
+GET /api/v1/health
+
+must remain a lightweight application liveness endpoint.
+
+A database readiness endpoint can be designed later when Docker and production health semantics are reviewed.
+
+Do not make application health fail just because no local MSSQL exists during this prompt.
+
+24. Application Startup / DB Connection
+---------------------------------------
+There is an important distinction:
+
+- unit/lint/typecheck/build should not require a running MSSQL server
+- normal application startup with DatabaseModule imported WILL attempt DB connection
+
+Design tests accordingly.
+
+Do not disable the real database module merely to hide connectivity requirements in the actual app.
+
+For unit/e2e tests that do not concern DB yet, use a clean test strategy so they remain independent of MSSQL.
+
+Do not use fragile module mocking scattered across tests.
+
+Evaluate a small test application/module override if necessary.
+
+Document how current health/infrastructure e2e tests avoid requiring MSSQL.
+
+25. Testing Requirements
+------------------------
+Add focused tests for the new database foundation without needing a running DB.
+
+At minimum test:
+
+A. Database environment validation
+- missing required DB values fail
+- invalid DB_PORT fails
+- invalid boolean values fail
+- valid configuration passes
+
+B. Database configuration parsing
+- correct host/port/name/user values
+- encrypt/trust-server-certificate semantics
+- defaults where applicable
+
+C. TypeORM options factory
+- synchronize is ALWAYS false
+- migrationsRun is intentionally false by default
+- correct type is mssql
+- migration table name is correct
+- password is present in options but never serialized/logged by project code
+- naming strategy is wired if selected
+
+D. Existing application infrastructure
+- health tests continue to pass
+- error contract tests continue to pass
+- Swagger tests continue to pass
+
+No test should require:
+- Docker
+- live MSSQL
+- external network
+
+Actual database connectivity testing belongs to Prompt #005/#006.
+
+26. E2E Test Isolation
+----------------------
+Prompt #003 created shared application bootstrap.
+
+Review the e2e test setup after DatabaseModule is introduced.
+
+The e2e suite must remain runnable before Docker/MSSQL is available.
+
+Use a deliberate solution such as:
+- a test root module without DatabaseModule for infrastructure-only tests
+or
+- a clean configuration switch exclusively for test composition
+
+Do NOT add a dangerous production env flag such as:
+DISABLE_DATABASE=true
+
+unless there is a very strong reason.
+
+Prefer test-module composition over a runtime escape hatch.
+
+Document the choice.
+
+27. Security Requirements
+-------------------------
+Before completion verify:
+
+- DB_PASSWORD never appears in logs
+- DB_PASSWORD is not returned by config debug output
+- no real DB credential is committed
+- .env remains ignored
+- .env.example contains only non-secret placeholders
+- TypeORM SQL logging is not dangerously verbose in production
+- synchronize is false
+- migrationsRun is not silently automatic
+- trustServerCertificate is not insecure by default in production
+
+28. Error Handling
+------------------
+Do not expose TypeORM/MSSQL internal errors through the API.
+
+Prompt #003's global exception filter must continue returning safe generic 500 errors for unexpected infrastructure failures.
+
+Do not build database-specific API exception mapping yet because there are no business operations.
+
+29. No Business Entities
+------------------------
+STRICTLY DO NOT CREATE:
+
+- User
+- Role
+- Permission
+- Parish
+- AcademicYear
+- CatechismLevel
+- Class
+- Student
+- Parent
+- Guardian
+- Lesson
+- Question
+- Exam
+- Practice
+- Badge
+- Article
+- Event
+
+or any other product-domain entity.
+
+This task is database infrastructure only.
+
+30. No Docker Yet
+-----------------
+STRICTLY OUT OF SCOPE:
+
+- Dockerfile
+- docker-compose.yml
+- compose.yml
+- docker/
+- MSSQL container
+- database init container
+- volumes
+- container networking
+- host port mapping
+
+That is Prompt #005.
+
+31. No CI/CD Yet
+----------------
+Do not create:
+- bitbucket-pipelines.yml
+- deployment scripts
+- registry configuration
+
+CI/CD work remains later.
+
+32. Git Behavior
+----------------
+DO NOT commit.
+
+Do not run:
+- git add
+- git commit
+- git push
+
+Read-only Git commands are allowed.
+
+Remember:
+the repository still has no initial commit, so use:
+git status --short --untracked-files=all
+
+Do not rely only on git diff.
+
+33. Required Validation
+-----------------------
+Before finishing use Node.js v22.23.1 and run:
+
+- node --version
+- npm --version
+- npm install or npm ci as appropriate
+- npm run format
+- npm run format:check
+- npm run lint
+- npm run typecheck
+- npm test
+- npm run test:e2e
+- npm run test:cov
+- npm run build
+
+Also validate migration CLI commands to the maximum extent possible without a live MSSQL server.
+
+For example:
+- verify TypeORM DataSource can be loaded/configured
+- verify migration CLI command syntax resolves correctly
+- if migration:show necessarily attempts a DB connection and fails because MSSQL is intentionally absent, do NOT count this as an application defect; document it accurately
+
+Do NOT claim migration execution passed against MSSQL because Docker/MSSQL has not been set up yet.
+
+34. Dependency Review
+---------------------
+Before finishing:
+
+- inspect package.json
+- confirm only one package manager/lockfile
+- confirm exact TypeORM/Nest integration versions
+- confirm mssql driver version
+- remove any unused DB dependency
+- do not upgrade unrelated packages
+- run npm audit and record the result
+
+Do not blindly run npm audit fix --force.
+
+35. Rules Compliance Review
+---------------------------
+Explicitly review the implementation against PROJECT_RULES.md.
+
+Pay special attention to:
+- database-first discipline
+- migration requirement
+- no synchronize
+- environment-driven config
+- no secrets
+- TypeScript strictness
+- tests
+- no speculative business modules
+- small scoped changes
+
+36. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_004_MSSQL_TYPEORM_MIGRATION_ARCHITECTURE_REPORT.md
+
+The report must contain:
+
+1. Objective
+
+2. State Inherited From Prompt #003
+
+3. ORM Decision
+Explain why TypeORM was selected and confirm compatibility.
+
+4. Exact Dependencies Added
+Include versions and why each exists.
+
+5. Files Created
+
+6. Files Modified
+
+7. Database Configuration
+Document:
+- DB_HOST
+- DB_PORT
+- DB_NAME
+- DB_USER
+- DB_PASSWORD
+- DB_ENCRYPT
+- DB_TRUST_SERVER_CERTIFICATE
+- defaults
+- production/local security behavior
+
+8. Environment Validation
+Explain Joi changes and fail-fast behavior.
+
+9. .env.example Changes
+Confirm no real secret exists.
+
+10. Database Module Architecture
+Explain NestJS TypeOrmModule integration.
+
+11. TypeORM Options
+Explicitly document:
+- type
+- synchronize
+- migrationsRun
+- entities
+- migrations
+- naming strategy
+- migration table
+- logging
+- TLS options
+
+12. Naming Convention
+Document table/column/constraint naming strategy.
+
+13. Future Entity Convention
+Document the conventions established WITHOUT creating business entities.
+
+14. UUID Strategy
+Document the chosen approach for future entities.
+
+15. Migration Architecture
+Explain:
+- source migration path
+- compiled migration path
+- create
+- generate
+- run
+- revert
+- show/status
+- development vs production execution
+
+16. CLI DataSource
+Explain how config is shared between Nest runtime and TypeORM CLI.
+
+17. Test Isolation
+Explain how current e2e tests remain independent of live MSSQL.
+
+18. Tests Added / Updated
+List each important test and what it proves.
+
+19. Commands Executed
+
+20. Validation Results
+Explicit PASS/FAIL for:
+- Node version
+- npm version
+- install
+- format
+- lint
+- typecheck
+- unit tests
+- e2e tests
+- coverage
+- build
+- migration CLI configuration/loading
+- npm audit
+
+Clearly distinguish:
+- configuration/tooling validated
+from:
+- live MSSQL connection NOT YET tested
+
+21. Security Review
+Confirm:
+- password not logged
+- .env ignored
+- no real credentials
+- synchronize=false
+- safe production TLS defaults
+- safe TypeORM logging
+
+22. Existing API Regression
+Confirm:
+- GET /api/v1/health still works in tests
+- global error contract remains intact
+- Swagger remains intact
+
+23. Git Status / Scope Summary
+
+24. Rules Compliance Review
+
+25. Known Issues / Assumptions
+
+26. Out-of-Scope Confirmation
+Explicitly confirm no:
+- business entities
+- Docker
+- Docker Compose
+- live MSSQL container
+- auth/RBAC
+- catechism modules
+- CI/CD
+
+27. Recommended Next Step
+
+Recommend:
+
+Prompt #005 — Docker + Docker Compose + Local MSSQL Runtime
+
+That prompt should:
+- create production/development Dockerfile strategy
+- run API in Docker for local dev
+- run MSSQL in Docker
+- persistent MSSQL volume
+- health checks
+- deterministic startup
+- migration execution strategy for local
+- validate real API ↔ MSSQL connectivity
+- avoid host-specific IP addresses
+
+Do NOT implement Prompt #005 work now.
+
+37. Final Response
+------------------
+When finished, respond concisely with:
+
+- Prompt #004 completion status
+- whether all non-live-DB validation passed
+- generated report path:
+  docs/PROMPT_004_MSSQL_TYPEORM_MIGRATION_ARCHITECTURE_REPORT.md
+- explicitly state that live MSSQL connectivity is intentionally deferred to Prompt #005
+- any blocker if present
+
+Do not proceed to Prompt #005 automatically.

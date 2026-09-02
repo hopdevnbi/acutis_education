@@ -1,0 +1,484 @@
+CURSOR PROMPT — EXAM ENGINE #001A
+CRITICAL CORRECTIVE AUDIT:
+LEARNER AUTH / STUDENT ACTOR + EXAM↔LOCALIZATION DEPENDENCY CYCLE
+
+1. WHY THIS CORRECTIVE AUDIT EXISTS
+-----------------------------------
+EXAM #001 reported:
+- design READY
+- BLOCKER/HIGH = 0
+- Parent exam attempts DENIED
+- ExamModule will depend on LocalizationModule
+- Localization ExamVersion adapter may call ExamService
+
+Before EXAM #002 schema implementation, independently re-audit two potentially critical contradictions:
+
+A. WHO CAN ACTUALLY TAKE AN EXAM?
+B. DOES EXAM METADATA LOCALIZATION CREATE A NEST MODULE CYCLE?
+
+This is corrective AUDIT / DESIGN ONLY.
+
+Do NOT implement schema, entities, services, controllers, roles, migrations, or APIs.
+
+2. PERMANENT GIT RULES
+----------------------
+Cursor MUST:
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+Audit-only report under docs/.
+Do not auto-proceed to #002.
+
+3. MANDATORY READING
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/LOCALIZATION_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Read relevant final Auth/User/Role/Permission reports.
+
+Inspect:
+src/modules/auth/
+src/modules/users/
+src/modules/student/
+src/modules/enrollment/
+src/modules/access-control/
+src/modules/localization/
+src/modules/practice/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+
+Inspect git status read-only.
+
+4. CRITICAL ISSUE A — CURRENT LEARNER AUTH REALITY
+--------------------------------------------------
+#001 chose:
+
+PARENT EXAM ATTEMPT POLICY: DENIED
+
+and proposed:
+Student linked user -> exam.attempt
+
+But audit actual current code.
+
+Answer explicitly:
+
+- Does a STUDENT role currently exist?
+- Is STUDENT seeded in RBAC?
+- Can StudentEntity currently link to a User?
+- Can such a user authenticate?
+- Can such a user resolve enrollmentId securely?
+- Is there an existing self-learner access service?
+- Does Auth currently allow/deny STUDENT?
+- Are learner-specific guards/scopes ready?
+- Is mobile/web contract ready for student login?
+
+Do not infer from roadmap.
+Prove from current code.
+
+5. ACTOR VIABILITY GATE
+-----------------------
+Determine whether, with Parent denied, ANY current production actor can legally:
+
+- list available exams
+- start own exam
+- save answers
+- resume
+- submit
+
+If the answer is NO:
+this is not a minor future concern.
+
+Classify severity:
+BLOCKER or HIGH for Exam implementation.
+
+6. RESOLUTION OPTIONS
+---------------------
+Compare at least:
+
+OPTION A — Introduce STUDENT role/auth foundation before Exam #002
+- role seed
+- User↔Student link semantics
+- login/auth compatibility
+- student own-enrollment resolution
+- student self-scope access service
+- FE/Mobile login impact
+- no Parent impersonation
+
+OPTION B — Allow linked Parent as temporary Exam proxy
+- contradicts formal-integrity policy
+- audit risks
+- probably reject unless product explicitly requires
+
+OPTION C — Split Exam phase:
+#002 first implements Student Auth / Learner Actor Foundation,
+then Exam persistence shifts one prompt later.
+
+OPTION D — Build Exam persistence now but block attempt APIs until learner role exists.
+Audit whether this creates avoidable dead architecture / incomplete phase.
+
+Recommend ONE.
+
+Strong preference:
+do not weaken formal assessment integrity merely to avoid adding STUDENT auth.
+
+7. STUDENT ROLE OWNERSHIP
+-------------------------
+If STUDENT must be implemented:
+
+Determine ownership:
+- Auth/RBAC owns role/permission
+- User owns account
+- Student owns student profile
+- Enrollment owns academic learner context
+
+Define secure mapping:
+authenticated userId
+ -> Student record
+ -> enrollmentId / active enrollments
+
+Client must never submit arbitrary studentId to impersonate another learner.
+
+8. STUDENT SELF-SCOPE CONTRACT
+------------------------------
+Design minimal public service contract, for example:
+
+StudentAccessService.getStudentByUserId(...)
+EnrollmentService.listActiveEnrollmentsForStudent(...)
+
+or a narrow:
+LearnerIdentityService.resolveAuthenticatedLearner(...)
+
+Avoid god/shared service.
+
+Audit existing services first.
+
+9. STUDENT LOGIN
+----------------
+Audit whether Auth already permits any active User regardless role.
+
+If adding STUDENT role requires no special login code, document.
+
+If registration/account provisioning is missing:
+design how admin links/creates a student user account.
+
+Do NOT implement now.
+
+10. PARENT POLICY RECONFIRMATION
+--------------------------------
+After auditing current actor viability, explicitly state:
+
+PARENT EXAM ATTEMPT POLICY:
+ALLOWED / DENIED / PRODUCT DECISION REQUIRED
+
+Do NOT silently change #001.
+
+If DENIED remains:
+state exact prerequisite that makes Exam attempt usable.
+
+11. CRITICAL ISSUE B — EXAM ↔ LOCALIZATION CYCLE
+------------------------------------------------
+#001 proposes:
+
+ExamModule -> LocalizationModule
+
+for:
+- locale resolution
+- localized question snapshot
+- exact translation revision replay
+
+AND proposes an ExamVersion localization adapter inside Localization that calls ExamService.
+
+That would imply:
+LocalizationModule -> ExamModule
+
+which creates:
+ExamModule <-> LocalizationModule
+
+Using only public services does NOT remove a Nest module cycle.
+
+Audit this explicitly.
+
+12. NO forwardRef
+-----------------
+Permanent architecture forbids default forwardRef solutions.
+
+Do NOT recommend forwardRef.
+
+13. EXAM METADATA LOCALIZATION OPTIONS
+--------------------------------------
+Compare at least:
+
+OPTION A — Exam imports Localization; Exam metadata remains source-language MVP
+- no cycle
+- question localization still works
+- exam title/instructions translation deferred
+
+OPTION B — Localization generic external snapshot API
+Exam provides source snapshot payload directly:
+LocalizationService.syncExternalResource(...)
+LocalizationService.resolveExternalSnapshot(...)
+
+Localization does NOT import Exam.
+
+Need ensure:
+- adapter validation
+- stable resourceType
+- source hash
+- payload contract
+- no arbitrary unsafe JSON/god abstraction
+
+OPTION C — Dedicated ExamDelivery orchestration module:
+ExamDelivery -> Exam + Localization
+Exam core does NOT import Localization
+
+But attempt generation may still need pinned question localization.
+Assess complexity.
+
+OPTION D — Localization plugin/adapter registration via pure interface/provider token
+without Localization importing ExamModule.
+
+Audit Nest feasibility:
+module provider ownership/import direction still matters.
+
+OPTION E — defer Exam metadata translation, only localize QB questions in MVP.
+
+Recommend ONE exact architecture.
+
+14. RESOURCE TYPE EXTENSION
+---------------------------
+If adding EXAM_VERSION to Localization resource types:
+
+How is the source snapshot provided without Localization importing Exam?
+
+Define:
+resourceId
+parishId
+sourceLocale
+sourceContentHash
+sourceVersionKey
+translatable units:
+title
+description
+instructions
+
+Need deterministic hash.
+
+15. TRANSLATION ADMIN WORKFLOW
+------------------------------
+Current Localization admin resource sync uses adapter registry.
+
+If Localization no longer imports Exam:
+how will admin sync/queue translation for EXAM_VERSION?
+
+Potential:
+Exam publish explicitly calls Localization facade to register/sync source snapshot.
+
+But this creates Exam -> Localization only, which is acyclic.
+
+Audit whether source module calling Localization violates prior principle.
+It may be acceptable for additive integration if no reverse dependency exists.
+
+Alternative:
+dedicated registration endpoint/source snapshot in ExamService.
+
+Choose coherent direction.
+
+16. ATTEMPT QUESTION LOCALIZATION
+--------------------------------
+Question localization does NOT require Localization -> Exam.
+
+Exam can safely:
+Exam -> Localization -> QuestionBank
+
+because Localization already imports QuestionBank.
+
+Confirm no cycle with QuestionBank.
+
+17. EXACT REVISION REPLAY
+------------------------
+Exam GET can call LocalizationService.resolveLocalizedResourceWithRevision(...)
+without Localization knowing Exam.
+
+Confirm.
+
+18. LEARNING PROGRESS DIRECTION
+-------------------------------
+Future:
+LearningProgress -> Exam public service
+
+Ensure Exam does not import LearningProgress.
+
+No cycle.
+
+19. FINAL DEPENDENCY GRAPH
+--------------------------
+Produce exact module graph after correction.
+
+Must be acyclic.
+
+Include:
+Exam
+Localization
+QuestionBank
+Enrollment
+Student
+Class
+LearningProgress
+
+20. PROMPT PLAN IMPACT
+----------------------
+Re-evaluate total Exam prompt count.
+
+If Student Auth prerequisite must be implemented inside Exam phase:
+likely 8 prompts.
+
+Possible revised sequence:
+
+#001 audit
+#001A corrective audit
+#002 Student learner-auth/self-scope prerequisite
+#003 Exam schema/module shell
+#004 authoring/publish/assignment
+#005 attempt generation/localization
+#006 answers/time/submit/grading
+#007 results/review/LearningProgress
+#008 final gate
+
+However #001A may be considered corrective and not count toward main 7 if Student support can be folded safely into #002.
+
+Recommend exact:
+7 or 8 main prompts.
+
+Do not optimize prompt count at expense of architecture.
+
+21. SCHEMA READINESS
+--------------------
+Only allow persistence/schema #002 if BOTH are resolved:
+
+- a valid learner actor strategy exists
+- localization integration graph is acyclic
+
+Otherwise EXAM #002 must first be prerequisite/foundation work.
+
+22. VALIDATION
+-------------
+Audit-only:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+23. REQUIRED REPORT
+-------------------
+Create:
+
+docs/EXAM_001A_CRITICAL_ARCHITECTURE_AND_LEARNER_AUTH_CORRECTION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Why #001 needed correction
+3 Current STUDENT role inventory
+4 Current Student↔User linkage
+5 Current learner authentication capability
+6 Current self-enrollment resolution capability
+7 Actor viability with Parent denied
+8 Severity
+9 Resolution options
+10 Final learner actor architecture
+11 Student role prerequisite decision
+12 Student provisioning/login design
+13 Student self-scope design
+14 Parent policy reconfirmation
+15 Current Exam/Localization proposed cycle
+16 Why public service alone does not prevent module cycle
+17 Localization architecture options
+18 Final Exam metadata localization architecture
+19 EXAM_VERSION resource strategy
+20 Admin translation sync strategy
+21 Question localization direction
+22 Exact revision replay direction
+23 Final module dependency graph
+24 Cycle/forwardRef verdict
+25 Learning Progress direction
+26 Revised prompt sequencing
+27 Final prompt count
+28 Schema readiness
+29 BLOCKER/HIGH/MEDIUM/LOW
+30 Files created
+31 Files modified
+32 Commands
+33 Validation
+34 EXAM next-step readiness
+35 Commit recommendation
+
+24. REQUIRED VERDICTS
+---------------------
+CURRENT STUDENT ACTOR READY: YES/NO
+
+FORMAL EXAM LEARNER ACTOR MODEL READY: YES/NO
+
+PARENT EXAM ATTEMPT POLICY: ALLOWED/DENIED/PRODUCT DECISION REQUIRED
+
+STUDENT AUTH PREREQUISITE REQUIRED BEFORE EXAM ATTEMPTS: YES/NO
+
+EXAM↔LOCALIZATION CYCLE RESOLVED: YES/NO
+
+EXAM METADATA LOCALIZATION MODEL READY: YES/NO
+
+FINAL MODULE GRAPH ACYCLIC: YES/NO
+
+forwardRef REQUIRED: YES/NO
+Expected: NO
+
+EXAM SCHEMA IMPLEMENTATION READY: YES/NO
+
+FINAL RECOMMENDED MAIN PROMPT COUNT: 7 / 8
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+25. NEXT STEP
+-------------
+If learner actor prerequisite is missing:
+recommend exact next prompt, likely:
+
+EXAM #002 —
+STUDENT LEARNER AUTH / SELF-SCOPE FOUNDATION
+
+If learner actor is already ready and cycle resolved:
+recommend:
+
+EXAM #002 —
+PERSISTENCE + MODULE BOUNDARY + SCHEMA FOUNDATION
+
+Do not implement automatically.
+
+26. FINAL RESPONSE
+------------------
+Respond concisely:
+- #001A status
+- current Student actor READY/NOT READY
+- Parent policy
+- Student prerequisite YES/NO
+- Exam/Localization cycle resolution
+- schema readiness
+- revised prompt count
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed automatically.

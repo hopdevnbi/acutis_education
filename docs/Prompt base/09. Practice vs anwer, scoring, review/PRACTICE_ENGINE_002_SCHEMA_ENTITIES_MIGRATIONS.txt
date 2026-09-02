@@ -1,0 +1,846 @@
+CURSOR PROMPT — PRACTICE ENGINE #002/6
+SCHEMA + ENTITIES + MIGRATIONS + MODULE BOUNDARIES
+
+1. Context
+----------
+Completed:
+- PRACTICE ENGINE #001/6 — Domain Audit + Flow Design
+
+Current:
+PRACTICE ENGINE #002 / 6
+
+Remaining after this:
+#003 Generation + session lifecycle + question selection + contextual media groundwork
+#004 Answer submission + grading + retry + review-wrong
+#005 Progress/statistics + scoped Parent/Catechist access + FE/Mobile hardening
+#006 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+This prompt is persistence-only.
+
+Do NOT implement HTTP APIs, session generation business logic, grading, retry/review behavior, progress APIs, permissions, or Question Bank service extensions yet.
+
+2. Permanent Workflow / Git Rules — CRITICAL
+--------------------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001 report and current code before changes
+- stay inside persistence scope
+- create a detailed report in docs/
+- not auto-proceed to #003
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(practice): add practice persistence foundation"
+
+Do not execute it.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/enrollment/
+src/modules/class/
+src/modules/question-bank/
+src/modules/media/
+src/modules/curriculum/
+src/database/
+src/database/seeds/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement only the persistence foundation for Practice:
+
+- PracticeModule skeleton
+- enums
+- entities
+- migration
+- constraints
+- indexes
+- UUID strategy
+- idempotency keys
+- metadata tests
+- MSSQL integration tests
+- module-boundary tests
+- mobile/offline persistence readiness
+
+No HTTP/business logic.
+
+5. Target Owned Tables
+----------------------
+PracticeModule owns exactly:
+
+practice_sessions
+practice_session_questions
+practice_answer_attempts
+
+No progress aggregate table in #002.
+No PracticeDefinition table.
+No Exam tables.
+No translation tables.
+
+6. Module Skeleton
+------------------
+Create:
+src/modules/practice/practice.module.ts
+
+Register three entities via TypeOrmModule.forFeature.
+
+At #002:
+prefer no controllers
+prefer no business providers
+prefer no exports
+
+If module-boundary conventions require a facade placeholder, justify strongly.
+Default expectation: persistence-only module, zero exports.
+
+Do NOT export TypeOrmModule/entities/repositories.
+
+7. Enums
+--------
+Create:
+
+PracticeSessionType:
+STANDARD
+REVIEW_WRONG
+
+PracticeSessionStatus:
+IN_PROGRESS
+COMPLETED
+ABANDONED
+
+Stable English DB/wire codes.
+
+8. practice_sessions Table
+--------------------------
+Columns:
+
+id uniqueidentifier PK
+enrollment_id uniqueidentifier NOT NULL
+session_type varchar(32) NOT NULL
+source_session_id uniqueidentifier NULL
+status varchar(32) NOT NULL
+locale varchar(32) NOT NULL
+curriculum_id uniqueidentifier NULL
+canonical_lesson_key uniqueidentifier NULL
+requested_question_count int NOT NULL
+max_attempts_per_question int NOT NULL
+randomize_questions bit NOT NULL
+randomize_options bit NOT NULL
+client_request_id uniqueidentifier NULL
+created_by_user_id uniqueidentifier NOT NULL
+started_at datetime2 NOT NULL
+completed_at datetime2 NULL
+abandoned_at datetime2 NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+9. Session Constraints
+----------------------
+CHECK:
+requested_question_count >= 1
+max_attempts_per_question >= 1
+
+Recommended max DB guard:
+requested_question_count <= 50
+max_attempts_per_question <= 10
+
+Application may use constants later, but DB should prevent absurd data.
+
+10. Session Type/Source Constraint
+---------------------------------
+Enforce:
+
+STANDARD -> source_session_id IS NULL
+
+REVIEW_WRONG -> source_session_id IS NOT NULL
+
+Use CHECK.
+
+11. Status Timestamp Consistency
+--------------------------------
+Enforce sensible lifecycle consistency:
+
+IN_PROGRESS:
+completed_at IS NULL
+abandoned_at IS NULL
+
+COMPLETED:
+completed_at IS NOT NULL
+abandoned_at IS NULL
+
+ABANDONED:
+abandoned_at IS NOT NULL
+completed_at IS NULL
+
+started_at always NOT NULL.
+
+12. Locale
+----------
+locale varchar(32) NOT NULL
+
+No DB default.
+No country relationship.
+Application validation later.
+
+13. Enrollment FK
+-----------------
+SQL FK:
+enrollment_id -> enrollments
+
+NO ORM relation.
+
+Delete:
+NO ACTION/RESTRICT.
+
+Practice history should not disappear automatically when enrollment changes.
+
+14. Source Session FK
+---------------------
+source_session_id -> practice_sessions.id
+
+NO ORM relation.
+
+Delete:
+NO ACTION preferred.
+
+Do not cascade-delete review lineage accidentally.
+
+15. Curriculum Reference
+------------------------
+curriculum_id stored scalar only.
+
+Per #001:
+NO FK to curriculums.
+
+Reason:
+future Practice service extraction and generation-time validation via CurriculumService.
+
+canonical_lesson_key scalar UUID only.
+
+16. createdByUserId FK
+----------------------
+created_by_user_id -> users
+
+NO ORM relation.
+
+17. Session Idempotency
+-----------------------
+Filtered unique:
+(enrollment_id, client_request_id)
+WHERE client_request_id IS NOT NULL
+
+This supports mobile retry-safe generation.
+
+18. Session Indexes
+-------------------
+At minimum:
+
+(enrollment_id, status)
+(enrollment_id, created_at)
+(source_session_id)
+(curriculum_id, canonical_lesson_key) if useful for progress filters
+(status, created_at) only if query plan needs it
+
+Do not over-index.
+
+19. practice_session_questions Table
+------------------------------------
+Columns:
+
+id uniqueidentifier PK
+practice_session_id uniqueidentifier NOT NULL
+question_version_id uniqueidentifier NOT NULL
+position int NOT NULL
+delivered_option_order_json nvarchar(max) NULL
+created_at datetime2 NOT NULL
+
+20. Session Question Constraints
+-------------------------------
+CHECK:
+position >= 1
+
+Unique:
+(practice_session_id, position)
+(practice_session_id, question_version_id)
+
+No duplicate question version in same session.
+
+21. Session Question FK
+-----------------------
+practice_session_id -> practice_sessions.id
+
+ON DELETE CASCADE is acceptable only for internal/admin cleanup because children are Practice-owned.
+
+Document.
+
+22. Question Version Reference
+------------------------------
+NO SQL FK to question_versions.
+
+Store scalar UUID only.
+
+Reason:
+Question Bank owns lifecycle, future service extraction.
+
+No ORM relation.
+
+23. deliveredOptionOrderJson
+----------------------------
+Nullable nvarchar(max)
+
+If non-null:
+ISJSON(...) = 1
+
+DB cannot fully validate UUID-array shape; application validator later.
+
+No arbitrary config JSON beyond this explicit field.
+
+24. Option Order Semantics
+-------------------------
+If randomizeOptions=false, field may be NULL and canonical Question Bank order used.
+
+If randomizeOptions=true, application later persists exact UUID array.
+
+Schema should support both.
+
+25. practice_answer_attempts Table
+---------------------------------
+Columns:
+
+id uniqueidentifier PK
+practice_session_question_id uniqueidentifier NOT NULL
+attempt_number int NOT NULL
+client_answer_id uniqueidentifier NOT NULL
+selected_option_ids_json nvarchar(max) NOT NULL
+is_correct bit NOT NULL
+score tinyint NOT NULL
+submitted_by_user_id uniqueidentifier NOT NULL
+submitted_at datetime2 NOT NULL
+
+26. Attempt Constraints
+-----------------------
+CHECK:
+attempt_number >= 1
+score IN (0,1)
+ISJSON(selected_option_ids_json) = 1
+
+Application later validates strict UUID array/non-empty/cardinality.
+
+27. Attempt FK
+-------------
+practice_session_question_id -> practice_session_questions.id
+
+ON DELETE CASCADE acceptable because owned child history.
+
+28. submittedByUserId FK
+------------------------
+submitted_by_user_id -> users
+
+NO ORM relation.
+
+29. Answer Idempotency
+----------------------
+Unique:
+(practice_session_question_id, client_answer_id)
+
+Duplicate mobile retry maps to existing attempt later.
+
+30. Attempt Number Uniqueness
+-----------------------------
+Unique:
+(practice_session_question_id, attempt_number)
+
+Application later locks row/session question before increment.
+
+31. Attempt Indexes
+-------------------
+At minimum:
+(practice_session_question_id)
+(submitted_at) only if useful
+Maybe composite:
+(practice_session_question_id, attempt_number)
+
+Avoid over-indexing redundant unique indexes.
+
+32. No Denormalized Progress Yet
+--------------------------------
+Do NOT add:
+attempt_count
+latest_correct
+final_correct
+first_attempt_correct
+
+to session_question unless current query requirements strongly justify them.
+
+#001 decision:
+raw attempts are source of truth.
+
+33. No Progress Aggregate Table
+-------------------------------
+Strictly no `practice_progress` table in #002.
+
+Progress derives in #005.
+
+34. No PracticeDefinition
+-------------------------
+Strictly deferred.
+
+35. No Retry Policy Table
+-------------------------
+maxAttemptsPerQuestion stored directly on session.
+
+Defaults/business constant later:
+3
+
+No configurable policy engine.
+
+36. UUID Strategy
+-----------------
+All Practice PK UUIDs application-generated v4.
+
+Use existing project `generateUuidV4()` pattern.
+
+No DB defaults:
+NEWID
+NEWSEQUENTIALID
+@Generated
+
+37. Entity Classes
+------------------
+Create:
+
+PracticeSessionEntity
+PracticeSessionQuestionEntity
+PracticeAnswerAttemptEntity
+
+Use project naming conventions.
+
+38. ORM Relations
+-----------------
+Strong requirement:
+scalar IDs only.
+
+No:
+@ManyToOne
+@OneToMany
+@JoinColumn
+
+Zero TypeORM relations.
+
+39. Human/Locale Fields
+-----------------------
+Practice has little learner-visible text.
+
+locale varchar.
+JSON arrays stored nvarchar(max) because JSON text and Unicode-safe storage.
+
+40. Mobile/Offline Persistence Readiness
+----------------------------------------
+Ensure schema supports:
+- stable session ID
+- stable session question ID
+- clientRequestId
+- clientAnswerId
+- persisted question order
+- persisted option order
+- resumable lifecycle
+- immutable attempt history
+
+41. Review-Wrong Persistence Readiness
+--------------------------------------
+Ensure:
+- session_type REVIEW_WRONG
+- source_session_id required by constraint
+- self-reference works
+- chain allowed
+- no cycle prevention in DB beyond self-reference? Audit.
+
+A direct self-reference source_session_id = id should be prevented if feasible.
+
+Add CHECK:
+source_session_id IS NULL OR source_session_id <> id
+
+No recursive cycle detection required at DB.
+
+42. Review Source Same Enrollment
+---------------------------------
+DB cannot easily enforce source session enrollment matches child review session.
+
+Application validation later.
+
+Document.
+
+43. Lifecycle Hard Delete Policy
+--------------------------------
+No user-facing delete in MVP.
+
+Internal cascade from session -> session questions -> attempts only applies if admin cleanup/manual DB delete occurs.
+
+Historical practice should generally remain.
+
+44. FK Delete Strategy
+----------------------
+Cross-domain:
+enrollment/users NO ACTION
+
+Practice-owned:
+session -> question rows CASCADE
+question row -> attempts CASCADE
+
+source_session self-FK NO ACTION
+
+45. Index for Progress Query
+----------------------------
+Because #005 derives progress by enrollment/date:
+
+practice_sessions(enrollment_id, created_at)
+practice_sessions(enrollment_id, status, session_type) if SQL Server index strategy supports.
+
+Do not add unnecessary covering indexes now.
+
+46. Module Boundary
+-------------------
+Register PracticeModule in AppModule.
+
+Update `module-boundaries.spec.ts`.
+
+Expected #002:
+PracticeModule exports nothing.
+
+If project conventions require zero exports for persistence foundation, assert exactly that.
+
+47. No QuestionBank Import Yet?
+------------------------------
+Audit whether #002 PracticeModule needs QuestionBankModule import.
+
+Strong preference:
+NO.
+
+Persistence-only module does not need service dependencies yet.
+
+QuestionBank/Enrollment/Curriculum/Media imports begin #003.
+
+48. Entity Metadata Tests
+-------------------------
+Create tests for:
+- table names
+- columns/types/nullability
+- enum columns
+- UUID strategy
+- zero ORM relations
+- JSON fields
+- no question_versions relation/FK
+- no curriculum FK
+- enrollment/users FKs as scalar metadata not ORM relations
+
+49. UUID Tests
+--------------
+Verify:
+PracticeSessionEntity
+PracticeSessionQuestionEntity
+PracticeAnswerAttemptEntity
+
+generate v4.
+Explicit ID preservation.
+
+50. Migration Integration Tests
+-------------------------------
+Real MSSQL tests:
+
+- three tables created
+- UUID PK no DB defaults
+- enrollment FK enforced
+- created/submitted user FK enforced
+- no question_versions FK
+- no curriculum FK
+- STANDARD sourceSession null constraint
+- REVIEW_WRONG requires source
+- self-source denied
+- status timestamp consistency
+- requestedQuestionCount bounds
+- maxAttempts bounds
+- session idempotency filtered unique
+- question position unique
+- questionVersion unique per session
+- delivered option JSON valid
+- attempt number unique
+- clientAnswerId unique
+- selected option JSON valid
+- score 0/1
+- cascade owned children works
+- source-session NO ACTION
+- Unicode/locale persistence
+
+51. Review Lineage Tests
+------------------------
+Create:
+STANDARD source
+REVIEW_WRONG child
+REVIEW_WRONG grandchild
+
+All valid if each has source.
+
+No cycle enforcement beyond direct self-reference.
+
+52. No Business Logic
+---------------------
+Do NOT implement:
+session generation
+question selection
+randomization
+answer submit
+Question Bank grading
+feedback
+review creation
+progress
+auth/RBAC
+controllers
+
+53. Existing Regression
+-----------------------
+Run current quality before DB, then full after migration.
+
+No regressions to:
+Question Bank
+Enrollment/Class
+Curriculum
+Media
+Auth
+
+54. quality:full
+----------------
+Because migrations are added:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+
+55. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:practice-schema .
+
+PASS required.
+
+56. Required Commands
+---------------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:practice-schema .
+
+57. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+Final response may print exactly ONE line:
+
+git commit -m "feat(practice): add practice persistence foundation"
+
+Do not execute it.
+
+58. Required Report
+-------------------
+Create:
+
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #001
+3 Rules applied
+4 Files created
+5 Files modified
+6 PracticeModule skeleton
+7 Public exports
+8 Enums
+9 practice_sessions entity/table
+10 session constraints
+11 lifecycle timestamp constraints
+12 review source constraint
+13 session idempotency
+14 session indexes
+15 practice_session_questions entity/table
+16 question uniqueness/order
+17 delivered option JSON
+18 no Question Bank FK
+19 practice_answer_attempts entity/table
+20 attempt constraints
+21 answer idempotency
+22 attempt number uniqueness
+23 score constraint
+24 actor FKs
+25 UUID strategy
+26 zero ORM relations
+27 FK strategy
+28 cascade strategy
+29 no progress aggregate
+30 no PracticeDefinition
+31 mobile/offline persistence readiness
+32 review-wrong persistence readiness
+33 entity metadata tests
+34 UUID tests
+35 migration integration tests
+36 locale/Unicode validation
+37 existing regression
+38 pristine quality:full
+39 Docker
+40 microservice extraction readiness
+41 commands
+42 validation matrix
+43 known/deferred
+44 out-of-scope
+45 PRACTICE #003 readiness
+46 prompt count
+47 commit recommendation
+
+59. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- three tables created
+- UUID no DB defaults
+- PracticeModule zero exports
+- no cycle
+- no forwardRef
+- zero ORM relations
+- enrollment FK
+- user actor FKs
+- no question_versions FK
+- no curriculum FK
+- session type checks
+- status checks
+- lifecycle timestamp checks
+- source-session constraint
+- self-source denied
+- questionCount bounds
+- maxAttempts bounds
+- session clientRequestId unique
+- position unique
+- questionVersion unique per session
+- option order JSON
+- attempt number unique
+- clientAnswerId unique
+- selected options JSON
+- score 0/1
+- owned cascades
+- source session NO ACTION
+- no progress table
+- no PracticeDefinition
+- no HTTP API
+- no grading/business logic
+- prior regression
+- Git rule compliance
+
+60. #003 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+PRACTICE ENGINE #003/6 — Generation + Session Lifecycle + Question Selection + Contextual Media Groundwork
+
+#003 should implement:
+- PracticeService facade
+- session generation
+- Parent/enrollment scope
+- Question Bank batch-selection contract
+- exact questionVersion pinning
+- question/order randomization
+- option-order persistence
+- session GET/resume
+- abandon
+- contextual media route groundwork
+- no answer submission yet
+
+61. Prompt Count
+----------------
+State:
+PRACTICE ENGINE #002/6 complete
+approximately 4 prompts remain (#003–#006)
+
+62. Final Response
+------------------
+Respond concisely:
+- PRACTICE #002 status
+- schema PASS/FAIL
+- migration PASS/FAIL
+- mobile/offline persistence PASS/FAIL
+- review-wrong persistence PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(practice): add practice persistence foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

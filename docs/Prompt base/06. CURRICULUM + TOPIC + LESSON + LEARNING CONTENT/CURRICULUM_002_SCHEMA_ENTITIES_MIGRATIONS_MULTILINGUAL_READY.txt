@@ -1,0 +1,1025 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #002/6
+SCHEMA + ENTITIES + MIGRATIONS
+WITH MULTILINGUAL-READY FOUNDATION
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/RBAC
+- Parish/Academic Structure
+- Class/Student/Catechist/Parent/Enrollment
+- CURRICULUM #001 Domain Audit + Content Model Design
+
+Current:
+CURRICULUM/CONTENT #002 / 6
+
+Remaining:
+#003 Curriculum + Topic services/API/RBAC
+#004 Lesson + Learning Content + versioning/publishing
+#005 Cross-domain integration + scoped auth + delivery contract
+#006 Final audit + seed/Postman + FE/Mobile contract readiness
+
+Important roadmap upgrade added after #001:
+The platform MUST be multilingual-ready.
+
+Do NOT implement the full Localization/Google Translation subsystem now.
+But the schema created in #002 must not block future:
+- sourceLocale
+- translated content
+- translation version invalidation
+- Google Cloud Translation provider abstraction
+- Catholic terminology glossary
+- locale-aware delivery to Web/Mobile
+
+2. Mandatory Reading
+--------------------
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+
+Also inspect:
+src/modules/parish/
+src/modules/academic-structure/
+src/modules/class/
+src/modules/enrollment/
+src/database/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Implement persistence foundation ONLY for:
+
+CurriculumModule
+LearningContentModule
+
+Entities:
+- CurriculumEntity
+- CurriculumVersionEntity
+- TopicEntity
+- LessonEntity
+- CurriculumAssignmentEntity
+- LessonContentEntity
+
+Enums:
+- CurriculumStatus
+- CurriculumVersionStatus
+
+Migration(s):
+- all required tables
+- FKs
+- indexes
+- filtered unique indexes
+- checks if stable
+
+Tests:
+- entity metadata
+- UUID generation
+- module boundaries
+- migration integration
+- key DB constraints
+- Unicode
+- multilingual-readiness fields
+
+NO business services/controllers/RBAC APIs yet.
+
+4. Selected Module Ownership
+----------------------------
+CurriculumModule owns:
+- curriculums
+- curriculum_versions
+- topics
+- lessons
+- curriculum_assignments
+
+LearningContentModule owns:
+- lesson_contents
+
+Dependency direction:
+LearningContentModule -> CurriculumModule later via public contract
+
+At #002:
+module skeletons only.
+
+No cross-module entities/repositories exported.
+
+5. Multilingual Foundation — REQUIRED
+-------------------------------------
+CURRICULUM #001 deferred locale fields because i18n was not yet in roadmap.
+
+That roadmap changed.
+
+We do NOT build translation tables yet.
+
+But source content needs language identity from day one.
+
+Therefore add:
+
+curriculums.source_locale
+
+and/or curriculum_versions.source_locale
+
+Audit exact placement.
+
+Preferred:
+`curriculums.source_locale` = canonical language of curriculum lineage.
+
+Reason:
+all versions of a curriculum normally share source language.
+
+If future version could change source language, version-level sourceLocale would be needed.
+
+Choose the least surprising model and document.
+
+Strong recommendation:
+- `curriculums.source_locale` required
+- BCP 47 string
+- default `vi-VN` only if project conventions allow explicit application default
+- DO NOT DB-default silently if app-generated values are preferred
+
+6. Locale Storage
+-----------------
+Use:
+varchar(32)
+
+Examples:
+vi-VN
+en-US
+fr-FR
+
+Locale codes are ASCII identifiers, so varchar is correct.
+
+Do NOT store country and language as one custom enum.
+
+No hardcoded supported-locale enum in DB.
+
+7. Translation Tables
+---------------------
+DO NOT create:
+curriculum_translations
+lesson_translations
+translation_jobs
+translation_glossaries
+
+Those belong dedicated Localization phase.
+
+But schema must provide stable IDs/version/hash surfaces so translation rows can be added later cleanly.
+
+8. Translation Version Readiness
+--------------------------------
+For `lesson_contents`, add a stable source content hash field if practical:
+
+content_hash
+varchar(64)
+nullable or required
+
+Preferred:
+SHA-256 hex
+64 chars
+
+Purpose:
+- source change detection
+- translation stale invalidation
+- cache validation
+- idempotency
+
+At #002:
+schema only.
+No hashing service yet.
+
+If application cannot guarantee it before #004 content service exists:
+allow nullable now and make #004 service populate it.
+
+Document.
+
+9. Curriculum Entity
+--------------------
+Table:
+curriculums
+
+Fields:
+
+id uniqueidentifier PK
+parish_id uniqueidentifier NOT NULL
+catechism_level_id uniqueidentifier NOT NULL
+code varchar(32) NOT NULL
+name nvarchar(128) NOT NULL
+description nvarchar(512) NULL
+status varchar(32) NOT NULL
+source_locale varchar(32) NOT NULL
+current_published_version_id uniqueidentifier NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+No academic_year_id.
+
+10. Curriculum Status
+---------------------
+ACTIVE
+INACTIVE
+
+No hard delete for published/referenced roots.
+
+11. Curriculum Constraints
+---------------------------
+Unique:
+(parish_id, catechism_level_id, code)
+
+Index:
+(parish_id, catechism_level_id)
+
+FK:
+parish_id -> parishes.id
+catechism_level_id -> catechism_levels.id
+
+current_published_version_id:
+nullable FK to curriculum_versions.id
+
+Potential circular FK creation ordering must be handled cleanly in migration.
+
+12. Curriculum Version Entity
+-----------------------------
+Table:
+curriculum_versions
+
+Fields:
+
+id
+curriculum_id
+version_number
+status
+label
+published_at
+published_by_user_id
+created_by_user_id
+created_at
+updated_at
+
+Types:
+UUIDs uniqueidentifier
+version_number int
+status varchar(32)
+label nvarchar(128)
+timestamps datetime2
+
+No locale duplication if sourceLocale owned by curriculum root.
+
+13. Curriculum Version Status
+-----------------------------
+DRAFT
+PUBLISHED
+ARCHIVED
+
+14. Version Constraints
+-----------------------
+Unique:
+(curriculum_id, version_number)
+
+Filtered unique:
+one DRAFT per curriculum
+
+Name:
+UQ_curriculum_versions_curriculum_id_draft
+WHERE status='DRAFT'
+
+Index:
+(curriculum_id, status)
+
+CHECK:
+version_number > 0
+
+Optional timestamp consistency:
+PUBLISHED/ARCHIVED should have published_at
+DRAFT should have published_at NULL
+
+Add only if lifecycle semantics are stable.
+
+15. Topic Entity
+----------------
+Table:
+topics
+
+Fields:
+id
+curriculum_version_id
+code nullable
+title nvarchar(256)
+description nvarchar(1024) nullable
+sort_order int
+created_at
+updated_at
+
+Do not add locale field.
+Topic text inherits source locale from Curriculum.
+
+16. Topic Ordering
+------------------
+CURRICULUM #001 considered unique sort order.
+
+Do NOT blindly add strict UNIQUE if reorder operations become awkward.
+
+Preferred:
+index:
+(curriculum_version_id, sort_order)
+
+Enforce nonnegative:
+CHECK sort_order >= 0
+
+If code exists:
+optional filtered unique:
+(curriculum_version_id, code)
+WHERE code IS NOT NULL
+
+Audit.
+
+17. Lesson Entity
+-----------------
+Table:
+lessons
+
+Fields:
+id
+curriculum_version_id
+topic_id
+canonical_lesson_key
+code nullable
+title nvarchar(256)
+summary nvarchar(1024) nullable
+sort_order int
+estimated_duration_minutes int nullable
+created_at
+updated_at
+
+18. canonical_lesson_key
+-----------------------
+uniqueidentifier NOT NULL
+
+Application-generated UUID v4.
+
+Do NOT DB-generate.
+
+This key is stable across version clones.
+
+It is not globally unique per row because the same canonical key intentionally appears in multiple curriculum versions.
+
+Therefore:
+DO NOT create UNIQUE(canonical_lesson_key).
+
+Create index:
+IX_lessons_canonical_lesson_key
+
+19. Lesson Constraints
+----------------------
+CHECK:
+sort_order >= 0
+
+estimated_duration_minutes:
+nullable
+if not null > 0
+set reasonable upper bound if project conventions prefer, e.g. <= 1440
+
+Index:
+(topic_id, sort_order)
+(curriculum_version_id)
+
+Optional code filtered unique:
+(topic_id, code) WHERE code IS NOT NULL
+
+Do not enforce unique sort order unless justified.
+
+20. Version Consistency Caveat
+-----------------------------
+DB FK cannot easily guarantee:
+lesson.curriculum_version_id == topic.curriculum_version_id
+
+Service #003/#004 will validate.
+
+Do NOT use triggers.
+
+21. Lesson Content Entity
+-------------------------
+Table:
+lesson_contents
+
+Fields:
+id
+lesson_id
+content_schema_version
+content_json
+content_hash
+created_at
+updated_at
+
+lesson_id uniqueidentifier
+content_schema_version int
+content_json nvarchar(max)
+content_hash varchar(64) nullable/recommended
+timestamps datetime2
+
+22. Lesson Content Constraints
+------------------------------
+Unique:
+lesson_id
+
+CHECK:
+content_schema_version > 0
+
+Do NOT try to validate JSON block semantics in DB.
+
+If MSSQL ISJSON check is stable and supported:
+consider CHECK ISJSON(content_json)=1
+
+This only validates JSON syntax, not schema.
+
+Application #004 validates block schema.
+
+23. Structured Content
+----------------------
+Persist JSON only.
+
+No raw HTML column.
+
+No Markdown column.
+
+No localized variants yet.
+
+24. Curriculum Assignment Entity
+--------------------------------
+Table:
+curriculum_assignments
+
+Fields:
+id
+parish_id
+academic_year_id
+catechism_level_id
+curriculum_version_id
+assigned_by_user_id nullable
+assigned_at
+created_at
+updated_at
+
+No class_id.
+
+25. Assignment Constraint
+-------------------------
+Unique:
+(parish_id, academic_year_id, catechism_level_id)
+
+This is one current assignment per delivery triple.
+
+Do not create assignment history table yet.
+
+Document that changing assignment mutates current pointer while published versions retain history.
+
+26. Assignment FKs
+------------------
+parish_id -> parishes
+academic_year_id -> academic_years
+catechism_level_id -> catechism_levels
+curriculum_version_id -> curriculum_versions
+assigned_by_user_id -> users nullable
+
+All ON DELETE NO ACTION.
+
+27. Author User FKs
+------------------
+curriculum_versions:
+created_by_user_id -> users
+published_by_user_id -> users
+
+Scalar IDs only.
+
+No UserEntity import.
+
+28. Source Locale Validation
+----------------------------
+Entity/schema only in #002.
+
+Application validation later should enforce BCP 47-like format.
+
+At DB:
+varchar(32) NOT NULL.
+
+Do not use country enum.
+
+29. Human-readable Unicode
+--------------------------
+Use nvarchar for:
+
+curriculum name
+description
+version label
+topic title
+description
+lesson title
+summary
+content_json
+
+Test Vietnamese round-trip.
+
+Also add at least one non-Vietnamese Unicode test if practical:
+e.g. French accented text.
+
+30. UUID Strategy
+-----------------
+Use existing project pattern:
+PrimaryColumn uniqueidentifier
+application UUID v4
+no DB default
+no NEWID
+no NEWSEQUENTIALID
+
+canonical_lesson_key also application UUID v4.
+
+31. Module Skeleton — CurriculumModule
+--------------------------------------
+Register:
+CurriculumEntity
+CurriculumVersionEntity
+TopicEntity
+LessonEntity
+CurriculumAssignmentEntity
+
+No providers
+No controllers
+No exports
+
+32. Module Skeleton — LearningContentModule
+-------------------------------------------
+Register:
+LessonContentEntity
+
+No providers
+No controllers
+No exports
+
+33. AppModule
+-------------
+Register both modules.
+
+Do not disturb existing module order/architecture unnecessarily.
+
+34. No Cross-Module ORM Relations
+---------------------------------
+CRITICAL:
+
+No @ManyToOne / @OneToMany / JoinColumn across module boundaries.
+
+Prefer scalar IDs everywhere.
+
+Within CurriculumModule, ORM relations are still optional.
+Follow established project style: scalar IDs only if possible.
+
+No imported ParishEntity/UserEntity/CatechismLevelEntity/etc.
+
+35. Migration Strategy
+----------------------
+Create one cohesive migration or small ordered pair.
+
+Preferred one migration.
+
+Possible order:
+
+1. curriculums WITHOUT current_published_version FK initially
+2. curriculum_versions
+3. add current_published_version FK to curriculums
+4. topics
+5. lessons
+6. lesson_contents
+7. curriculum_assignments
+
+Down reverse.
+
+Do NOT edit prior migrations.
+
+36. Foreign Key Deletion
+------------------------
+Use NO ACTION / RESTRICT.
+
+Published/history rows must not disappear due parent delete.
+
+37. Metadata Tests
+------------------
+Verify:
+
+table names
+column names/types
+nullable flags
+status varchar lengths
+source_locale
+content_hash
+UUID PK not DB-generated
+canonicalLessonKey not DB-generated
+0 cross-module ORM relations
+
+38. UUID Tests
+--------------
+Verify all new entities:
+- app-generated UUID v4
+- explicit ID preservation
+
+Verify canonicalLessonKey default generation only when appropriate.
+
+Be careful:
+when cloning future lesson rows, service must preserve canonical key.
+Entity default should still allow explicit preservation.
+
+39. Migration Integration Tests
+-------------------------------
+On catechism_api_test verify:
+
+tables:
+curriculums
+curriculum_versions
+topics
+lessons
+lesson_contents
+curriculum_assignments
+
+Verify:
+FKs
+indexes
+filtered DRAFT unique
+assignment unique
+lesson_content unique
+UUID no defaults
+source_locale column
+content_hash column
+nvarchar
+checks
+
+40. Constraint Tests — Curriculum
+---------------------------------
+- same code same parish+level rejected
+- same code different level allowed
+- same code different parish allowed
+- invalid parish FK rejected
+- invalid level FK rejected
+- sourceLocale persists
+
+41. Constraint Tests — Versions
+-------------------------------
+- version numbers unique per curriculum
+- same version number across curriculum allowed
+- one DRAFT per curriculum
+- multiple PUBLISHED historical rows allowed
+- invalid curriculum/user FK rejected
+- version >0 check
+
+42. Constraint Tests — Topics
+-----------------------------
+- nonnegative sort order
+- Unicode title
+- optional code behavior
+- invalid version FK rejected
+
+43. Constraint Tests — Lessons
+------------------------------
+- canonicalLessonKey same across different version-scoped rows allowed
+- negative sort rejected
+- duration invalid rejected if CHECK added
+- invalid topic/version FK rejected
+- Unicode title/summary
+
+44. Constraint Tests — Content
+------------------------------
+- one content row per lesson
+- invalid lesson FK rejected
+- contentSchemaVersion positive
+- valid JSON accepted
+- invalid JSON rejected if ISJSON CHECK added
+- content_hash nullable/persisted
+- Unicode JSON content round-trip
+
+45. Constraint Tests — Assignment
+---------------------------------
+- one assignment per parish/year/level
+- same level next academic year allowed
+- invalid FK rejected
+- different parish/level/year combinations supported
+
+46. Module Boundary Tests
+-------------------------
+At #002 expected exports:
+
+CurriculumModule:
+none
+
+LearningContentModule:
+none
+
+No TypeOrmModule/entity/repository export.
+
+47. Multilingual Readiness Test
+-------------------------------
+Explicitly verify:
+
+- source_locale exists at selected owner
+- locale is independent from country
+- no translated tables prematurely created
+- stable curriculum/version/lesson IDs exist for future translation references
+- content_hash available for stale translation detection
+- enum/status values remain language-neutral English codes
+- no Vietnamese-specific canonical IDs
+
+48. Existing CRLF / Format Debt
+-------------------------------
+CURRICULUM #001 report found:
+
+format:check FAIL
+lint FAIL
+
+due pre-existing CRLF drift on CLASS #007A files.
+
+Before implementing schema:
+reproduce.
+
+If failures are purely line-ending/prettier drift and fixing them is safe:
+normalize those files as part of hygiene.
+
+Do NOT change their business logic.
+
+Document exactly which files changed for formatting only.
+
+Goal:
+format:check PASS
+lint PASS
+
+Do not carry known trivial formatting debt into this phase.
+
+49. No Business Services
+------------------------
+Do NOT implement:
+
+CurriculumService
+CurriculumVersionService
+TopicService
+LessonService
+LearningContentService
+publish/clone commands
+scope services
+
+50. No Controllers / APIs
+-------------------------
+Do NOT implement HTTP routes.
+
+51. No RBAC Seed
+----------------
+Do NOT add curricula/lesson-content permissions yet.
+
+#003.
+
+52. No Translation Service
+--------------------------
+STRICTLY do NOT implement:
+
+LocalizationModule
+TranslationService
+GoogleCloudTranslationProvider
+glossary
+translation jobs
+translation tables
+
+Only multilingual-ready source schema.
+
+53. No File/Media Integration
+-----------------------------
+assetId remains future content JSON field only.
+
+No storage/upload dependency.
+
+54. No FE/Mobile Changes
+------------------------
+Do not touch Web or Mobile repositories.
+
+55. Security / Privacy
+----------------------
+Verify:
+
+- no child PII added
+- content metadata does not store pastoral/confessional info
+- author IDs are scalar user IDs
+- no arbitrary HTML storage
+- no executable JSON
+- no cross-module repo/entity
+
+56. Docker / CI
+---------------
+AppModule/schema changed, so production Docker build required.
+
+57. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Migration:
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:curriculum-schema .
+
+58. quality:full Existing Flake
+-------------------------------
+The previous CLASS phase had a known parallel DB test flake.
+
+Attempt one clean quality:full run.
+
+If failure:
+- identify whether old shared-state race or new curriculum defect
+- do not weaken tests
+- document accurately
+- if minimal safe isolation fix is obvious, fix
+- otherwise carry to #006 final gate
+
+Do not falsely mark PASS.
+
+59. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(curriculum): add versioned curriculum schema"
+
+Cursor must NOT execute it.
+
+60. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #001
+3. Multilingual roadmap delta from #001
+4. Rules applied
+5. CRLF/format debt audit
+6. Files created
+7. Files modified
+8. CurriculumModule skeleton
+9. LearningContentModule skeleton
+10. CurriculumEntity
+11. sourceLocale ownership decision
+12. CurriculumVersionEntity
+13. TopicEntity
+14. LessonEntity
+15. canonicalLessonKey strategy
+16. LessonContentEntity
+17. contentHash strategy
+18. CurriculumAssignmentEntity
+19. Enums
+20. UUID strategy
+21. Migration
+22. FK strategy
+23. Cross-module ORM audit
+24. Filtered unique indexes
+25. Assignment uniqueness
+26. CHECK constraints
+27. Index strategy
+28. Module export audit
+29. Metadata tests
+30. UUID tests
+31. Migration integration tests
+32. Curriculum constraints
+33. Version constraints
+34. Topic constraints
+35. Lesson constraints
+36. Content constraints
+37. Assignment constraints
+38. Unicode validation
+39. Multilingual readiness audit
+40. Security/privacy audit
+41. Existing regression
+42. Fresh DB migration result
+43. quality:full result
+44. Docker validation
+45. Module boundary matrix
+46. Future Localization compatibility
+47. Future microservice extraction review
+48. Commands executed
+49. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- required tables
+- UUID no DB defaults
+- canonicalLessonKey behavior
+- sourceLocale present
+- contentHash present
+- FKs
+- one DRAFT invariant
+- one assignment per triple
+- one content per lesson
+- JSON syntax constraint if added
+- Unicode Vietnamese
+- non-Vietnamese Unicode sample
+- no cross-module ORM relation
+- no persistence exports
+- no translation subsystem implemented prematurely
+- prior regression
+
+50. Known issues/deferred
+51. Out-of-scope confirmation
+52. CURRICULUM #003 readiness
+53. Prompt count status
+54. Commit recommendation
+
+61. CURRICULUM #003 Readiness
+-----------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+CURRICULUM/CONTENT #003 — Curriculum + Topic Services/API/RBAC
+
+#003 should implement:
+- CurriculumService
+- curriculum root CRUD/status
+- version create/list/get
+- Topic CRUD/reorder on DRAFT
+- parish/level/year validation through public services
+- curricula.read/manage/publish permission catalog/wiring as appropriate
+- safe snapshots
+- Swagger
+- tests
+
+Do NOT implement lesson content publishing/clone orchestration yet unless specifically scoped.
+
+62. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #002/6 complete
+approximately 4 prompts remain (#003–#006)
+
+63. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM/CONTENT #002 status
+- schema/migration PASS/FAIL
+- multilingual foundation PASS/FAIL
+- module boundary PASS/FAIL
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(curriculum): add versioned curriculum schema"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

@@ -1,0 +1,946 @@
+CURSOR PROMPT — AUTH/RBAC #004/9
+AUTHENTICATION LOGIN + ACCESS JWT FOUNDATION
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit: COMPLETE
+- AUTH/RBAC #002 — Schema + Entities + Migrations: COMPLETE
+- AUTH/RBAC #002B — Schema Boundary Hardening: COMPLETE
+- AUTH/RBAC #003 — User Account + Password Foundation: COMPLETE
+
+Current:
+- AUTH/RBAC #004 / 9 — Authentication Login + Access JWT
+
+Updated phase plan:
+#001 Modular rules + audit
+#002 Schema/entities/migrations
+#002B Schema boundary hardening
+#003 User/password/account foundation
+#004 Login + access JWT
+#005 Refresh token/session/logout
+#006 Role + Permission + RBAC guards
+#007 Security hardening + integration tests
+#008 Seed sample data + Postman verification
+#009 Final Auth/RBAC audit + module-boundary review
+
+Do NOT implement refresh token/session lifecycle yet.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+5. Read:
+   docs/AUTH_002B_SCHEMA_BOUNDARY_HARDENING_REPORT.md
+6. Read:
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+7. Inspect:
+   src/modules/users/
+   src/modules/auth/
+   src/modules/access-control/
+   src/config/
+   src/http/
+   src/request-context/
+   test/
+   package.json
+   README.md
+8. Inspect Git status with read-only commands.
+
+3. Primary Objective
+--------------------
+Implement phase-1 access authentication:
+
+- AuthModule application service
+- POST /api/v1/auth/login
+- JWT access token issuing
+- JWT access token validation
+- JwtAuthGuard
+- @Public() decorator if useful
+- @CurrentUser() decorator / typed auth context
+- minimal auth configuration
+- unit tests
+- integration/e2e tests
+
+Use UserAccountService as the ONLY UserModule authentication boundary.
+
+Do NOT implement:
+- refresh token
+- auth_sessions persistence workflow
+- token rotation
+- logout
+- role/permission checks
+- permission guard
+- user registration
+- admin provisioning
+
+4. Module Boundary — CRITICAL
+-----------------------------
+Dependency direction:
+
+AuthModule -> UsersModule
+
+AuthModule may import:
+- UsersModule
+- ConfigModule/framework auth libraries
+- its own providers
+
+AuthModule MUST NOT:
+- import UserEntity
+- inject Repository<UserEntity>
+- access users table directly
+- import PasswordHashService
+- access password_hash
+
+Authentication must call:
+
+UserAccountService.verifyCredentials(...)
+
+or an equally narrow public contract.
+
+UsersModule MUST NOT import AuthModule.
+
+No cycle.
+
+5. Dependencies
+---------------
+Audit/install only what is required.
+
+Likely:
+- @nestjs/jwt
+
+Evaluate whether Passport is necessary now.
+
+Preferred:
+implement a small custom JWT guard using @nestjs/jwt if that is simpler and avoids unnecessary `passport` abstraction.
+
+Passport is acceptable if it clearly improves maintainability, but do not add:
+- @nestjs/passport
+- passport
+- passport-jwt
+
+just by convention.
+
+Choose the leanest NestJS-native design.
+
+Document exact dependency versions.
+
+6. JWT Algorithm
+----------------
+AUTH #001 selected phase-1:
+HS256 symmetric JWT.
+
+Keep this decision unless a concrete blocker exists.
+
+Requirements:
+- no secret in code
+- no default insecure production secret
+- algorithm explicitly controlled
+- access token short-lived
+- signature + expiration verified
+
+Do not add asymmetric keys yet.
+
+7. Auth Environment Variables
+-----------------------------
+Add validated configuration.
+
+Required conceptually:
+
+JWT_ACCESS_SECRET
+JWT_ACCESS_EXPIRES_IN
+
+Preferred default expiration:
+15m
+
+Security requirement:
+JWT_ACCESS_SECRET must be explicitly configured.
+
+Evaluate environment behavior carefully:
+
+- production: required, fail fast
+- development/test: still should not silently use a known weak runtime default
+
+Preferred:
+include placeholder only in `.env.example`, but actual runtime should require a supplied value.
+
+For DB-free tests, test setup may provide a test-only secret explicitly.
+
+Do not leak secret in logs.
+
+8. Config Architecture
+----------------------
+Integrate with existing config architecture.
+
+Do NOT read `process.env` directly in AuthService/guard.
+
+Use:
+- ConfigService
+or
+- typed configuration factory
+
+Follow existing project conventions.
+
+Keep JWT config inside AuthModule/auth-specific config if reasonable.
+
+9. Access Token Claims
+----------------------
+Keep access token minimal.
+
+Required:
+- sub: user id
+- iat
+- exp
+
+Do NOT include:
+- password hash
+- email unless clearly needed
+- permissions list
+- full roles list
+- profile data
+- parish/class data
+
+AUTH #001 allowed optional `sid`, but session lifecycle is not implemented yet.
+
+Therefore:
+DO NOT include `sid` in #004 unless a session is actually created.
+
+Keep token independent from refresh/session until #005.
+
+10. Authenticated User Context
+------------------------------
+Define a typed request auth context.
+
+Preferred safe shape:
+
+{
+  userId: string
+}
+
+Optionally:
+{
+  sub: string
+}
+
+but normalize application-facing form to `userId`.
+
+Do not expose JWT raw payload everywhere.
+
+11. AuthService
+---------------
+Implement a focused AuthService.
+
+Primary method:
+login(email, password)
+
+Flow:
+
+1. call UserAccountService.verifyCredentials(email, password)
+2. if invalid:
+   return/throw generic unauthorized result
+3. if valid:
+   sign short-lived JWT access token
+4. return safe login response
+
+No user repository access.
+
+12. Login Response
+------------------
+Preferred phase-1 response:
+
+{
+  accessToken: "...",
+  tokenType: "Bearer",
+  expiresIn: <seconds or stable representation>,
+  user: {
+    id,
+    email
+  }
+}
+
+Evaluate whether returning user snapshot is useful.
+
+Do NOT include:
+- passwordHash
+- status unless needed
+- roles
+- permissions
+- refreshToken
+
+Keep response minimal.
+
+13. Login DTO
+-------------
+Create request DTO.
+
+Required:
+- email
+- password
+
+Use class-validator.
+
+Do not duplicate full service-layer password policy on login.
+
+Login password input should:
+- be string
+- have bounded maximum length
+- not reveal account creation policy details unnecessarily
+
+Email normalized inside UserAccountService.
+
+14. Generic Authentication Failure
+----------------------------------
+Invalid cases must return the same public response:
+
+HTTP 401 Unauthorized
+
+Generic message such as:
+Invalid credentials
+
+Same public response for:
+- unknown email
+- wrong password
+- invalid email
+- INACTIVE
+- LOCKED
+
+Do not expose account state.
+
+15. Exception Mapping
+---------------------
+Use NestJS UnauthorizedException or module-level exception mapped consistently.
+
+Ensure existing global error contract produces:
+
+statusCode
+error
+message
+path
+timestamp
+requestId
+
+Do not bypass global exception filter.
+
+16. Login Endpoint
+------------------
+Implement:
+
+POST /api/v1/auth/login
+
+No version duplication.
+
+Controller should remain thin:
+- DTO validation
+- call AuthService
+- return result
+
+No repository/crypto logic in controller.
+
+17. Public Route Decorator
+--------------------------
+Evaluate adding:
+
+@Public()
+
+This is useful if a global auth guard is introduced now.
+
+But do NOT introduce a global JwtAuthGuard unless it is clearly beneficial at this stage.
+
+Two valid approaches:
+
+A. Route-level JwtAuthGuard for protected endpoints later
+- login naturally public
+- @Public not needed yet
+
+B. Global auth guard with @Public
+- stronger deny-by-default pattern
+- but affects all existing endpoints such as health/swagger
+
+Preferred for #004:
+avoid global auth behavior unless carefully justified.
+
+Implement @Public only if the architecture will actively use it now.
+
+No dead decorators.
+
+18. JwtAuthGuard
+---------------
+Implement reusable JWT access-token guard.
+
+Responsibilities:
+- extract `Authorization: Bearer <token>`
+- reject missing token on protected endpoint
+- verify JWT signature
+- verify expiry
+- validate `sub`
+- attach typed auth context to request
+
+No DB lookup yet unless required.
+
+Authorization/RBAC comes later.
+
+19. Token Extraction
+--------------------
+Strictly support:
+
+Authorization: Bearer <token>
+
+Reject malformed schemes.
+
+Do not accept token via:
+- query string
+- cookie
+- custom header
+
+Access JWT belongs in Authorization header.
+
+20. User Status After Token Issuance
+------------------------------------
+Important design question:
+
+If an ACTIVE user logs in and later becomes INACTIVE/LOCKED,
+a purely stateless 15-minute access token could remain valid until expiry.
+
+For #004:
+document this limitation.
+
+Do NOT add per-request UserModule DB lookup just to solve it prematurely unless clearly justified.
+
+Short access-token lifetime is acceptable for phase 1.
+Future hardening may add account-state checks if needed.
+
+21. CurrentUser Decorator
+------------------------
+If useful, implement:
+
+@CurrentUser()
+
+Return typed authenticated context.
+
+Do not expose raw Request everywhere.
+
+Add only if actually demonstrated by a protected test endpoint or future-ready guard test.
+
+22. Protected Test Surface
+--------------------------
+We need to test JwtAuthGuard behavior without creating a real business endpoint.
+
+Choose one:
+
+A. test-only controller defined inside e2e tests
+B. minimal auth endpoint such as:
+   GET /api/v1/auth/me
+
+But AUTH #001 listed `/auth/me` as a possible phase endpoint.
+
+Evaluate whether `/auth/me` is useful now.
+
+Preferred:
+Implement `GET /api/v1/auth/me` ONLY if it returns minimal authenticated context and provides real value for frontend/Postman later.
+
+If implemented:
+- protected by JwtAuthGuard
+- response minimal
+- can return user id/email only if fetched through public UserModule contract
+- do not query UserEntity directly
+
+If account lookup method is needed, add a narrow safe UserAccountService method such as:
+getAccountAuthStateById(id)
+or
+getAccountSnapshotById(id)
+
+Keep contract minimal.
+
+Alternative preferred if avoiding extra scope:
+use a test-only controller for guard tests.
+
+Choose deliberately and document.
+
+23. UserAccountService Extension
+--------------------------------
+Only if AuthModule genuinely needs account lookup by id:
+
+Add a narrow method to UserAccountService.
+
+Requirements:
+- safe snapshot only
+- no entity
+- no password hash
+- no repository export
+
+Do not expand UserModule into general CRUD.
+
+24. JWT Service Boundary
+------------------------
+Consider a small internal provider such as:
+
+AccessTokenService
+
+Responsibilities:
+- sign access token
+- verify access token
+- convert payload to typed auth principal
+
+This can keep AuthService and JwtAuthGuard focused.
+
+Preferred if it reduces duplication.
+
+Do not create unnecessary token abstraction layers.
+
+25. Expiration Handling
+-----------------------
+Use `JWT_ACCESS_EXPIRES_IN`.
+
+Need a reliable response `expiresIn`.
+
+Avoid parsing arbitrary duration inconsistently.
+
+Either:
+- normalize config at startup
+- or omit expiresIn from response if no clean representation is available
+
+But frontend usually benefits from it.
+
+Document exact contract.
+
+26. JWT Secret Validation
+-------------------------
+Validate:
+- non-empty
+- meaningful minimum length
+
+Preferred:
+minimum 32 bytes/chars for HS256 secret.
+
+Do not use:
+secret
+changeme
+development-secret
+
+as runtime defaults.
+
+Test config may inject a clearly test-scoped strong value.
+
+27. Swagger
+-----------
+Document:
+POST /auth/login
+
+If JwtAuthGuard exists, consider adding Bearer auth scheme to Swagger now.
+
+If added:
+- configure one bearer scheme
+- protected routes may annotate appropriately
+
+Do not mark login as authenticated.
+
+If no actual protected production route exists, adding scheme is still acceptable because guard is implemented for future modules, but avoid decorative config with no usage.
+
+28. Logging
+-----------
+Do not log:
+- password
+- access token
+- Authorization header
+- JWT secret
+
+Login success logs, if any:
+- minimal
+- avoid email unless necessary
+
+Login failures:
+- do not log credential material
+- do not generate noisy warning per bad password by default
+
+29. Rate Limiting
+-----------------
+Do NOT implement rate limiting in #004.
+
+Record as #007 hardening task.
+
+30. Brute Force Lockout
+-----------------------
+Do NOT implement:
+- failed_login_count
+- locked_at
+- auto lockout
+
+Schema intentionally deferred.
+
+Keep generic auth failures.
+
+31. Refresh Token
+-----------------
+STRICTLY do NOT:
+- create refresh token
+- return refresh token
+- write auth_sessions
+- use token_family_id
+- implement logout
+
+That is AUTH #005.
+
+32. RBAC
+--------
+STRICTLY do NOT:
+- query roles/permissions
+- put roles/permissions into JWT
+- implement PermissionGuard
+- implement RequirePermissions
+
+That is AUTH #006.
+
+33. AuthModule Exports
+----------------------
+After #004, AuthModule may export only public auth infrastructure needed by future modules.
+
+Potential:
+- JwtAuthGuard
+- CurrentUser decorator does not require DI export
+- AccessTokenService should probably remain private
+
+Do NOT export:
+- TypeOrmModule
+- AuthSessionEntity
+- JWT internals unnecessarily
+
+34. Module Boundary Test
+------------------------
+Update module-boundary tests.
+
+Expected:
+UsersModule:
+- exports UserAccountService only
+
+AuthModule:
+- may export JwtAuthGuard if needed by future feature modules
+- must not export TypeOrmModule/AuthSessionEntity
+
+AccessControlModule:
+- remains no exports in #004
+
+No repository leakage.
+
+35. Unit Tests
+--------------
+At minimum:
+
+AuthService:
+- valid credentials -> access token
+- invalid credentials -> Unauthorized
+- no password/hash in response
+
+AccessTokenService/JWT provider:
+- valid sign/verify
+- expired token rejected
+- malformed token rejected
+- wrong signature rejected
+- missing/invalid sub rejected
+
+JwtAuthGuard:
+- valid bearer attaches auth context
+- missing bearer -> 401
+- malformed bearer -> 401
+- invalid/expired JWT -> 401
+
+Config:
+- missing JWT secret fails
+- short/invalid JWT secret fails
+- valid config passes
+- expiry parsed/accepted correctly
+
+36. E2E Tests
+-------------
+Add e2e tests using real application.
+
+At minimum:
+POST /api/v1/auth/login
+
+Cases:
+- valid account -> 200/201 depending controller choice
+- response has access token
+- JWT payload sub matches user id
+- wrong password -> 401
+- unknown email -> 401
+- INACTIVE -> 401
+- LOCKED -> 401
+- malformed DTO -> 400
+- password never returned
+
+Use test DB only.
+
+If protected test endpoint or /auth/me exists:
+- missing token -> 401
+- invalid token -> 401
+- valid token -> success
+
+37. Integration Test Account Setup
+----------------------------------
+Create test users through:
+
+UserAccountService.createAccount
+
+not direct repository insert where practical.
+
+This exercises public module boundary.
+
+For INACTIVE/LOCKED test setup:
+service may allow explicit initial status for internal test/provisioning.
+
+Do not bypass module ownership unnecessarily.
+
+38. Test Cleanup
+----------------
+Clean only test-owned rows.
+
+Remember later auth_sessions may FK users, but #004 creates no sessions.
+
+Use unique email prefixes.
+
+No dev DB.
+
+39. Existing Test Layer Preservation
+------------------------------------
+Keep:
+npm test
+npm run test:e2e
+npm run test:integration
+npm run test:e2e:db
+npm run quality
+npm run quality:full
+
+DB-free tests must remain DB-free.
+
+Auth HTTP e2e requiring DB should belong in DB-aware e2e/integration layer, not fast infrastructure e2e.
+
+40. Docker / CI
+---------------
+New JWT packages should be pure JS unless chosen dependencies say otherwise.
+
+Still run:
+- production Docker build
+- quality
+- quality:full
+
+No Bitbucket pipeline changes unless a real issue is found.
+
+41. Security Review
+-------------------
+Explicitly verify:
+- no JWT secret committed
+- no access token logged
+- no password logged
+- no passwordHash exposed
+- token minimal claims
+- invalid auth generic
+- JWT expiry enforced
+- HS256 algorithm controlled
+- no refresh implementation
+- no permission claims trusted
+
+42. Future Microservice Extraction
+----------------------------------
+Document:
+
+AuthModule future service boundary:
+- login endpoint
+- token verification contract
+- no users persistence ownership
+
+UserModule:
+- credential verification remains public service/RPC boundary
+
+No ORM entity crosses modules.
+
+43. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci or npm install as appropriate
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+build production target.
+
+44. Git Policy — CRITICAL
+------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE recommended command:
+
+git commit -m "feat(auth): add login and access token authentication"
+
+Cursor must NOT execute it.
+
+45. Required Report
+-------------------
+Create:
+
+docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From AUTH #003
+
+3. Architecture / Module Boundary Audit
+
+4. Dependencies Added
+Exact versions and why.
+
+5. Files Created
+
+6. Files Modified
+
+7. AuthModule Architecture
+
+8. JWT Configuration
+
+9. JWT Secret Validation
+
+10. Access Token Claims
+
+11. Token Expiration Strategy
+
+12. AuthService Login Flow
+
+13. Login DTO
+
+14. Login Response Contract
+
+15. Authentication Failure Behavior
+
+16. JwtAuthGuard
+
+17. Token Extraction
+
+18. Authenticated User Context
+
+19. CurrentUser / Public Decorator Decision
+
+20. Protected Endpoint/Test Strategy
+
+21. UserAccountService Interaction
+
+22. Swagger Changes
+
+23. Logging / Secret Review
+
+24. Unit Tests
+
+25. DB-Aware E2E Tests
+
+26. Existing Test Regression
+
+27. Module Boundary Audit After Implementation
+
+28. Future Microservice Extraction Review
+
+29. Security Review
+
+30. Commands Executed
+
+31. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB-aware auth e2e
+- quality:full
+- production Docker build
+- valid login
+- invalid login generic 401
+- JWT signature verification
+- JWT expiration verification
+- no password/hash exposure
+- no persistence export
+- no refresh/session behavior
+
+32. Known Issues / Deferred Items
+Include:
+- rate limiting
+- account-state revocation after token issue
+- refresh/session
+- RBAC
+
+33. Out-of-Scope Confirmation
+
+34. AUTH #005 Readiness
+
+Recommend:
+AUTH/RBAC #005 — Refresh Token + Session + Logout
+
+It should implement:
+- AuthSession service/repository internal to AuthModule
+- refresh token generation
+- hashed refresh token persistence
+- rotation
+- token family/reuse detection
+- refresh endpoint
+- logout/current-session revocation
+- no RBAC yet
+
+35. Commit Message Recommendation
+
+Print exactly ONE:
+
+git commit -m "feat(auth): add login and access token authentication"
+
+Cursor MUST NOT execute it.
+
+46. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #004 status
+- login/JWT PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(auth): add login and access token authentication"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to AUTH #005 automatically.

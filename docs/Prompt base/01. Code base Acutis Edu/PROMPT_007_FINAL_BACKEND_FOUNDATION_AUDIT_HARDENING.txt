@@ -1,0 +1,1093 @@
+CURSOR PROMPT #007 — FINAL BACKEND FOUNDATION AUDIT + HARDENING
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+This is the FINAL prompt of the first backend foundation phase.
+
+Technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm
+- MSSQL
+- TypeORM 0.3.x
+- @nestjs/typeorm 11.x
+- Docker / Docker Compose
+- Docker Engine through WSL2 for local development
+- Bitbucket Pipelines planned later
+- Frontend is a separate ReactJS repository
+
+Completed prompts:
+
+#001
+- PROJECT_RULES.md
+- repository hygiene
+- Cursor always-apply rules
+- docs/ gitignored
+
+#002
+- NestJS bootstrap
+- Node/npm pinning
+- TypeScript strict
+- ESLint
+- Prettier
+- unit/e2e baseline
+- GET /api/v1/health
+
+#003
+- centralized config
+- Joi env validation
+- structured logging
+- request ID
+- global validation
+- global exception handling
+- Swagger/OpenAPI
+- shared app bootstrap
+
+#004
+- MSSQL
+- TypeORM
+- DataSource
+- migration architecture
+- synchronize=false
+- migrationsRun=false
+
+#005 / #005B
+- Dockerfile
+- Docker Compose
+- MSSQL container
+- mssql-init
+- persistent volumes
+- live Docker/MSSQL/TypeORM validation
+- API health / Swagger smoke
+- persistence verification
+
+#006
+- dedicated test DB
+- DB integration tests
+- DB-aware e2e
+- migration validation against test DB
+- development DB safety guard
+- quality / quality:full scripts
+
+Before making ANY change:
+
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all .cursor/rules/*.mdc.
+4. Read ALL reports under docs/ from Prompt #001 through Prompt #006.
+5. Inspect the complete current repository.
+6. Inspect package.json, Dockerfile, docker-compose.yml, config, logging, TypeORM, tests, test DB utilities, migrations, Swagger, health endpoint, and Git status.
+
+Do not assume prior implementation is correct merely because previous prompts passed.
+
+This prompt is an independent final audit + hardening pass.
+
+2. Current Phase
+----------------
+Backend Foundation
+Prompt #007 / 7
+
+This is the FINAL prompt of:
+
+Base Architecture + NestJS Bootstrap + MSSQL + Docker
+
+After this prompt is accepted, the next major phase will be:
+
+Auth + Users + Roles + Permissions
+
+Do NOT start that phase here.
+
+3. Primary Objective
+--------------------
+Audit the entire foundation implemented in Prompts #001–#006 and fix only genuine foundation-level issues.
+
+Goals:
+
+- verify architecture consistency
+- verify package/dependency quality
+- verify configuration safety
+- verify logging/privacy
+- verify error handling
+- verify Swagger behavior
+- verify TypeORM/MSSQL architecture
+- verify migrations
+- verify Docker/Compose developer experience
+- verify WSL portability assumptions
+- verify test architecture
+- verify test DB safety
+- verify quality scripts
+- remove small technical debt
+- ensure future modules have a stable foundation
+- document final foundation architecture
+- leave the repository ready for Auth/Users/Roles work
+
+Do not introduce business features.
+
+4. Audit First, Then Change
+---------------------------
+Do NOT begin by refactoring.
+
+First perform a structured audit.
+
+Create an internal findings list with severity:
+
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+- NO ACTION
+
+For every potential issue ask:
+- Is it real?
+- Is it in scope?
+- Does fixing it reduce future risk?
+- Will fixing it introduce unnecessary abstraction?
+
+Only implement fixes that are justified.
+
+Do not modify code simply to make it "cleaner".
+
+5. Architecture Audit
+---------------------
+Review:
+
+- src/main.ts
+- src/app.module.ts
+- bootstrap/*
+- config/*
+- logging/*
+- request-context/*
+- http/*
+- database/*
+- health/*
+- test/*
+- scripts/*
+- Docker files
+
+Check for:
+
+- circular dependencies
+- duplicated configuration logic
+- dumping-ground folders
+- premature abstractions
+- direct process.env usage outside approved CLI/test bootstrap boundaries
+- unnecessary global modules
+- hidden coupling
+- inconsistent naming
+- duplicated constants
+- framework misuse
+
+Keep the architecture simple.
+
+6. Dependency Audit
+-------------------
+Inspect package.json and package-lock.json.
+
+Verify:
+- only npm lockfile exists
+- Node engine remains exactly 22.23.1
+- NestJS remains 11.2.3 unless a patch-level update is clearly justified
+- no accidental major upgrades
+- no unused dependencies
+- devDependencies vs dependencies are categorized correctly
+- TypeORM/MSSQL packages are necessary
+- test-only packages are devDependencies
+- pino-pretty remains dev-only
+- no duplicate packages provide the same responsibility
+
+Run:
+npm audit --audit-level=moderate
+
+Do NOT run:
+npm audit fix --force
+
+Do not perform broad dependency upgrades in this prompt.
+
+7. TypeScript / ESLint / Prettier Audit
+---------------------------------------
+Verify:
+
+- strict remains enabled
+- no new explicit any
+- no @ts-ignore
+- no @ts-nocheck
+- no unsafe casts added without reason
+- ESLint rules are still type-aware
+- Prettier config remains aligned with PROJECT_RULES.md
+- LF behavior remains stable
+- shell files remain LF-safe
+
+Run:
+npm run format:check
+npm run lint
+npm run typecheck
+
+Fix genuine violations only.
+
+8. Configuration Audit
+----------------------
+Review all environment/config values currently supported.
+
+Expected foundation configuration includes only what is actually needed:
+
+Application:
+- NODE_ENV
+- PORT
+- SWAGGER_ENABLED
+
+Database:
+- DB_HOST
+- DB_PORT
+- DB_NAME
+- DB_USER
+- DB_PASSWORD
+- DB_ENCRYPT
+- DB_TRUST_SERVER_CERTIFICATE
+
+Docker-local:
+- MSSQL_PUBLISH_PORT
+
+Test-specific config where applicable.
+
+Check:
+
+- defaults
+- fail-fast validation
+- boolean parsing
+- port parsing
+- local vs production TLS semantics
+- no accidental production-insecure default
+- no config values duplicated in multiple places
+- .env.example correctness
+- .env.test.example correctness
+- .env and .env.test ignored
+- no secret values tracked
+
+Do NOT introduce speculative variables.
+
+9. Logging / Privacy Audit
+--------------------------
+Review nestjs-pino / pino configuration.
+
+Verify:
+- structured production logging
+- readable local logging
+- request ID present
+- Authorization redacted
+- Cookie redacted
+- Set-Cookie redacted
+- password redacted
+- token/accessToken/refreshToken redacted
+- no global request body logging
+- no global response body logging
+- no environment dump
+- DB_PASSWORD never logged
+- unexpected errors logged safely
+- API clients never receive stack traces
+
+Because this platform serves minors, default to minimal logging.
+
+Do not introduce personal-data logging for convenience.
+
+10. Request ID Audit
+--------------------
+Verify:
+- secure generation using crypto.randomUUID or equivalent
+- safe acceptance of inbound request ID
+- bounded length
+- invalid values replaced
+- same ID returned in response header
+- same ID included in error response
+- no global mutable request context
+- concurrency safety
+
+Only change this if a real flaw is found.
+
+11. Global Exception Contract Audit
+-----------------------------------
+Review public error response.
+
+Verify:
+- known HTTP exceptions preserve status
+- validation errors remain useful
+- unknown exceptions return generic 500
+- stack/internal SQL details are hidden
+- path/timestamp/requestId remain correct
+- error format is consistent
+- logs retain enough diagnostic context
+
+Do not add database-specific business exception mapping yet.
+
+12. ValidationPipe Audit
+------------------------
+Verify current global ValidationPipe settings remain intentional:
+
+- whitelist
+- forbidNonWhitelisted
+- transform
+- enableImplicitConversion=false
+- validationError target/value hidden
+
+Check compatibility with future DTO usage.
+
+Do not create fake DTO endpoints.
+
+13. Swagger Audit
+-----------------
+Verify:
+- API remains /api/v1
+- Swagger route remains separate and predictable
+- docs JSON works
+- development default behavior is appropriate
+- production default remains safe
+- Swagger does not accidentally expose secrets
+- no auth scheme should be added yet because auth does not exist
+
+Do not over-customize documentation.
+
+14. Health / Readiness Decision
+-------------------------------
+Current endpoint:
+
+GET /api/v1/health
+
+is liveness-only.
+
+Audit whether the foundation should ALSO introduce a separate readiness endpoint now.
+
+Possible direction:
+
+GET /api/v1/health/ready
+
+that verifies required infrastructure such as database connectivity.
+
+Only implement readiness if:
+- it clearly improves Docker/future deployment health semantics
+- it can be implemented cleanly
+- it does not make liveness depend on DB
+- it can be tested against real MSSQL
+- it will benefit future container orchestration/CI
+
+If implemented:
+
+Liveness:
+GET /api/v1/health
+- process/app alive
+- no DB dependency
+
+Readiness:
+GET /api/v1/health/ready
+- confirms app can reach MSSQL
+- returns safe status only
+- no connection string/internal error leakage
+
+If not implemented:
+document why it is deliberately deferred.
+
+Do not blindly add it.
+
+15. TypeORM Architecture Audit
+------------------------------
+Review:
+
+- DatabaseModule
+- TypeOrmModule.forRootAsync
+- TypeORM option factories
+- CLI DataSource
+- migration globs
+- entity globs
+- naming strategy
+- TLS options
+- logging
+- migration table
+
+Verify:
+
+synchronize=false
+migrationsRun=false
+
+under ALL environments.
+
+Check dev .ts vs dist .js migration discovery.
+
+Confirm CLI and Nest runtime share configuration semantics.
+
+Check that current design will support feature-local entities later.
+
+Do not add BaseEntity abstraction.
+
+16. UUID Decision Review
+------------------------
+Prompt #004 chose:
+
+application-generated UUID v4
+stored as MSSQL uniqueidentifier
+
+Review this decision.
+
+Keep it unless a concrete technical issue exists.
+
+Do not create business entities to validate it.
+
+Document the final decision for future modules.
+
+17. Database Naming Audit
+-------------------------
+Verify snake_case convention remains stable for:
+
+- tables
+- columns
+- indexes/constraints where supported
+
+Review typeorm-naming-strategies dependency.
+
+If it is suitable, keep it.
+
+Do not implement a custom naming strategy merely to remove a dependency unless there is a real reason.
+
+18. Migration Workflow Audit
+----------------------------
+Review scripts:
+
+- migration:create
+- migration:generate
+- migration:show
+- migration:run
+- migration:run:prod
+- migration:revert
+- test:db:migrations
+
+Verify:
+- commands actually resolve
+- dev/production paths are correct
+- no double .ts/.js loading
+- migrations are explicit
+- no auto migration on startup
+- empty migration state is supported
+- future developer workflow is understandable
+
+Run live migration validation against:
+- development DB where safe
+- dedicated test DB
+
+Do not create meaningless migrations.
+
+19. Test Architecture Audit
+---------------------------
+Review all current layers:
+
+A. unit
+B. DB-free infrastructure e2e
+C. DB integration
+D. DB-aware AppModule e2e
+
+Verify:
+- correct Jest patterns
+- DB e2e excluded from DB-free suite
+- no duplicate test execution
+- deterministic setup
+- cleanup
+- no test order dependency
+- reasonable timeouts
+- no hidden Docker startup inside Jest
+- clear failure when MSSQL unavailable
+
+Do not merge all suites into one slow command.
+
+20. Test DB Safety Audit
+------------------------
+Review:
+
+catechism_api_test
+
+safety design.
+
+Verify:
+- development DB catechism_api is explicitly blocked
+- _test suffix guard exists
+- regex validation exists
+- destructive operations are guarded
+- DB_NAME() runtime assertion exists
+- master DB is used only for create/drop
+- SQL identifiers safely quoted
+- DB password never printed
+- test DB may be reset intentionally
+- dev DB remains untouched
+
+Try at least one safe negative validation demonstrating that the guard rejects the development DB WITHOUT performing destructive action.
+
+Do not drop development DB.
+
+21. Quality Script Audit
+------------------------
+Review:
+
+npm run quality
+npm run quality:full
+
+Expected:
+
+quality:
+- format:check
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+
+quality:full:
+- quality
+- migration validation
+- DB integration
+- DB-aware e2e
+
+Verify actual behavior and exit codes.
+
+Do not add unnecessary task-runner dependencies.
+
+22. Dockerfile Audit
+--------------------
+Review all stages.
+
+Verify:
+
+- exact Node 22.23.1 image
+- deterministic npm ci
+- dev stage works
+- production stage works
+- production deps only
+- non-root runtime
+- no .env copied
+- no docs copied
+- no Git metadata copied
+- no unnecessary OS packages
+- production health check works
+- build caching is reasonable
+
+Do not optimize for image size at the expense of maintainability.
+
+23. Docker Compose Audit
+------------------------
+Review:
+
+- mssql
+- mssql-init
+- api
+- named volumes
+- health checks
+- depends_on semantics
+- env interpolation
+- port mapping
+- service DNS
+- startup ordering
+
+Verify:
+
+API -> MSSQL:
+mssql:1433
+
+Host -> MSSQL:
+localhost:${MSSQL_PUBLISH_PORT}
+
+No host-specific IP.
+
+No host.docker.internal dependency.
+
+24. WSL Developer Experience Audit
+----------------------------------
+Current environment:
+- Windows host
+- WSL2 Ubuntu
+- Docker Engine in WSL
+- commands may run as:
+  wsl docker compose ...
+
+Review whether developer workflow is documented/usable.
+
+If a pre-existing helper such as:
+scripts/docker.ps1
+
+exists, audit it.
+
+Allowed:
+- improve a small wrapper/readme-like developer helper if genuinely useful
+
+Do NOT:
+- make application depend on WSL
+- add machine-specific paths
+- add developer username/path
+- install Docker/WSL automatically
+
+Core project must remain Linux CI compatible.
+
+25. Shell / CRLF Audit
+----------------------
+Verify:
+- .gitattributes keeps *.sh LF
+- shell scripts use compatible interpreter
+- bash syntax matches shebang
+- no CRLF errors
+- no set -x secret leakage
+
+26. Docker Persistence Audit
+----------------------------
+Verify current documented behavior:
+
+docker compose down
+- preserves DB volume
+
+docker compose down -v
+- destroys only project volumes
+
+Do NOT run broad prune commands.
+
+Do not destroy the current dev DB unless necessary.
+
+27. Security Foundation Audit
+-----------------------------
+Review all current foundation code against future use with minors.
+
+Check:
+- no credentials tracked
+- no stack leak
+- no verbose personal-data logs
+- no unsafe default Swagger exposure in production
+- no unsafe DB TLS production defaults
+- no synchronize
+- no automatic destructive migrations
+- test DB destruction guard
+- no publicly exposed student concepts yet
+- no unnecessary externally accessible services
+
+Fix foundation security issues if found.
+
+28. Production Readiness Boundaries
+-----------------------------------
+Do NOT turn this prompt into full production infrastructure.
+
+Production items remain future scope:
+- staging
+- deployment
+- secret manager
+- backups
+- monitoring platform
+- TLS termination
+- cloud/container orchestration
+- restricted production DB user
+- rate limiting
+- auth
+- production migration release process
+
+However, document any foundation assumptions future production work must address.
+
+29. README / Permanent Documentation Decision
+--------------------------------------------
+Remember:
+docs/ is gitignored and used only for temporary Cursor handoff reports.
+
+If the repository currently lacks permanent developer instructions and a small tracked README is necessary to make the foundation usable, evaluate creating or updating:
+
+README.md
+
+It may include:
+- prerequisites
+- Node version
+- local .env setup
+- Docker/WSL commands
+- API URL
+- Swagger URL
+- quality commands
+- test commands
+- migration commands
+- safe DB reset behavior
+
+Only create/update README.md if it adds real value.
+
+Do NOT duplicate the huge temporary docs reports.
+
+Keep permanent documentation concise.
+
+30. First Commit Policy
+-----------------------
+IMPORTANT USER RULE:
+
+Cursor must NEVER execute:
+- git add
+- git commit
+- git push
+
+Cursor must NOT create the first commit automatically.
+
+However, because this prompt may contain code/config changes, Cursor MUST provide a recommended commit command at the END of the report/final response IF there are code/config changes.
+
+Required format:
+
+git commit -m "<concise conventional commit message>"
+
+Example style:
+git commit -m "chore: establish backend foundation"
+
+The user will manually decide whether to:
+- git add
+- run the commit
+- push
+
+Cursor only prints the recommended `git commit -m "..."` command.
+
+If this prompt produces NO code/config changes:
+- do NOT print a commit message
+- explicitly state: "No code/config changes; no commit message required."
+
+Under no circumstances run Git write operations.
+
+31. Conventional Commit Message
+--------------------------------
+If changes are made, propose ONE concise commit message.
+
+Preferred categories:
+- chore:
+- refactor:
+- fix:
+- test:
+- docs:
+
+Because this is a final foundation prompt, if multiple foundation hardening changes occur, a message such as:
+
+git commit -m "chore: finalize backend foundation"
+
+may be appropriate.
+
+Do not fabricate multiple commit options.
+Provide exactly one recommendation.
+
+32. Allowed Changes
+-------------------
+Allowed:
+
+- genuine foundation bug fixes
+- small architecture consistency corrections
+- small test fixes
+- config safety fixes
+- Docker correctness fixes
+- README developer instructions
+- readiness endpoint if justified
+- missing tests for foundation behavior
+
+Not allowed:
+
+- Auth
+- User entity
+- Roles
+- Permissions
+- JWT
+- Parish modules
+- AcademicYear
+- Student
+- Parent
+- Catechist
+- Class
+- Lesson
+- Question
+- Exam
+- Gamification
+- CMS
+- Notifications
+- Bitbucket pipeline
+- business schema
+
+33. No Speculative Refactoring
+------------------------------
+Do not:
+- rename large folder trees without need
+- move files simply for style
+- introduce clean architecture layers prematurely
+- add CQRS
+- add event bus
+- add repository base classes
+- add generic CRUD abstractions
+- add BaseEntity
+- add Redis
+- add queues
+- add caching
+- add API response wrapper merely for consistency unless a real need exists
+
+The foundation should remain intentionally lean.
+
+34. Required Validation
+-----------------------
+Run all relevant validation after audit/fixes.
+
+Host quality:
+- node --version
+- npm --version
+- npm run format
+- npm run format:check
+- npm run lint
+- npm run typecheck
+- npm test
+- npm run test:e2e
+- npm run test:cov
+- npm run build
+- npm audit --audit-level=moderate
+- npm run quality
+
+Full DB validation:
+- confirm Docker stack healthy
+- npm run test:db:migrations
+- npm run test:integration
+- npm run test:e2e:db
+- npm run quality:full
+
+Docker:
+- docker compose config
+- docker compose build api
+- production Docker build
+- API health smoke
+- Swagger smoke
+- MSSQL health
+- migration CLI live connection
+
+If readiness endpoint is added:
+- test it with healthy DB
+- safely test failure behavior if practical without destructive operations
+- ensure liveness remains independent
+
+Every reported PASS must reflect an actually executed command.
+
+35. Git Audit
+-------------
+Use only read-only commands:
+
+git status --short --untracked-files=all
+git diff
+git diff --stat
+
+Because there may still be no initial commit, interpret untracked state correctly.
+
+Do NOT run:
+git add
+git commit
+git push
+
+36. Foundation Completion Criteria
+----------------------------------
+The backend foundation may be declared COMPLETE only if:
+
+- rules are established
+- NestJS bootstrap is stable
+- Node/npm pinned
+- strict TypeScript stable
+- lint/format stable
+- config/env validation stable
+- structured logging stable
+- request ID stable
+- global validation stable
+- global exception handling stable
+- Swagger stable
+- MSSQL integration stable
+- TypeORM config stable
+- migration tooling stable
+- synchronize=false
+- migrationsRun=false
+- Docker dev stack stable
+- MSSQL init idempotent
+- persistence verified
+- unit tests pass
+- DB-free e2e pass
+- DB integration tests pass
+- DB-aware AppModule e2e passes
+- quality passes
+- quality:full passes
+- no business modules introduced
+- no unresolved BLOCKER/HIGH foundation issue remains
+
+If a BLOCKER/HIGH issue remains:
+do NOT declare the phase complete.
+
+37. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+
+The report must be comprehensive.
+
+Required sections:
+
+1. Objective
+
+2. Foundation Status Before Audit
+
+3. Audit Method
+Explain what was reviewed.
+
+4. Findings Summary
+Table:
+- ID
+- severity
+- area
+- finding
+- action
+
+5. Architecture Audit
+
+6. Dependency Audit
+
+7. TypeScript / ESLint / Prettier Audit
+
+8. Configuration Audit
+
+9. Logging / Privacy Audit
+
+10. Request ID Audit
+
+11. Validation / Exception Contract Audit
+
+12. Swagger Audit
+
+13. Health / Readiness Decision
+State whether readiness endpoint was:
+- implemented
+or
+- deliberately deferred
+and why.
+
+14. MSSQL / TypeORM Audit
+
+15. UUID / Naming Convention Final Decision
+
+16. Migration Architecture Audit
+
+17. Test Architecture Audit
+
+18. Test Database Safety Audit
+
+19. Quality Gate Audit
+
+20. Dockerfile Audit
+
+21. Docker Compose Audit
+
+22. WSL / Local Developer Experience
+
+23. Shell / CRLF Audit
+
+24. Security Foundation Audit
+
+25. Files Created
+
+26. Files Modified
+
+27. Changes Implemented
+For every change:
+- problem
+- fix
+- reason
+
+If no changes:
+state explicitly that audit required no code/config modifications.
+
+28. README / Permanent Docs
+Document whether README was created/updated.
+
+29. Commands Executed
+
+30. Validation Results
+Explicit PASS/FAIL for:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- coverage
+- build
+- audit
+- quality
+- Docker Compose config
+- Docker dev build
+- Docker production build
+- MSSQL health
+- migration test DB
+- DB integration
+- DB-aware e2e
+- quality:full
+- API health
+- Swagger
+- readiness if implemented
+
+31. Remaining Issues
+List only real remaining issues with severity.
+
+32. Production-Future Items
+Clearly separate them from current foundation defects.
+
+33. Git Status / Scope Summary
+
+34. Rules Compliance Review
+
+35. Out-of-Scope Confirmation
+Confirm no business modules/auth/CI were implemented.
+
+36. Foundation Completion Decision
+
+State exactly one:
+
+A.
+BACKEND FOUNDATION COMPLETE
+
+or
+
+B.
+BACKEND FOUNDATION NOT COMPLETE
+
+If B:
+list blockers.
+
+37. Next Major Phase
+
+ONLY if foundation is COMPLETE:
+
+Recommend:
+
+Phase 2 — Authentication + Users + Roles + Permissions
+
+Do NOT implement it.
+
+38. Commit Message Recommendation
+
+IMPORTANT:
+
+If code/config/permanent documentation changed during Prompt #007:
+print exactly ONE recommended command:
+
+git commit -m "<message>"
+
+Cursor MUST NOT execute it.
+
+If no code/config/permanent documentation changed:
+state:
+No code/config changes; no commit message required.
+
+38. Final Response
+------------------
+When finished, respond concisely with:
+
+- Prompt #007 status
+- Foundation COMPLETE / NOT COMPLETE
+- all validation PASS/FAIL
+- report path:
+  docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+
+If code/config/permanent documentation changed:
+also print exactly ONE recommended:
+
+git commit -m "<message>"
+
+Do NOT run git add.
+Do NOT run git commit.
+Do NOT run git push.
+
+Do not proceed to Auth/Users/Roles automatically.

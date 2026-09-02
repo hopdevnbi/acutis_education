@@ -1,0 +1,693 @@
+CURSOR PROMPT — EXAM ENGINE #003/8
+PERSISTENCE + EXAM MODULE SHELL + SCHEMA FOUNDATION
+
+CONTEXT
+-------
+Completed:
+- EXAM #001 — Domain Audit + Formal Assessment Design
+- EXAM #002/8 — Student Learner Auth + Self-Scope Foundation
+
+Current:
+EXAM #003 / 8
+
+Remaining:
+#004 Authoring + publish + class assignment APIs
+#005 Attempt generation + immutable localized snapshots
+#006 Answer save + submit + grading + time/attempt controls
+#007 Results/review + Learning Progress integration + FE/Mobile hardening
+#008 Final audit + demo seed + Postman + quality/full + Docker
+
+Inherited guarantees:
+- STUDENT role exists
+- learner.self.read exists
+- demo Student user is linked to Student profile
+- GET /api/v1/me/learner-context exists
+- LearnerSelfScopeService exported
+- Parent Exam attempt policy remains DENIED
+- Student actor gate is unblocked
+- no Exam module/schema exists yet
+- EXAM #001 design is the source of truth
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001 and #002 reports first
+- keep scope strictly to persistence/module foundation
+- create detailed docs report
+- NOT implement authoring HTTP yet
+- NOT implement attempt HTTP yet
+- NOT auto-proceed #004
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(exam): add exam persistence foundation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all .cursor/rules/*.mdc
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/LOCALIZATION_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Inspect:
+src/modules/student/
+src/modules/enrollment/
+src/modules/question-bank/
+src/modules/localization/
+src/modules/practice/
+src/database/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+test/
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Implement ONLY the Exam persistence/module-boundary foundation:
+
+A. ExamModule shell
+B. entities/enums/interfaces
+C. migration(s)
+D. internal repository registration
+E. ExamService facade skeleton
+F. module-boundary tests
+G. schema constraints/indexes
+H. persistence helpers only where necessary
+I. migration/integration tests
+J. quality:full + Docker
+
+Do NOT implement:
+- authoring controllers/routes
+- assignment controllers/routes
+- attempt start/save/submit routes
+- grading orchestration
+- result/review endpoints
+- Learning Progress composition
+- localization delivery logic
+- ExamVersion Localization adapter
+- demo seed/Postman
+
+EXAM-OWNED TABLES
+-----------------
+Create exactly these 7 tables:
+
+1. exams
+2. exam_versions
+3. exam_version_questions
+4. exam_assignments
+5. exam_attempts
+6. exam_attempt_questions
+7. exam_attempt_answers
+
+Do NOT create:
+- exam_results
+- exam_answer_revisions
+- exam_statistics
+- exam_events
+- exam translation tables
+
+EXAMS
+-----
+Fields:
+id UUID PK app-generated
+parish_id UUID NOT NULL
+code varchar NOT NULL
+status ACTIVE|INACTIVE
+created_at
+updated_at
+
+Unique:
+(parish_id, code)
+
+No ORM relation/FK to Parish preferred.
+
+EXAM_VERSIONS
+-------------
+Fields:
+id UUID PK
+exam_id UUID NOT NULL
+version_number int NOT NULL
+title nvarchar NOT NULL
+description nvarchar(max) NULL
+instructions nvarchar(max) NULL
+source_locale varchar(32) NOT NULL
+duration_minutes int NOT NULL
+max_attempts int NOT NULL
+passing_score_percent decimal NULL
+shuffle_questions bit NOT NULL default false
+shuffle_options bit NOT NULL default false
+review_policy_json nvarchar(max) NOT NULL
+status DRAFT|PUBLISHED|ARCHIVED
+published_at datetime2 NULL
+published_by_user_id UUID NULL
+created_at
+updated_at
+
+Unique:
+(exam_id, version_number)
+
+Checks:
+duration_minutes > 0
+max_attempts >= 1
+passing score NULL or 0..100
+review_policy_json ISJSON
+
+REVIEW POLICY
+-------------
+Typed shape:
+
+{
+  scoreVisibility: NEVER | AFTER_SUBMIT | AFTER_ASSIGNMENT_CLOSE,
+  correctAnswerVisibility: NEVER | AFTER_SUBMIT | AFTER_ASSIGNMENT_CLOSE,
+  explanationVisibility: NEVER | AFTER_SUBMIT | AFTER_ASSIGNMENT_CLOSE
+}
+
+Create enum/interface + validator.
+Persist normalized JSON.
+
+EXAM_VERSION_QUESTIONS
+----------------------
+Fields:
+id
+exam_version_id
+question_id
+question_version_id NULL for DRAFT, pinned at publish
+sort_order
+created_at
+updated_at
+
+MVP equal weight.
+No points_weight.
+
+Unique:
+(exam_version_id, sort_order)
+Prefer unique(exam_version_id, question_id)
+
+No QB FK/ORM relation.
+
+EXAM_ASSIGNMENTS
+----------------
+Fields:
+id
+exam_version_id
+class_id
+opens_at
+closes_at
+status SCHEDULED|OPEN|CLOSED|CANCELLED
+created_by_user_id
+created_at
+updated_at
+
+Check:
+closes_at > opens_at
+
+Class scalar only.
+
+Do not over-constrain duplicate assignments without evidence; document final index/uniqueness decision.
+
+EXAM_ATTEMPTS
+-------------
+Fields:
+id
+exam_assignment_id
+exam_id
+exam_version_id
+enrollment_id
+student_id
+class_id
+parish_id
+academic_year_id
+catechism_level_id
+attempt_number
+status IN_PROGRESS|SUBMITTED|GRADED
+client_request_id NULL
+request_semantic_hash char(64) NULL
+started_by_user_id
+started_at
+deadline_at
+submitted_at NULL
+graded_at NULL
+finalization_reason NULL
+question_count NULL
+correct_count NULL
+score_percent NULL
+passed NULL
+exam_title_delivered NULL
+instructions_delivered NULL
+exam_translation_revision_id NULL
+exam_delivered_locale NULL
+created_at
+updated_at
+
+Finalization reason:
+LEARNER_SUBMIT
+TIME_EXPIRED
+ASSIGNMENT_CLOSED
+
+Unique:
+(exam_assignment_id, enrollment_id, attempt_number)
+
+Filtered unique:
+(exam_assignment_id, enrollment_id)
+WHERE status='IN_PROGRESS'
+
+Filtered unique client idempotency:
+(exam_assignment_id, enrollment_id, client_request_id)
+WHERE client_request_id IS NOT NULL
+
+Checks:
+attempt_number >= 1
+deadline_at >= started_at
+score range where practical
+
+EXAM_ATTEMPT_QUESTIONS
+----------------------
+Fields:
+id
+exam_attempt_id
+question_id
+question_version_id
+source_content_hash char(64)
+sort_order
+delivered_option_order_json nvarchar(max)
+translation_revision_id NULL
+delivered_locale varchar(32)
+created_at
+
+No QB/Localization FK.
+
+Checks:
+ISJSON(delivered_option_order_json)
+source hash format if practical
+
+Unique:
+(exam_attempt_id, sort_order)
+
+Prefer no duplicate question version in same attempt unless #001 design says otherwise.
+
+EXAM_ATTEMPT_ANSWERS
+--------------------
+Fields:
+id
+exam_attempt_question_id
+selected_option_ids_json nvarchar(max)
+saved_at
+saved_by_user_id
+client_answer_id UUID
+answer_semantic_hash char(64)
+created_at
+updated_at
+
+Unique:
+exam_attempt_question_id
+
+Important design issue:
+#001 wants one current mutable answer row, but also arbitrary replay safety for clientAnswerId.
+
+With a single mutable row, perfect historical replay of older clientAnswerIds is impossible without extra history.
+
+DO NOT add an 8th table silently.
+
+Audit and choose exact MVP semantics.
+
+Strong preference:
+- one current answer row
+- latest-save idempotency only
+- stable per-question clientAnswerId may be reused by client
+- document limitation honestly
+- if this becomes a real HIGH issue, stop/report rather than inventing schema
+
+This exact point MUST be addressed in final report.
+
+RESULT STORAGE
+--------------
+Result fields live on exam_attempts.
+No exam_results table.
+
+Before GRADED:
+result fields may be null.
+
+After GRADED:
+questionCount/correctCount/scorePercent required by service semantics.
+
+EXAM MODULE
+-----------
+Create ExamModule.
+
+Export:
+ExamService ONLY
+
+Do NOT export:
+entities
+repos
+TypeOrmModule
+internal persistence services
+
+AppModule imports ExamModule.
+
+Keep imports minimal in #003:
+TypeOrmModule for Exam entities only unless another module is strictly required now.
+
+Do not prematurely import QB/Localization/Enrollment/Class/Student until #004/#005.
+
+ENTITY / FK RULES
+-----------------
+Prefer scalar IDs everywhere.
+
+No cross-module ORM relations.
+
+Within Exam tables:
+internal SQL FK allowed.
+
+Cross-module IDs:
+questionId
+questionVersionId
+translationRevisionId
+enrollmentId
+studentId
+classId
+parishId
+academicYearId
+catechismLevelId
+
+Prefer no SQL FK; validate later through public services.
+
+Actor user FKs may follow existing NO ACTION project convention if consistent.
+
+UUID STRATEGY
+-------------
+Application-generated UUID v4.
+No DB UUID defaults.
+
+LOCALE / TEXT
+-------------
+Locale columns varchar(32), BCP47 validated later.
+Translatable text nvarchar/nvarchar(max).
+Codes/hashes varchar/char.
+
+INDEXES
+-------
+Include indexes for:
+- exams parish/status
+- exam_versions exam/status
+- exam_version_questions examVersion/sortOrder
+- assignments class/status/window
+- attempts enrollment/status
+- attempts assignment/enrollment/attemptNumber
+- one-active-attempt filtered unique
+- clientRequestId filtered unique
+- attempts class/status
+- attempt questions attempt/sortOrder
+- attempt answers unique attemptQuestion
+
+DB CHECKS
+---------
+Use safe checks for:
+enum values
+positive version number/duration/max attempts
+passing score range
+review JSON ISJSON
+closesAt > opensAt
+attempt number >=1
+deadline >= started
+score range
+option/answer JSON ISJSON
+hash format if practical
+
+Do not duplicate complex business logic in brittle SQL.
+
+PERSISTENCE SERVICES
+--------------------
+Only create internal persistence helpers if needed for tests/module cleanliness.
+
+Do NOT implement authoring/attempt lifecycle yet.
+
+STUDENT ACTOR COMPATIBILITY
+---------------------------
+Schema must support:
+student_id
+enrollment_id
+started_by_user_id
+
+No parent proxy fields.
+No guardian actor semantics.
+
+Parent attempt policy remains DENIED.
+
+LOCALIZATION SNAPSHOT FIELDS
+----------------------------
+Question snapshot:
+translation_revision_id nullable
+delivered_locale
+source_content_hash
+
+Exam metadata delivery fields on attempt row as designed.
+
+ExamVersion localization adapter remains deferred.
+
+TESTS
+-----
+Unit:
+- enums
+- review policy validation
+- entity mappings
+- UUID generation
+- score decimal mapping
+- no cross-module ORM relations
+
+Real MSSQL migration/integration:
+- exactly 7 Exam tables
+- no extra Exam tables
+- required columns
+- unique constraints
+- filtered unique active attempt
+- filtered client request index
+- JSON checks
+- enum checks
+- score bounds
+- assignment window check
+- internal FKs
+- no QB/Localization FK
+- app-generated UUID/no DB UUID default
+
+Module boundary:
+ExamService only export
+no repo/entity export
+no forwardRef
+no cycles
+
+REGRESSION
+----------
+Keep green:
+Auth/User
+Student self-scope
+Enrollment/Class
+Curriculum
+Question Bank
+Practice
+Learning Progress
+Localization
+
+QUALITY
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-schema ."
+
+PASS required.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+Docker build.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/EXAM_003_PERSISTENCE_MODULE_SCHEMA_FOUNDATION_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited #001/#002
+3 Rules applied
+4 Files created
+5 Files modified
+6 ExamModule architecture
+7 Public export
+8 Table ownership
+9 exams schema
+10 exam_versions schema
+11 review policy storage
+12 exam_version_questions schema
+13 exam_assignments schema
+14 exam_attempts schema
+15 exam_attempt_questions schema
+16 exam_attempt_answers schema
+17 Answer idempotency design decision
+18 Result storage decision
+19 Status enums
+20 Finalization reason enum
+21 UUID strategy
+22 Locale storage
+23 Unicode storage
+24 Internal FK strategy
+25 Cross-module FK strategy
+26 ORM relation audit
+27 Indexes
+28 Active-attempt filtered unique
+29 clientRequestId idempotency index
+30 DB checks
+31 ExamService facade
+32 AppModule registration
+33 Student actor compatibility
+34 Parent-denied compatibility
+35 Localization snapshot columns
+36 Version immutability readiness
+37 Assignment readiness
+38 Attempt readiness
+39 Authoring API readiness
+40 Unit tests
+41 Migration/integration tests
+42 DB e2e/regression
+43 Module boundary tests
+44 Existing regression
+45 pristine quality:full
+46 Docker
+47 npm audit
+48 Microservice extraction
+49 Security
+50 Risks/known decisions
+51 Commands
+52 Validation matrix
+53 Out-of-scope
+54 EXAM #004 readiness
+55 Updated prompt count
+56 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- format/lint/typecheck/unit/e2e/build/audit/quality
+- pristine DB reset/migrations/integration/DB e2e
+- quality:full one clean run
+- Docker
+- no cycle
+- no forwardRef
+- ExamService only export
+- exactly 7 Exam-owned tables
+- no exam_results
+- no exam_answer_revisions
+- no cross-module ORM relations
+- no QB/Localization FK
+- app-generated UUID
+- no DB UUID defaults
+- root/version/status checks
+- reviewPolicy ISJSON
+- duration/maxAttempts checks
+- passing score range
+- ordered question schema
+- assignment window check
+- one active attempt DB guard
+- attempt-number uniqueness
+- client request idempotency index
+- question snapshot fields
+- option-order JSON
+- current-answer uniqueness
+- answer idempotency limitation documented honestly
+- result fields on attempt
+- Parent proxy absent
+- Student actor compatible
+- no HTTP APIs added
+- prior regression
+- Git compliance
+
+IMPORTANT GATE — ANSWER IDEMPOTENCY
+-----------------------------------
+Do NOT claim perfect arbitrary historical clientAnswerId replay if the one-row answer schema cannot support it.
+
+State exact semantics and severity.
+
+If this is MEDIUM and safe for MVP, document.
+If HIGH, stop and recommend schema correction before #004.
+
+#004 READINESS
+--------------
+Only if BLOCKER/HIGH=0 and schema/quality/Docker are clean.
+
+Recommend:
+EXAM #004/8 —
+AUTHORING + PUBLISH + CLASS ASSIGNMENT APIs
+
+Next scope:
+- Exam permissions
+- root CRUD
+- draft version CRUD
+- add/remove/reorder questions
+- publish pins QuestionBank published versions
+- clone
+- assignment create/list/update/cancel
+- no learner attempts yet
+
+PROMPT COUNT
+------------
+EXAM #003/8 complete
+approximately 5 prompts remain (#004–#008)
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- EXAM #003 status
+- schema PASS/FAIL
+- table count
+- module boundary
+- answer idempotency decision
+- quality:full
+- Docker
+- BLOCKER/HIGH
+- report path
+
+Then exactly:
+git commit -m "feat(exam): add exam persistence foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

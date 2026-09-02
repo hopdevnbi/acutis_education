@@ -1,0 +1,738 @@
+CURSOR PROMPT — QUESTION BANK #007/8
+SEARCH / FILTER + IMPORT / EXPORT READINESS + OPENAPI / FE / MOBILE HARDENING
+
+Context
+-------
+Completed:
+- #001 Domain Audit + Model Design
+- #002 Schema + Entities + Migrations
+- #003 Metadata CRUD + Tags/Curriculum Links + RBAC
+- #004 Options + Correct Answers + Publish
+- #005 Clone/Versioning + Learner Projection + Grading
+- #006 Curriculum/Media Integration + Scoped Delivery
+
+Current: QUESTION BANK #007/8
+Remaining after this: #008 Final audit + demo seed + Postman + quality/full + Docker + phase completion.
+
+Permanent rules
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports/code first
+- stay within #007 scope
+- create a detailed docs report
+- not auto-proceed to #008
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(question-bank): harden search and admin contracts"
+
+Do not execute it.
+
+Mandatory reading
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Reports:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+docs/QUESTION_BANK_004_OPTIONS_ANSWERS_PUBLISH_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/curriculum/
+src/modules/media/
+src/modules/parish/
+src/modules/access-control/
+src/modules/auth/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Primary objective
+-----------------
+Implement/harden:
+A. admin search/filter/pagination/sort
+B. tag + curriculum/lesson filtering
+C. draft/published state filters
+D. Unicode text/code search
+E. stable query semantics
+F. import/export READINESS
+G. safe read-only JSON export
+H. validate-only import contract if safe
+I. OpenAPI completeness
+J. FE admin contract readiness
+K. Mobile delivery contract readiness
+L. Practice/Exam readiness
+M. tests + quality/full + Docker
+
+Do NOT implement:
+- PracticeModule
+- ExamModule
+- learner attempts/sessions
+- translations
+- SHORT_TEXT/NUMBER
+- partial credit
+- AI generation
+- shared global cross-parish bank
+- spreadsheet/XLSX importer unless clearly justified
+
+Search endpoint
+---------------
+Harden:
+GET /api/v1/parishes/:parishId/questions
+
+Permission: questions.read
+Parish scope required.
+
+Support:
+- status
+- sourceLocale
+- code
+- search
+- questionType
+- difficulty
+- versionStatus
+- hasDraft
+- hasPublished
+- tagId
+- tagCode
+- curriculumId
+- canonicalLessonKey
+- sortBy
+- sort
+- page
+- limit
+
+Return one row per QUESTION ROOT, never duplicate roots due joins.
+
+Effective-version semantics
+---------------------------
+Use a predictable rule for summary filters/search:
+DRAFT if present, otherwise current PUBLISHED.
+
+Apply to:
+- questionType
+- difficulty
+- prompt search
+
+Document this for FE.
+
+List row summary
+----------------
+Return compact root metadata plus:
+
+currentDraftVersion:
+id, versionNumber, questionType, difficulty, status
+
+currentPublishedVersion:
+id, versionNumber, questionType, difficulty, status, publishedAt
+
+Do NOT include:
+options
+correct answers
+explanation
+media JSON
+
+hasDraft / hasPublished
+-----------------------
+hasDraft=true if DRAFT exists.
+hasPublished=true only if currentPublishedVersionId points to current PUBLISHED.
+
+Historical ARCHIVED alone does not mean hasPublished=true.
+
+Text search
+-----------
+Parameterized query only.
+Unicode/Vietnamese search must work.
+LIKE-based MVP is acceptable.
+No raw SQL interpolation.
+No full-text index unless truly justified.
+
+Tag filter
+----------
+Support tagId/tagCode.
+Same parish only.
+No cross-parish leakage.
+
+Curriculum filter
+-----------------
+Support curriculumId + optional canonicalLessonKey.
+
+Prefer requiring curriculumId when canonicalLessonKey is supplied for predictable semantics.
+Return 400 if canonicalLessonKey is provided without curriculumId, unless current architecture strongly supports safe global key filtering.
+
+Pagination / sorting
+---------------------
+Use project conventions.
+
+page >= 1
+limit default 20
+max 100 or current standard
+
+Stable sort whitelist:
+createdAt
+updatedAt
+code
+status
+
+Default updatedAt DESC.
+
+No arbitrary sort column injection.
+
+Performance
+-----------
+Avoid N+1.
+Count DISTINCT question roots when joins exist.
+Audit generated SQL.
+Only add indexes if concrete need.
+No full-text infrastructure now.
+
+Authoring FE contract
+---------------------
+Audit existing endpoints so FE can:
+- create question + initial draft
+- edit draft metadata
+- edit options
+- set correct answers
+- tags
+- curriculum links
+- media refs
+- publish validation
+- publish
+- clone
+- preview
+- search/filter
+
+Do not create unnecessary god DTO if current version-authoring + tag/link APIs are sufficient.
+
+Publish validation UX
+---------------------
+Ensure Swagger documents 422 issues[] clearly for:
+PROMPT_REQUIRED
+INVALID_OPTION_COUNT
+CORRECT_ANSWER_REQUIRED
+TOO_MANY_CORRECT_ANSWERS
+ANSWER_OPTION_NOT_FOUND
+DUPLICATE_OPTION_CODE
+OPTION_REPRESENTATION_REQUIRED
+DIFFICULTY_REQUIRED
+ASSET_NOT_FOUND
+ASSET_NOT_READY
+ASSET_CATEGORY_MISMATCH
+DRAFT_ONLY
+ANSWER_DEFINITION_NOT_ALLOWED
+
+Import/export strategy
+----------------------
+Prefer:
+EXPORT = implemented now, read-only JSON
+IMPORT = validate-only now
+IMPORT COMMIT = deferred unless requirements are fully safe
+
+Do NOT implement unsafe bulk mutation.
+
+Version export endpoint
+-----------------------
+Preferred:
+GET /api/v1/question-versions/:versionId/export
+
+Permission: questions.read + parish scope.
+
+QuestionExportPackageV1:
+- schemaVersion: 1
+- sourceQuestionCode
+- sourceLocale
+- versionNumber
+- questionType
+- prompt
+- instruction
+- explanation
+- difficulty
+- prompt/explanation media asset refs
+- options with export-local keys
+- correctOptionKeys
+- tag codes
+- curriculum semantic links
+
+No actor PII.
+No storage provider keys/bucket/path.
+
+Export option keys
+------------------
+Correct answers must NOT depend on DB option UUIDs for import semantics.
+
+Use export-local stable keys:
+- option code if present/unique
+- otherwise deterministic `opt-1`, `opt-2`, ...
+
+CorrectOptionKeys reference these export keys.
+
+Raw source UUID may be informational only, not required to import.
+
+Media portability
+-----------------
+mediaAssetId is environment-local.
+
+Document:
+V1 export media refs are only directly reusable in same environment unless an external media migration process exists.
+
+Do not pretend cross-environment media portability is solved.
+
+Curriculum portability
+----------------------
+Prefer curriculum code + canonicalLessonKey in export semantics.
+
+Raw curriculum UUID is environment-specific.
+
+If current Curriculum API lacks lookup by code, document the import portability gap.
+
+Tag portability
+---------------
+Use tag code.
+Validate-only resolves existing tag code.
+Do not auto-create missing tags.
+
+Validate-only import endpoint
+-----------------------------
+Preferred:
+POST /api/v1/parishes/:parishId/question-imports/validate
+
+Permission: questions.manage
+
+Input:
+QuestionExportPackageV1
+
+Output:
+valid
+issues[]
+normalizedPreview
+
+NO DB writes.
+
+Validation issues
+-----------------
+Structured:
+code
+path
+message
+severity ERROR|WARNING
+
+Potential codes:
+UNSUPPORTED_SCHEMA_VERSION
+UNSUPPORTED_QUESTION_TYPE
+INVALID_SOURCE_LOCALE
+PROMPT_REQUIRED
+INVALID_OPTION_COUNT
+DUPLICATE_OPTION_EXPORT_KEY
+CORRECT_OPTION_KEY_NOT_FOUND
+QUESTION_CODE_CONFLICT
+TAG_NOT_FOUND
+CURRICULUM_NOT_FOUND
+CANONICAL_LESSON_NOT_FOUND
+MEDIA_ASSET_NOT_FOUND
+MEDIA_ASSET_NOT_READY
+MEDIA_ASSET_CATEGORY_MISMATCH
+
+Validate:
+- schemaVersion
+- type
+- locale
+- prompt lengths/no HTML
+- option count
+- export-key uniqueness
+- correct-key resolution
+- tag code
+- curriculum semantics
+- media readiness/category
+- question code collision
+
+Import security
+---------------
+Bound package size.
+Bound nested arrays:
+- options <= current MAX_OPTIONS
+- tags e.g. <= 50
+- links e.g. <= 50
+
+No raw HTML.
+No DB writes in validate-only path.
+
+OpenAPI
+-------
+Audit ALL Question Bank routes.
+
+Ensure:
+- DTOs
+- enums
+- auth
+- 400/401/403/404/409/422
+- examples
+- pagination
+- publish issue schema
+- preview schema
+- export V1
+- import validate schema
+
+No entity types.
+
+FE readiness verdict
+--------------------
+Report:
+FE QUESTION BANK ADMIN CONTRACT READY: YES/NO
+
+Mobile readiness verdict
+------------------------
+Report:
+MOBILE QUESTION DELIVERY CONTRACT READY: YES/NO
+
+Mobile does not author Question Bank.
+Base delivery contract should include:
+- immutable questionVersionId
+- type enum
+- option IDs
+- mediaAssetId
+- no answer leakage
+
+Contextual media remains future Practice/Exam responsibility.
+
+Practice/Exam readiness
+-----------------------
+Report:
+PRACTICE INTEGRATION CONTRACT READY: YES/NO
+EXAM INTEGRATION CONTRACT READY: YES/NO
+
+Verify:
+- current published selection
+- learner projection
+- immutable snapshot
+- grading
+- archived version support
+- stable option order
+- no mutable current-root dependency
+
+Question-type rendering contract
+--------------------------------
+Document:
+SINGLE_CHOICE -> single select
+MULTIPLE_CHOICE -> multi select; exact-set scoring server-side
+TRUE_FALSE -> two normal options
+
+Client must never infer correctness.
+
+Multilingual
+------------
+Reconfirm:
+- sourceLocale
+- sourceContentHash
+- Unicode search
+- correctness independent of display text
+- export includes locale
+- validate import locale
+- no runtime translation
+
+Security/privacy
+----------------
+- no learner PII
+- no answer leakage
+- no cross-parish search
+- no generic learner routes
+- export admin/read only
+- import validate manage only
+- no storage internals
+- no raw SQL/HTML
+
+Unit tests
+----------
+Search:
+- pagination
+- sort
+- Unicode search
+- status
+- type
+- difficulty
+- hasDraft
+- hasPublished
+- tag
+- curriculum
+- canonicalLessonKey
+- cross-parish safety
+- unique root rows
+
+Export:
+- schemaVersion
+- option export keys
+- correct answer key mapping
+- locale
+- tags
+- curriculum links
+- media refs
+- no PII/storage internals
+
+Import validate:
+- valid package
+- unsupported schema
+- duplicate option key
+- missing correct key
+- invalid type
+- invalid locale
+- code conflict
+- tag missing
+- curriculum invalid
+- media invalid
+- NO DB write
+
+Integration tests
+-----------------
+Real MSSQL:
+- mixed draft/published/archived questions
+- list filters
+- Unicode prompt search
+- tag filter
+- curriculum/key filter
+- correct total count
+- no duplicate roots
+- export package
+- import validation with zero DB mutation
+
+DB e2e
+------
+- PARISH_ADMIN own search
+- CATECHIST read search own parish
+- cross-parish denied
+- PARENT denied
+- export permission
+- import validate permission
+- CATECHIST import validate denied
+- invalid package rejected
+- no import commit endpoint
+
+Existing regression
+-------------------
+#003–#006
+Curriculum
+Media
+Auth
+must PASS.
+
+quality:full
+------------
+Run pristine:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+
+Docker
+------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-contracts .
+
+PASS required.
+
+README / contract notes
+-----------------------
+If project convention supports, document:
+- MVP question types
+- lifecycle
+- authoring roles
+- search semantics
+- export V1
+- import validate-only
+- Practice/Exam boundary
+- no generic learner API
+- no runtime translation
+
+Do NOT create final demo seed/Postman unless naturally needed.
+Prefer final canonical seed/Postman in #008.
+
+Required commands
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:question-bank-contracts .
+
+Required report
+---------------
+Create:
+docs/QUESTION_BANK_007_SEARCH_IMPORT_EXPORT_CONTRACT_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #006
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final module architecture
+7 Search endpoint
+8 Root-row search semantics
+9 Effective-version semantics
+10 Unicode text/code search
+11 Status filters
+12 Type/difficulty filters
+13 hasDraft/hasPublished
+14 Tag filters
+15 Curriculum filters
+16 canonicalLessonKey filter
+17 Pagination
+18 Sorting
+19 Query performance/N+1
+20 Index decision
+21 Search result DTO
+22 FE authoring contract audit
+23 Publish validation UX contract
+24 Export strategy
+25 Export endpoint
+26 QuestionExportPackageV1
+27 Export option key strategy
+28 Correct answer export mapping
+29 Media portability
+30 Curriculum portability
+31 Tag portability
+32 Import strategy
+33 Validate-only endpoint
+34 Import issue model
+35 Import security/limits
+36 Import no-write guarantee
+37 OpenAPI audit
+38 Stable errors
+39 FE admin readiness
+40 Mobile delivery readiness
+41 Practice readiness
+42 Exam readiness
+43 Rendering contract
+44 Multilingual readiness
+45 Security/privacy
+46 Unit tests
+47 Integration tests
+48 DB e2e
+49 Existing regression
+50 pristine quality:full
+51 Docker
+52 README/contracts
+53 Microservice extraction
+54 Commands
+55 Validation matrix
+56 Known/deferred
+57 Out-of-scope
+58 QUESTION BANK #008 readiness
+59 Prompt count
+60 Commit recommendation
+
+Explicit PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- QuestionBankService only export
+- unique root rows
+- pagination
+- stable sort
+- Unicode search
+- status filter
+- type filter
+- difficulty filter
+- hasDraft
+- hasPublished
+- tag filter
+- curriculum filter
+- canonicalLessonKey filter
+- cross-parish search denied
+- compact list DTO no answers
+- export schemaVersion
+- export option keys
+- export correct-answer mapping
+- export no PII
+- export no storage internals
+- import validate no DB write
+- unsupported schema denied
+- duplicate option key denied
+- unresolved correct key denied
+- question code conflict issue
+- media validation in import
+- curriculum validation in import
+- OpenAPI complete
+- FE admin contract ready
+- Mobile delivery contract ready
+- Practice contract ready
+- Exam contract ready
+- no generic learner API
+- no public grading HTTP
+- no import commit endpoint unless explicitly justified
+- no translation tables
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+#008 readiness
+--------------
+Only if no unresolved BLOCKER/HIGH:
+QUESTION BANK #008/8 — FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION
+
+Prompt count
+------------
+QUESTION BANK #007/8 complete
+approximately 1 prompt remains
+
+Final response
+--------------
+Respond concisely:
+- QUESTION BANK #007 status
+- search/filter PASS/FAIL
+- export PASS/FAIL
+- import validation readiness PASS/FAIL
+- FE admin readiness
+- Mobile delivery readiness
+- Practice/Exam readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly:
+git commit -m "feat(question-bank): harden search and admin contracts"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #008 automatically.

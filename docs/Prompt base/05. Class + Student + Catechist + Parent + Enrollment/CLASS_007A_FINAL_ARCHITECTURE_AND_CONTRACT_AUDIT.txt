@@ -1,0 +1,797 @@
+CURSOR FINAL CORRECTIVE PROMPT — CLASS/PEOPLE/ENROLLMENT #007A
+FINAL ARCHITECTURE GATE + INTEGRATION HARDENING + FE/MOBILE CONTRACT READINESS
+
+1. Context
+----------
+Nominal CLASS phase prompts executed:
+
+#001 Domain Audit
+#002 Schema + Entities + Migrations
+#003 Class Service + API
+#004 Student + Guardian Services + APIs
+#005 Catechist Assignment + Enrollment Services + APIs
+#006 Scoped Authorization
+#007 Domain Seed
+
+However there is an unresolved process/architecture concern:
+
+CLASS #006 report explicitly stated that `forwardRef` remained in the
+Student / Enrollment / Class dependency graph.
+
+A corrective prompt #006A was intended to remove those cycles before #007,
+but the latest #007 report does not contain evidence that #006A was executed.
+
+Therefore the CLASS phase MUST NOT be considered final until this prompt
+independently verifies and, if necessary, fixes the architecture.
+
+This prompt is a final corrective gate after #007.
+
+Do NOT begin the next backend domain.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Read reports:
+
+- docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+- docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+- docs/CLASS_003_CLASS_SERVICE_API_RBAC_REPORT.md
+- docs/CLASS_004_STUDENT_GUARDIAN_SERVICES_API_REPORT.md
+- docs/CLASS_005_CATECHIST_ENROLLMENT_SERVICES_API_REPORT.md
+- docs/CLASS_006_SCOPED_RBAC_REPORT.md
+- docs/CLASS_007_CLASS_ENROLLMENT_DOMAIN_SEED_REPORT.md
+
+If this file exists, also read:
+- docs/CLASS_006A_REMOVE_SCOPE_MODULE_CYCLES_REPORT.md
+
+Inspect:
+
+src/modules/parish/
+src/modules/class/
+src/modules/student/
+src/modules/enrollment/
+src/modules/users/
+src/modules/access-control/
+src/modules/auth/
+src/modules/module-boundaries.spec.ts
+src/database/
+test/
+README.md
+package.json
+
+Inspect git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Independently verify and harden the entire:
+
+Parish Membership
+Class
+Student
+Guardian
+Catechist Assignment
+Enrollment
+Scoped Authorization
+
+domain before declaring the phase COMPLETE.
+
+The final result MUST satisfy:
+
+- no circular module dependency
+- no `forwardRef` workaround in this bounded context
+- no cross-module repository/entity access
+- correct scoped authorization
+- correct historical enrollment behavior
+- demo seed idempotent
+- full quality validation
+- Docker build
+- Swagger/API contract ready for React Web
+- API contract reviewed for future React Native Mobile use
+
+4. Critical Architecture Gate — forwardRef
+------------------------------------------
+Search production source for:
+
+forwardRef(
+@Inject(forwardRef
+StudentModule
+EnrollmentModule
+ClassModule
+ParishModule
+
+Build the ACTUAL current dependency graph.
+
+Specifically verify whether any of these exist:
+
+StudentModule -> EnrollmentModule
+EnrollmentModule -> StudentModule
+
+ClassModule -> EnrollmentModule
+EnrollmentModule -> ClassModule
+
+ParishModule -> StudentModule
+ParishModule -> ClassModule
+ParishModule -> EnrollmentModule
+
+Any cycle among these bounded contexts is unacceptable.
+
+Do NOT accept `forwardRef` as the solution.
+
+5. Required Target Graph
+------------------------
+Preferred final direction:
+
+UsersModule
+   ↑
+StudentModule
+
+ParishModule
+   ↑
+ClassModule
+   ↑
+EnrollmentModule
+
+StudentModule
+   ↑
+EnrollmentModule
+
+ClassModule may depend on:
+- ParishModule
+- AcademicStructureModule
+- UsersModule
+
+EnrollmentModule may depend on:
+- StudentModule
+- ClassModule
+
+StudentModule MUST NOT depend on EnrollmentModule.
+
+ParishModule MUST NOT depend on Student/Class/Enrollment.
+
+No cycles.
+
+If current implementation differs but is still truly acyclic and respects ownership,
+document the exact justified graph.
+
+6. Fix Cycles If Present
+------------------------
+If any cycle exists:
+
+refactor ownership/orchestration.
+
+Preferred techniques:
+
+- move cross-domain HTTP orchestration to the downstream module
+- use narrow public snapshot/query services
+- batch snapshot APIs instead of repository access
+- caller-side composition of scope evidence
+- keep persistence owned by the bounded context
+
+Do NOT:
+
+- add more `forwardRef`
+- create a generic AuthorizationGodService
+- export TypeOrmModule
+- export repositories
+- export entities
+- move enrollment queries into StudentModule persistence
+- move Student queries into Enrollment repositories
+
+7. Parish Student Route
+-----------------------
+Preserve:
+
+GET /api/v1/parishes/:parishId/students
+
+Its response contract must remain backward compatible.
+
+Because parish student membership derives from Enrollment, ensure route orchestration
+does not force StudentModule -> EnrollmentModule.
+
+Preferred:
+Enrollment-side orchestration uses:
+- EnrollmentQueryService
+- StudentService public batch snapshot API
+
+No N+1 query pattern.
+
+8. Scope Services Final Audit
+-----------------------------
+Audit:
+
+ParishScopeService
+ClassScopeService
+StudentAccessService
+Enrollment scope orchestration
+
+Each scope service should query only evidence owned by its module or call lower-level
+public contracts without creating cycles.
+
+No cross-module repositories.
+
+9. Security Matrix — REQUIRED
+-----------------------------
+Validate these cases:
+
+SUPER_ADMIN
+- can access/manage all class-domain resources
+
+PARISH_ADMIN
+- can read/manage only resources within ACTIVE parish membership
+- cannot manage another parish
+
+CATECHIST
+- can read assigned classes
+- can read roster/enrollment data for assigned classes only
+- cannot globally read unrelated students/classes
+- cannot manage unless separately authorized by parish-admin scope
+
+PARENT
+- can read only ACTIVE guardian-linked children
+- can read only enrollment/class context reachable through linked children
+- cannot globally enumerate students
+
+STUDENT (if linked-user behavior currently exists)
+- only own StudentProfile / own enrollment context
+- if not implemented, explicitly mark deferred
+
+Role alone must never replace scope evidence.
+
+10. Existing Permission Seed Audit
+----------------------------------
+Audit current seeded permission matrix.
+
+Important:
+Earlier reports showed broad permissions may exist for CATECHIST/PARENT
+(`students.read`, `enrollments.read`, etc.).
+
+Verify that scoped guards actually prevent global access despite broad capability.
+
+If broad permissions are unnecessary and create risk:
+safely tighten sample/dev seed role mapping.
+
+Do NOT rename permission codes unless required.
+
+Document exact final matrix.
+
+11. Enrollment History Final Audit
+----------------------------------
+Verify:
+
+- Student stable identity across years
+- one ACTIVE enrollment per student/parish/academicYear
+- terminal history retained
+- transfer:
+  source ACTIVE -> TRANSFERRED
+  new target ACTIVE
+  same parish
+  same academic year
+  different class
+- transfer atomic
+- failure leaves original ACTIVE
+- new year uses new enrollment, not transfer
+- denormalized parishId/academicYearId cannot be forged from request
+- class structural IDs immutable enough to preserve history
+
+12. Enrollment Concurrency
+--------------------------
+Audit race behavior for:
+
+- concurrent enrollment
+- concurrent transfer
+- transfer vs direct enroll
+
+Final DB state must preserve:
+exactly one ACTIVE enrollment for student/parish/year.
+
+Add or retain deterministic concurrent integration test if practical.
+
+Map unique/deadlock/serialization errors to safe domain conflict.
+
+13. Guardian History Final Audit
+--------------------------------
+Verify:
+
+- multiple guardians supported
+- one ACTIVE link per student/guardian pair
+- one ACTIVE primary guardian per student
+- ENDED link remains historical
+- re-link creates new row
+- parent access requires ACTIVE link
+
+14. Catechist Assignment Final Audit
+------------------------------------
+Verify:
+
+- multiple classes per catechist
+- assignment history preserved
+- one ACTIVE assignment per class/user
+- ENDED is terminal
+- reassign creates new row
+- assignment does not automatically change Auth role
+
+15. Parish Membership Final Audit
+---------------------------------
+Verify:
+
+- one ACTIVE membership per parish/user
+- history preserved
+- multi-parish user supported
+- used as PARISH_ADMIN scope evidence
+- no `parish_id` added to users
+
+16. Class Lifecycle Final Audit
+-------------------------------
+Verify:
+
+PLANNED -> ACTIVE
+PLANNED -> CANCELLED
+ACTIVE -> COMPLETED
+ACTIVE -> CANCELLED
+
+Terminal immutable.
+
+Activation requires:
+- active parish
+- ACTIVE academic year
+- ACTIVE catechism level
+
+Audit class completion/cancellation with ACTIVE enrollments.
+
+If current ClassService can complete/cancel a class while ACTIVE enrollments remain,
+decide final policy carefully.
+
+Preferred:
+do NOT introduce ClassModule -> EnrollmentModule cycle.
+
+Possible solution:
+- keep class lifecycle independent for now and explicitly defer bulk enrollment closure
+- or implement downstream orchestration command outside ClassModule
+
+Do not compromise architecture.
+
+17. Seed Final Audit
+--------------------
+Verify commands:
+
+npm run seed:auth-rbac
+npm run seed:parish-academic
+npm run seed:class-enrollment
+
+Required:
+- dev/test safe environment guards
+- production rejected
+- idempotent
+- synthetic data only
+- public services only
+- no repository bypass
+
+Run class-enrollment seed twice.
+
+18. Demo Scope Verification
+---------------------------
+Using seeded users/data, verify:
+
+admin:
+- demo parish manage access
+
+catechist:
+- demo-class-a/b read access
+- unrelated class denied
+
+parent:
+- Demo Student Alpha/Beta accessible
+- unrelated student denied
+
+Use integration/E2E where practical.
+
+19. Postman / Manual Verification Assets
+----------------------------------------
+Audit existing Postman assets.
+
+If CLASS domain collection does not exist:
+create:
+
+docs/postman/Acutis-Education-Class-Enrollment.postman_collection.json
+
+Reuse existing local environment if suitable.
+
+Flow should cover:
+
+login admin
+list parish
+list academic years
+list classes
+create/update class if safe
+list students
+guardian links
+catechist assignments
+enrollments
+transfer/history
+scope examples
+
+No real credentials outside local synthetic seed.
+
+20. Swagger / OpenAPI Audit
+---------------------------
+Verify all current routes documented:
+
+Parish membership if public
+Class
+Student
+Guardian
+Catechist Assignment
+Enrollment
+
+Check:
+- bearer auth
+- request DTOs
+- response DTOs
+- enums
+- pagination
+- filters
+- errors
+- transfer route
+- date/datetime formats
+
+No TypeORM entity schemas leaking.
+
+21. React Web Contract Readiness
+-------------------------------
+Evaluate:
+
+FE CLASS/PEOPLE/ENROLLMENT CONTRACT READY: YES/NO
+
+Check:
+- stable route paths
+- stable UUID IDs
+- uppercase enums
+- pagination consistent
+- safe snapshots
+- no backend entity coupling
+- scoped authorization errors consistent
+- student/guardian/enrollment DTOs sufficient for admin screens
+- Swagger suitable for generated client/types
+
+22. React Native Mobile Contract Readiness
+------------------------------------------
+Evaluate separately:
+
+MOBILE CLASS/PEOPLE/ENROLLMENT CONTRACT READY: YES/NO
+
+Do NOT implement Mobile.
+
+Check native-client concerns:
+- all APIs HTTP/JSON
+- no browser-only assumption for these domain endpoints
+- DTOs mobile-safe
+- scoped authorization derives from authenticated user identity
+- no cookie-specific domain behavior
+- future mobile auth transport can use same domain APIs once auth strategy is audited
+- list sizes/pagination mobile-friendly
+
+This is contract readiness only.
+
+23. quality:full Flake — MUST RESOLVE OR EXPLICITLY BLOCK
+--------------------------------------------------------
+Previous reports repeatedly mentioned parallel DB E2E flake around:
+- auth-rbac seed cleanup
+- parish DB e2e
+- shared permission state
+
+This final prompt must investigate.
+
+Goal:
+`npm run quality:full` PASS in one clean run.
+
+Preferred fixes:
+- test data isolation
+- deterministic cleanup
+- avoid shared fixed-role mutation across parallel suites
+- serialize only the genuinely shared DB stage if project conventions allow
+- unique test fixtures
+
+Do NOT:
+- disable failing tests
+- reduce assertions
+- hide failure
+- mark PASS if the command did not pass
+
+If unable to fix:
+CLASS phase must be marked NOT COMPLETE.
+
+24. Fresh Database Validation
+-----------------------------
+Run:
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+
+Then full DB suites.
+
+Verify all migrations apply from zero.
+
+25. Migration Re-run Safety
+---------------------------
+Verify migration:show all applied.
+
+Do not edit prior committed migrations.
+
+If schema defect found:
+new migration only.
+
+26. Docker Validation
+---------------------
+Run:
+
+wsl docker build --target production -t catechism-api:class-domain-final .
+
+Must PASS.
+
+27. Module Boundary Tests
+-------------------------
+Final test must assert:
+
+ParishModule public exports only intended services
+ClassModule public exports only intended services
+StudentModule public exports only intended services
+EnrollmentModule public exports only intended services
+
+No:
+TypeOrmModule export
+entity export
+repository export
+
+Add static cycle assertions if missing.
+
+28. Microservice Extraction Map
+-------------------------------
+Document final extraction boundaries:
+
+Parish Service
+- parishes
+- parish_memberships
+
+Student Service
+- students
+- student_guardians
+
+Class Service
+- classes
+- class_catechist_assignments
+
+Enrollment Service
+- enrollments
+
+Dependencies must be scalar IDs + public APIs.
+
+Document future:
+Attendance -> Enrollment
+Exam -> Enrollment
+Parent/Catechist BFF/orchestration -> public APIs
+
+29. No Next Domain Work
+-----------------------
+Do NOT start:
+
+Curriculum
+Topic
+Lesson
+Learning Content
+Question Bank
+Attendance
+Exam
+Mobile
+Web FE
+
+This is phase closure only.
+
+30. Required Commands
+---------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Seeds:
+npm run seed:auth-rbac
+npm run seed:parish-academic
+npm run seed:class-enrollment
+npm run seed:class-enrollment
+
+Migration:
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:class-domain-final .
+
+31. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE commit command.
+
+Preferred if architecture/test hardening changes exist:
+
+git commit -m "fix(class): finalize class enrollment domain"
+
+Cursor must NOT execute it.
+
+32. Required Report
+-------------------
+Create:
+
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #001–#007
+3. Missing #006A evidence audit
+4. Rules applied
+5. Findings summary with severity
+6. Previous dependency graph
+7. Final dependency graph
+8. forwardRef audit
+9. Circular dependency audit
+10. Module ownership matrix
+11. Public export matrix
+12. Cross-module repository/entity audit
+13. ParishScopeService audit
+14. ClassScopeService audit
+15. StudentAccessService audit
+16. Security matrix
+17. Permission seed matrix
+18. Class lifecycle
+19. Enrollment lifecycle
+20. Enrollment transfer atomicity
+21. Enrollment concurrency
+22. Guardian history
+23. Catechist assignment history
+24. Parish membership history
+25. Seed safety/idempotency
+26. Demo scope verification
+27. Postman/manual verification
+28. Swagger/OpenAPI audit
+29. React Web contract audit
+30. React Native Mobile contract audit
+31. quality:full flake root cause
+32. quality:full final result
+33. Fresh DB migration result
+34. Docker result
+35. Module boundary tests
+36. Microservice extraction map
+37. Files created
+38. Files modified
+39. Commands executed
+40. Validation results
+41. Known/deferred issues
+42. Out-of-scope confirmation
+43. Final phase completion decision
+44. Next backend phase recommendation
+45. Commit recommendation
+
+33. Explicit PASS/FAIL Matrix
+-----------------------------
+Report explicitly:
+
+- format
+- lint
+- typecheck
+- unit tests
+- DB-free e2e
+- build
+- npm audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- seed auth-rbac
+- seed parish-academic
+- seed class-enrollment first run
+- seed class-enrollment second run
+- Docker production build
+- no circular dependency
+- no class-domain forwardRef
+- no cross-module repository/entity
+- parish scope
+- class scope
+- parent scope
+- catechist scope
+- one ACTIVE enrollment
+- transfer atomicity
+- enrollment history
+- guardian history
+- catechist assignment history
+- seed idempotency
+- API contract
+- Swagger
+- Web FE readiness
+- Mobile readiness
+
+34. Completion Statements
+-------------------------
+If and ONLY if all BLOCKER/HIGH issues are resolved and architecture is clean:
+
+Print exactly:
+
+CLASS / STUDENT / CATECHIST / PARENT / ENROLLMENT PHASE COMPLETE
+
+FE CLASS/PEOPLE/ENROLLMENT CONTRACT READY: YES
+
+MOBILE CLASS/PEOPLE/ENROLLMENT CONTRACT READY: YES
+
+If not:
+
+CLASS / STUDENT / CATECHIST / PARENT / ENROLLMENT PHASE NOT COMPLETE
+
+and explain blockers.
+
+35. Next Backend Phase
+----------------------
+Only if COMPLETE, recommend:
+
+CURRICULUM + TOPIC + LESSON + LEARNING CONTENT
+
+Do NOT implement it.
+
+The next phase should begin with a targeted domain audit / bounded-context design prompt.
+
+36. Prompt Position
+-------------------
+Main planned prompts:
+#001–#007 have been executed.
+
+This prompt:
+#007A FINAL CORRECTIVE GATE
+
+After #007A:
+- if COMPLETE -> CLASS phase closes
+- then explicitly notify user before moving to Curriculum phase
+
+37. Final Response
+------------------
+Respond concisely:
+
+- CLASS #007A status
+- cycle/forwardRef status
+- quality:full status
+- Web FE contract readiness
+- Mobile contract readiness
+- unresolved BLOCKER/HIGH count
+- final phase COMPLETE/NOT COMPLETE
+- next recommended backend phase
+- report path
+
+Then print exactly ONE commit command if tracked changes exist.
+
+Do NOT run git add/commit/push.
+Do NOT start next phase automatically.

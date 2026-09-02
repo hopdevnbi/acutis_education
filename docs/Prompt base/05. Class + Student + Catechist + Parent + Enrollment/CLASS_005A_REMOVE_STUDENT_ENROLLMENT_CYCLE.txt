@@ -1,0 +1,473 @@
+CURSOR CORRECTIVE PROMPT — CLASS/PEOPLE/ENROLLMENT #005A
+REMOVE STUDENT ↔ ENROLLMENT CYCLE / ELIMINATE forwardRef
+
+1. Context
+----------
+Current main phase:
+CLASS/PEOPLE/ENROLLMENT
+
+Completed nominal prompts:
+#001 Domain Audit
+#002 Schema
+#003 Class API
+#004 Student + Guardian API
+#005 Catechist Assignment + Enrollment API
+
+However CLASS #005 introduced an architecture violation:
+
+StudentModule -> EnrollmentModule
+EnrollmentModule -> StudentModule
+
+and resolved it with mutual `forwardRef()`.
+
+This conflicts with permanent project rules:
+- acyclic module graph
+- no default forwardRef workaround
+- fix ownership/orchestration instead of hiding cycles
+
+Therefore this corrective prompt MUST run before CLASS #006.
+
+After this corrective prompt succeeds:
+continue with CLASS #006/7.
+
+2. Mandatory Reading
+--------------------
+Before changes:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all `.cursor/rules/*.mdc`
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_004_STUDENT_GUARDIAN_SERVICES_API_REPORT.md
+   docs/CLASS_005_CATECHIST_ENROLLMENT_SERVICES_API_REPORT.md
+5. Inspect:
+   src/modules/student/
+   src/modules/enrollment/
+   src/modules/class/
+   src/modules/module-boundaries.spec.ts
+   test/student.db.e2e-spec.ts
+   test/enrollment.db.e2e-spec.ts
+   test/integration/
+6. Inspect git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Eliminate the StudentModule ↔ EnrollmentModule cycle.
+
+Final target dependency:
+
+StudentModule
+  -> UsersModule
+  -> AuthModule / AccessControlModule for controller wiring
+
+EnrollmentModule
+  -> StudentModule
+  -> ClassModule
+  -> AuthModule / AccessControlModule for controller wiring
+
+There must be NO:
+
+StudentModule -> EnrollmentModule
+
+and NO:
+
+forwardRef()
+
+between these modules.
+
+4. Preserve Existing HTTP Contract
+----------------------------------
+The route:
+
+GET /api/v1/parishes/:parishId/students
+
+already exists and must remain backward-compatible.
+
+Do NOT remove it.
+Do NOT change its response contract unnecessarily.
+
+Only move its orchestration/ownership so the module graph becomes acyclic.
+
+5. Required Ownership Fix
+-------------------------
+The parish student list depends on enrollment-owned data:
+
+- active enrollment rows
+- parishId
+- academicYearId
+- student IDs
+
+Therefore orchestration belongs on the Enrollment side.
+
+Preferred design:
+
+EnrollmentModule:
+- owns EnrollmentQueryService
+- imports StudentModule
+- has a thin controller/orchestrator for:
+  GET /api/v1/parishes/:parishId/students
+
+The controller/service:
+1. queries EnrollmentQueryService for distinct student IDs matching parish filters
+2. calls StudentService public API for safe StudentSnapshots
+3. returns the same FE-safe response contract
+
+StudentModule must no longer import EnrollmentModule.
+
+6. StudentModule Cleanup
+------------------------
+Remove:
+
+forwardRef(() => EnrollmentModule)
+
+Remove any EnrollmentModule import.
+
+Remove any injection of EnrollmentQueryService from Student controllers/services.
+
+Student business services stay focused on:
+- students
+- guardians
+- User validation
+
+7. EnrollmentModule Cleanup
+---------------------------
+Keep normal import:
+
+StudentModule
+
+No forwardRef.
+
+EnrollmentService can inject StudentService normally.
+
+EnrollmentModule may expose:
+- EnrollmentService
+- EnrollmentQueryService
+
+only if justified by downstream consumers.
+
+8. Controller Placement
+-----------------------
+Create or move the parish student route handler into an Enrollment-owned controller.
+
+Possible name:
+EnrollmentStudentQueryController
+or another concise application-facing name.
+
+Do NOT create a generic OrchestrationModule unless absolutely necessary.
+
+Prefer simplest bounded-context ownership.
+
+9. Route Compatibility
+----------------------
+Preserve:
+
+GET /api/v1/parishes/:parishId/students
+
+Existing query support:
+- academicYearId if currently supported
+- search if currently supported
+- pagination/response shape exactly as current contract
+
+If current implementation supports other filters:
+preserve them.
+
+10. Student Snapshot Fetching
+-----------------------------
+Do NOT query StudentEntity from EnrollmentModule.
+
+Use StudentService public methods.
+
+If StudentService lacks efficient batch lookup:
+add a narrow public method such as:
+
+getStudentsByIds(ids: string[])
+
+returning StudentSnapshots only.
+
+This is preferable to N+1 repeated getStudentById calls.
+
+No repository export.
+
+11. Batch Query Efficiency
+--------------------------
+Avoid:
+N student IDs -> N DB queries
+
+Preferred:
+StudentService.getStudentsByIds(ids)
+
+Internally StudentModule owns Student repository and does one IN query.
+
+Preserve enrollment ordering if response requires it.
+
+12. Public Contract Rule
+------------------------
+Cross-module contracts:
+snapshots/interfaces only.
+
+No StudentEntity export.
+No EnrollmentEntity export.
+No repository export.
+
+13. Remove forwardRef Completely
+--------------------------------
+Search production source for:
+
+forwardRef
+
+Specifically ensure there is no Student/Enrollment cycle usage.
+
+If other unrelated historical forwardRef exists:
+do NOT modify blindly.
+Document it.
+
+But for this bounded context:
+forwardRef count must be zero.
+
+14. Module Boundary Tests
+-------------------------
+Update/add tests that explicitly assert:
+
+- StudentModule does not import EnrollmentModule
+- EnrollmentModule imports StudentModule normally
+- no forwardRef metadata used between StudentModule and EnrollmentModule
+- StudentModule exports only intended services
+- EnrollmentModule exports only intended public services
+- no persistence exports
+
+15. Dependency Graph Test
+-------------------------
+Add a lightweight static/module architecture test if practical.
+
+It should fail if:
+
+StudentModule imports EnrollmentModule
+
+in future.
+
+Use stable source/metadata inspection pattern already used by project.
+
+Do not add a heavy dependency-analysis library unless necessary.
+
+16. Existing Student API Regression
+-----------------------------------
+All routes from CLASS #004 must remain PASS:
+
+POST /students
+GET /students
+GET /students/:id
+PATCH /students/:id
+guardian endpoints
+GET /parishes/:parishId/students
+
+17. Existing Enrollment API Regression
+--------------------------------------
+All CLASS #005 enrollment routes must remain PASS:
+
+POST /classes/:classId/enrollments
+GET /classes/:classId/enrollments
+GET /students/:studentId/enrollments
+GET /enrollments/:id
+PATCH /enrollments/:id/status
+POST /enrollments/:id/transfer
+
+18. Existing Catechist API Regression
+-------------------------------------
+All class catechist routes remain unchanged.
+
+19. No Business Redesign
+------------------------
+Do NOT change:
+- enrollment lifecycle
+- transfer semantics
+- student lifecycle
+- guardian lifecycle
+- catechist assignment lifecycle
+- RBAC policy
+unless required to fix a genuine regression.
+
+This corrective prompt is architectural only.
+
+20. No Scoped Authorization Yet
+-------------------------------
+Do NOT start CLASS #006 work.
+
+No:
+ParishScopeService
+ClassScopeService
+StudentAccessService
+
+21. quality:full Flake
+----------------------
+Attempt full quality validation.
+
+Do not conflate the architecture fix with the pre-existing parallel DB seed-cleanup flake.
+
+If `quality:full` fails only because of that known race:
+document exact failure.
+
+If a minimal safe isolation fix is obvious and localized:
+you may fix it.
+
+Do not weaken tests.
+
+22. Required Validation
+-----------------------
+Run:
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:class-cycle-fix .
+
+23. Architecture Validation
+---------------------------
+Explicitly verify:
+
+- StudentModule -> EnrollmentModule: NO
+- EnrollmentModule -> StudentModule: YES
+- Student/Enrollment forwardRef: NO
+- no circular dependency: YES
+- parish student route preserved: YES
+- no N+1 student lookup: YES
+- no cross-module repository/entity: YES
+
+24. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "refactor(enrollment): remove student enrollment module cycle"
+
+Cursor must NOT execute it.
+
+25. Required Report
+-------------------
+Create:
+
+docs/CLASS_005A_REMOVE_STUDENT_ENROLLMENT_CYCLE_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Architecture violation found in #005
+3. Rules applied
+4. Previous dependency graph
+5. Root cause
+6. Selected cycle-resolution design
+7. Final dependency graph
+8. StudentModule changes
+9. EnrollmentModule changes
+10. Parish student route relocation
+11. HTTP compatibility
+12. Student batch snapshot contract
+13. Query efficiency
+14. Public export audit
+15. forwardRef audit
+16. Module boundary tests
+17. Student regression
+18. Enrollment regression
+19. Catechist regression
+20. quality:full status
+21. Docker status
+22. Files created
+23. Files modified
+24. Commands executed
+25. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- integration
+- DB e2e
+- quality:full
+- Docker
+- no StudentModule -> EnrollmentModule
+- EnrollmentModule -> StudentModule only
+- no Student/Enrollment forwardRef
+- no circular dependency
+- parish student route unchanged
+- no N+1
+- no cross-module repository/entity
+- Student API regression
+- Guardian API regression
+- Enrollment API regression
+- Catechist API regression
+
+26. Completion Decision
+-----------------------
+State exactly one:
+
+CLASS #005A CYCLE FIX COMPLETE
+
+or
+
+CLASS #005A CYCLE FIX NOT COMPLETE
+
+Do NOT declare COMPLETE with unresolved BLOCKER/HIGH.
+
+27. CLASS #006 Readiness
+------------------------
+Only if COMPLETE:
+
+State:
+
+READY FOR CLASS #006/7 — Scoped Authorization + Cross-Domain Hardening
+
+Do NOT implement #006 automatically.
+
+28. Prompt Position
+-------------------
+This is a corrective prompt between #005 and #006.
+
+Main roadmap remains:
+#005/7 completed functionally
+#005A corrective architecture gate
+then #006/7
+then #007/7
+
+29. Final Response
+------------------
+Respond concisely:
+
+- CLASS #005A status
+- cycle removed YES/NO
+- forwardRef removed YES/NO
+- parish student route preserved YES/NO
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/CLASS_005A_REMOVE_STUDENT_ENROLLMENT_CYCLE_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "refactor(enrollment): remove student enrollment module cycle"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #006 automatically.

@@ -1,0 +1,1108 @@
+CURSOR PROMPT — PARISH/ACADEMIC STRUCTURE #001/5
+TARGETED DOMAIN AUDIT + MODULAR BOUNDARY DESIGN
+
+1. Context
+----------
+We are building a long-term parish catechism platform backend.
+
+Completed phases:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- Auth / User / Role / Permission: COMPLETE
+
+The next backend phase is:
+
+Parish + Academic Year + Catechism Level
+
+Estimated phase:
+5 prompts
+
+Planned sequence:
+
+#001 Targeted domain audit + module boundaries + schema/API design
+#002 Database schema + entities + migrations
+#003 Parish module application/service layer
+#004 Academic Year + Catechism Level application/service layer
+#005 Integration tests + hardening + final module-boundary audit
+
+This prompt is #001/5.
+
+DO NOT implement entities, migrations, controllers, services, or APIs yet.
+
+2. Required Reading — CRITICAL
+------------------------------
+Before doing anything:
+
+1. Read PROJECT_RULES.md completely.
+   Pay special attention to:
+   - modular architecture
+   - future microservice extraction
+   - database ownership
+   - cross-module dependencies
+   - security/privacy
+   - testing
+   - naming conventions
+
+2. Read AGENTS.md completely.
+
+3. Read ALL `.cursor/rules/*.mdc`.
+
+4. Read:
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+
+5. Read the backend foundation reports relevant to:
+   - database
+   - migrations
+   - module structure
+   - configuration
+   - testing conventions
+
+6. Inspect current project structure:
+   src/
+   src/modules/
+   src/database/
+   test/
+   package.json
+   README.md
+
+7. Inspect current Git status using read-only commands only.
+
+3. Permanent Architecture Rule
+------------------------------
+This project is currently a modular monolith, but every business capability must be designed so it can later be extracted into independent microservices with minimal rewriting.
+
+For EVERY decision in this audit:
+
+- identify data ownership
+- identify public module contract
+- identify inbound dependencies
+- identify outbound dependencies
+- avoid cross-module repository access
+- avoid ORM entities as cross-module contracts
+- avoid cyclic dependencies
+- avoid giant "shared" business modules
+- avoid premature microservice implementation
+- preserve scalar IDs/contracts at module boundaries
+
+Do NOT optimize for microservices today at the cost of needless complexity.
+
+The goal is:
+clean modular monolith now,
+extractable bounded contexts later.
+
+4. Primary Objective
+--------------------
+Perform a TARGETED audit and domain design for:
+
+- Parish
+- Academic Year
+- Catechism Level
+
+Determine:
+
+- exact bounded-context/module split
+- responsibility ownership
+- data model
+- relationships
+- lifecycle rules
+- uniqueness rules
+- status/state model
+- API/service contract direction
+- RBAC implications
+- future tenant/microservice extraction implications
+
+No implementation yet.
+
+5. Existing Auth/RBAC Implication
+---------------------------------
+Auth/RBAC is COMPLETE.
+
+Current RBAC is globally scoped.
+
+Important:
+DO NOT immediately modify Auth/RBAC schema in this prompt.
+
+However Parish introduces the first real organizational/tenant boundary.
+
+Audit carefully whether future authorization will eventually require:
+
+- parish-scoped roles
+- parish membership
+- scoped assignments
+- global platform roles vs parish-local roles
+
+Examples conceptually:
+SUPER_ADMIN may be global.
+PARISH_ADMIN may later be scoped to a parish.
+CATECHIST may later be assigned through class/enrollment structure.
+
+Do NOT implement scoped RBAC now.
+
+Instead:
+document the future integration point and avoid Parish architecture that blocks it.
+
+6. Core Domain Questions
+------------------------
+Audit and answer:
+
+A. What exactly is a Parish in this platform?
+
+B. Is AcademicYear:
+- global?
+- parish-owned?
+- reusable across parishes?
+
+C. Is CatechismLevel:
+- global reference data?
+- parish-owned configuration?
+- academic-year-specific?
+- both template + parish customization?
+
+D. Should these be:
+- one module
+- two modules
+- three modules?
+
+E. What should future ClassModule depend on?
+
+F. Which module owns relationships among:
+Parish ↔ AcademicYear ↔ CatechismLevel?
+
+7. Recommended Initial Boundary Candidates
+------------------------------------------
+Evaluate the following, but do NOT blindly follow it.
+
+Option A:
+
+ParishModule
+- parish organization
+
+AcademicStructureModule
+- academic years
+- catechism levels
+
+This is likely the cleanest initial modular split.
+
+Option B:
+
+ParishModule
+AcademicYearModule
+CatechismLevelModule
+
+This may be overly fragmented for current scale.
+
+Option C:
+
+ParishAcademicModule
+- all three together
+
+This may become too broad later.
+
+Choose intentionally.
+
+8. ParishModule Audit
+---------------------
+Define responsibility for Parish.
+
+Likely ownership:
+- parish identity
+- parish display information
+- parish status
+- parish code/slug
+- timestamps
+
+Potential fields to evaluate:
+
+id
+code
+name
+slug
+description
+address
+phone
+email
+status
+created_at
+updated_at
+
+DO NOT automatically include all fields.
+
+Classify:
+
+- required now
+- useful soon
+- deferred
+
+Avoid turning Parish into a CMS/contact-info dumping ground.
+
+9. Parish Identity
+------------------
+Decide whether Parish needs:
+
+- code
+- slug
+- both
+
+Evaluate use cases:
+
+code:
+stable internal/business identifier
+
+slug:
+URL-friendly identifier
+
+Keep IDs as UUID v4.
+
+If both are unnecessary now, choose minimal model.
+
+10. Parish Status
+-----------------
+Evaluate lifecycle states.
+
+Possible:
+ACTIVE
+INACTIVE
+
+Avoid excessive states.
+
+No deletion workflow yet.
+
+Determine:
+- deactivate instead of delete?
+- hard delete policy?
+
+Prefer preserving historical references.
+
+11. Academic Year Domain Definition
+-----------------------------------
+Define AcademicYear precisely.
+
+Potential example:
+2026–2027
+
+Possible fields:
+
+id
+parish_id
+name
+start_date
+end_date
+status
+created_at
+updated_at
+
+Potential statuses:
+PLANNED
+ACTIVE
+CLOSED
+
+Audit whether these states are necessary.
+
+Avoid using current calendar year implicitly.
+
+Academic year must be an explicit domain object.
+
+12. Academic Year Ownership
+---------------------------
+Strongly evaluate:
+
+AcademicYear belongs to Parish.
+
+Likely:
+parish_id FK
+
+Reason:
+different parishes may have different year scheduling/configuration.
+
+But verify requirement and document decision.
+
+13. Academic Year Uniqueness
+----------------------------
+Design uniqueness rule.
+
+Possible:
+unique(parish_id, name)
+
+or:
+unique(parish_id, start_date, end_date)
+
+Evaluate.
+
+Do NOT rely only on display name if dates define identity more robustly.
+
+Document exact choice.
+
+14. Academic Year Date Rules
+----------------------------
+Define invariants:
+
+start_date < end_date
+
+Avoid:
+- overlapping academic years?
+- multiple ACTIVE years per parish?
+
+Evaluate whether we should enforce:
+
+A. one active academic year per parish
+B. overlapping years prohibited
+C. neither yet
+
+Do not over-constrain without real requirement.
+
+Document:
+database-enforceable constraints
+vs application-layer validation.
+
+15. Catechism Level Domain Definition
+-------------------------------------
+Define CatechismLevel.
+
+Examples might conceptually be:
+- Khai Tâm
+- Rước Lễ
+- Thêm Sức
+etc.
+
+But DO NOT hard-code actual Catholic curriculum taxonomy unless requirements explicitly define it.
+
+The model should support parish-configured levels.
+
+Potential fields:
+
+id
+parish_id
+code
+name
+description
+sort_order
+status
+created_at
+updated_at
+
+Evaluate whether level is:
+
+A. parish-owned
+B. global reference catalog
+C. independent template + parish mapping
+
+Prefer simplest extensible model.
+
+16. Academic Year vs Catechism Level Relationship
+-------------------------------------------------
+Important question:
+
+Should CatechismLevel belong directly to AcademicYear?
+
+Potential models:
+
+A.
+Parish -> CatechismLevel
+Parish -> AcademicYear
+Class later references both
+
+B.
+AcademicYear -> CatechismLevel
+
+C.
+Global CatechismLevel + yearly configuration mapping
+
+Audit carefully.
+
+Preferred initial direction likely:
+
+Parish owns stable CatechismLevel definitions.
+AcademicYear represents time period.
+Future Class references:
+- parishId
+- academicYearId
+- catechismLevelId
+
+This avoids duplicating level rows each year.
+
+But validate and document.
+
+17. Future Class Module Dependency
+----------------------------------
+The next major domain after this phase will likely include:
+
+Class
+Student
+Catechist
+Parent
+Enrollment
+
+Design current contracts so ClassModule later can reference:
+
+parishId
+academicYearId
+catechismLevelId
+
+without:
+- importing repositories
+- importing entities
+- querying tables directly
+
+Future ClassModule should use public validation/query contracts.
+
+18. Data Ownership Matrix
+-------------------------
+Create explicit ownership matrix.
+
+For each table/entity concept:
+- owner module
+- allowed writers
+- allowed readers via public API
+- future service extraction owner
+
+Likely:
+
+ParishModule:
+parishes
+
+AcademicStructureModule:
+academic_years
+catechism_levels
+
+But audit first.
+
+19. Cross-Module FK Strategy
+----------------------------
+SQL foreign keys are allowed inside modular monolith.
+
+Potential:
+
+academic_years.parish_id -> parishes.id
+catechism_levels.parish_id -> parishes.id
+
+This creates relational integrity.
+
+Application code must still respect:
+- Parish persistence private
+- AcademicStructure persistence private
+- public validation contracts
+
+Document future microservice extraction:
+FKs become scalar IDs + external validation/eventual consistency.
+
+20. Cross-Module ORM Relationship Rule
+--------------------------------------
+Prefer scalar FK columns across module boundary.
+
+Example:
+
+AcademicYearEntity:
+parishId: string
+
+Avoid:
+@ManyToOne(() => ParishEntity)
+
+if it requires importing ParishEntity across module persistence boundary.
+
+Database migration may create FK independently.
+
+This is the same principle already used in Auth/RBAC.
+
+21. Module Dependency Direction
+-------------------------------
+Design exact direction.
+
+Possible:
+
+AcademicStructureModule -> ParishModule public service
+
+if AcademicStructure needs semantic parish validation.
+
+Alternative:
+rely on SQL FK.
+
+Preferred for create/update services:
+a narrow ParishQueryService or ParishService may validate parish existence/status.
+
+But avoid unnecessary dependency if database constraint is sufficient.
+
+Audit tradeoff.
+
+No cycles.
+
+22. Public Contracts
+--------------------
+Plan safe snapshots/contracts.
+
+Potential ParishSnapshot:
+- id
+- code
+- name
+- status
+
+Potential AcademicYearSnapshot:
+- id
+- parishId
+- name
+- startDate
+- endDate
+- status
+
+Potential CatechismLevelSnapshot:
+- id
+- parishId
+- code
+- name
+- sortOrder
+- status
+
+Do NOT expose TypeORM entities.
+
+23. Future Authorization Integration
+------------------------------------
+Audit likely permission namespaces.
+
+Examples ONLY:
+
+parishes.read
+parishes.manage
+
+academic-years.read
+academic-years.manage
+
+catechism-levels.read
+catechism-levels.manage
+
+Do NOT seed/create them in this audit prompt.
+
+Document naming convention compatibility with current RBAC `{resource}.{action}`.
+
+24. Future Parish Scoping
+-------------------------
+This is important.
+
+We currently have global roles.
+
+Document future authorization model trigger:
+
+When APIs become parish-sensitive, permission alone may not be enough.
+
+Example:
+PARISH_ADMIN with `classes.manage`
+should not automatically manage every parish.
+
+Likely future model will require:
+- user's parish membership
+- role assignment scoped to parish
+or
+- resource ownership checks
+
+Do NOT redesign Auth/RBAC now.
+
+But current Parish schema should support stable parish IDs used in future authorization scope.
+
+25. Multi-Parish Users
+----------------------
+Consider:
+Can one catechist/parent/admin belong to multiple parishes?
+
+Do not assume one user = one parish.
+
+Therefore:
+DO NOT add parish_id to users table.
+
+This is important.
+
+Future membership/assignment tables should model relationships.
+
+Document this rule.
+
+26. Parish Membership
+---------------------
+Do NOT implement ParishMembership in this phase unless absolutely necessary.
+
+Likely belongs in future:
+Class + Student + Catechist + Parent + Enrollment phase
+or a dedicated membership layer.
+
+This phase should establish organization structure only.
+
+27. Deletion Strategy
+---------------------
+Audit deletion policy.
+
+Because future:
+classes
+enrollments
+exam results
+progress
+attendance
+events
+materials
+
+will reference parish/year/level.
+
+Prefer:
+- status/deactivation
+- no routine hard delete
+
+If hard delete is allowed only when unused:
+document.
+
+Do not add soft-delete columns automatically unless justified.
+
+28. Sort Order
+--------------
+CatechismLevel likely needs explicit ordering.
+
+Evaluate:
+sort_order integer
+
+This supports:
+- UI display
+- curriculum ordering
+- level progression
+
+If useful, include in schema plan.
+
+No implicit alphabetical ordering.
+
+29. Level Progression
+---------------------
+Do NOT implement prerequisite/progression graph yet.
+
+Future Learning/Enrollment may need:
+previousLevelId / progression rules
+
+Defer unless current model requires it.
+
+30. Academic Year Active State
+------------------------------
+Evaluate whether an `is_active` boolean is simpler than status enum.
+
+Potential status:
+PLANNED
+ACTIVE
+CLOSED
+
+Choose based on future:
+- planning next year
+- current operations
+- historical records
+
+Document chosen model.
+
+31. Domain Errors Planning
+--------------------------
+Plan module-specific errors.
+
+Possible:
+
+ParishCodeAlreadyExistsError
+ParishNotFoundError
+AcademicYearNotFoundError
+AcademicYearDateRangeInvalidError
+CatechismLevelCodeAlreadyExistsError
+
+No implementation yet.
+
+32. API Planning — Parish
+-------------------------
+Conceptually propose endpoints.
+
+Potential:
+
+POST   /api/v1/parishes
+GET    /api/v1/parishes
+GET    /api/v1/parishes/:id
+PATCH  /api/v1/parishes/:id
+
+Maybe:
+PATCH /:id/status
+
+Do NOT implement.
+
+Avoid DELETE initially unless justified.
+
+33. API Planning — Academic Year
+--------------------------------
+Potential:
+
+POST /api/v1/parishes/:parishId/academic-years
+GET  /api/v1/parishes/:parishId/academic-years
+GET  /api/v1/academic-years/:id
+PATCH /api/v1/academic-years/:id
+
+Evaluate nested vs flat route consistency.
+
+No implementation.
+
+34. API Planning — Catechism Level
+----------------------------------
+Potential:
+
+POST /api/v1/parishes/:parishId/catechism-levels
+GET  /api/v1/parishes/:parishId/catechism-levels
+GET  /api/v1/catechism-levels/:id
+PATCH /api/v1/catechism-levels/:id
+
+No implementation.
+
+35. RBAC Planning
+-----------------
+Plan required permissions.
+
+No endpoints should eventually be public.
+
+Likely:
+JwtAuthGuard + PermissionGuard.
+
+Do NOT wire permissions in audit prompt.
+
+36. Seed Strategy
+-----------------
+Do NOT seed Parish/AcademicYear/Level in #001.
+
+Plan future sample seed only after services exist.
+
+Do not add sample church/parish production-like records yet.
+
+37. Date Storage
+----------------
+For academic year:
+
+use DATE if time-of-day irrelevant.
+
+Do not use datetime2 for simple start/end calendar dates unless justified.
+
+Timestamps still datetime2 UTC.
+
+Document.
+
+38. Unicode / Vietnamese Text
+-----------------------------
+Parish and level names may contain Vietnamese diacritics.
+
+Use MSSQL `nvarchar`.
+
+Codes remain machine-readable ASCII-style where appropriate.
+
+39. Slug Considerations
+-----------------------
+If Parish slug is chosen:
+- lowercase
+- URL-safe
+- unique
+
+But do not add slug solely because web frontend may someday use it.
+
+UUID routes are acceptable initially.
+
+Document whether slug deferred.
+
+40. Constraint / Index Planning
+-------------------------------
+Design:
+
+parishes:
+- unique code if code exists
+- maybe unique slug
+
+academic_years:
+- index parish_id
+- unique parish/year identity
+
+catechism_levels:
+- index parish_id
+- unique(parish_id, code)
+- index/parish + sort_order if useful
+
+No implementation.
+
+41. Schema Names
+----------------
+Likely tables:
+
+parishes
+academic_years
+catechism_levels
+
+Use snake_case.
+
+No generic:
+organizations
+periods
+levels
+
+unless domain audit shows a stronger abstraction.
+
+Prefer domain clarity.
+
+42. Generic Organization Abstraction
+-------------------------------------
+Do NOT prematurely create:
+OrganizationModule
+
+just because parish is technically an organization.
+
+This is a Catholic catechism platform.
+Use domain language unless multi-organization requirements actually appear.
+
+43. Generic Taxonomy Abstraction
+--------------------------------
+Do NOT create generic:
+Level
+Category
+Hierarchy
+
+CatechismLevel has specific domain meaning.
+
+44. Microservice Extraction Map
+-------------------------------
+Audit future extraction.
+
+Possible:
+
+Parish Service:
+- parishes
+
+Academic Structure Service:
+- academic_years
+- catechism_levels
+
+Future Class Service:
+references IDs
+
+Document:
+- API contracts
+- FK removal implications
+- event/RPC validation replacement
+
+45. Module Boundary Audit Requirement
+-------------------------------------
+Per PROJECT_RULES, report must explicitly include:
+
+For each proposed module:
+- owned data
+- public exports
+- inbound dependencies
+- outbound dependencies
+- future extraction boundary
+
+46. Existing Project Compatibility
+----------------------------------
+Audit:
+- current AppModule pattern
+- dynamic AppModule.forRoot()
+- auth demo flag
+- TypeOrm autoLoadEntities
+- migration architecture
+- test DB conventions
+
+Do not disturb Auth/RBAC.
+
+47. No Implementation
+---------------------
+STRICTLY do not create:
+
+- ParishEntity
+- AcademicYearEntity
+- CatechismLevelEntity
+- migrations
+- controllers
+- services
+- repositories
+- DTOs
+- permission rows
+- seed data
+
+This is design/audit only.
+
+48. Validation
+-------------
+Because this prompt should change only docs/rules if necessary:
+
+Run:
+
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+Do not require DB/Docker unless code unexpectedly changes.
+
+49. Rules Check
+--------------
+Do NOT create new rules unless an actual gap is found.
+
+The modular/microservice-ready rules already exist.
+
+If existing rules already cover this module:
+leave them unchanged.
+
+In report, explicitly state:
+PROJECT_RULES + Cursor modular rules were read and applied.
+
+50. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If only the gitignored report is created and no tracked files change:
+state:
+No code/config changes; no commit message required.
+
+If tracked rules/docs must genuinely change:
+print exactly ONE recommended commit command.
+
+Do not manufacture a tracked change just to produce a commit.
+
+51. Required Report
+-------------------
+Create:
+
+docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From Auth/RBAC Phase
+
+3. Rules / Architecture Constraints Applied
+
+4. Existing Project Structure Relevant to This Phase
+
+5. Domain Definitions
+- Parish
+- AcademicYear
+- CatechismLevel
+
+6. Module Split Decision
+Choose and justify:
+- ParishModule
+- AcademicStructureModule
+or alternative
+
+7. ParishModule Responsibilities
+
+8. AcademicStructureModule Responsibilities
+
+9. Data Ownership Matrix
+
+10. Module Dependency Graph
+
+11. Public Contract Plan
+
+12. Cross-Module Persistence Rules
+
+13. Cross-Module FK Strategy
+
+14. Parish Schema Plan
+Required vs deferred fields.
+
+15. Parish Identity / Code / Slug Decision
+
+16. Parish Status / Deactivation Decision
+
+17. Academic Year Schema Plan
+
+18. Academic Year Ownership Decision
+
+19. Academic Year Date Invariants
+
+20. Academic Year Uniqueness
+
+21. Catechism Level Schema Plan
+
+22. Catechism Level Ownership Decision
+
+23. Catechism Level Ordering
+
+24. AcademicYear ↔ CatechismLevel Relationship Decision
+
+25. Future ClassModule Integration
+
+26. Multi-Parish User Decision
+Explicitly confirm no parish_id on users.
+
+27. Future Parish Membership Consideration
+
+28. RBAC / Parish Scope Future Integration
+
+29. Permission Namespace Plan
+
+30. Deletion / Historical Data Policy
+
+31. Index / Constraint Plan
+
+32. API Endpoint Plan
+Conceptual only.
+
+33. Seed Strategy
+Deferred.
+
+34. Security / Privacy Review
+
+35. Future Microservice Extraction Map
+
+36. Risks / Open Questions
+
+37. Files Created
+
+38. Files Modified
+
+39. Commands Executed
+
+40. Validation Results
+
+41. Out-of-Scope Confirmation
+Confirm no implementation.
+
+42. PARISH #002 Readiness
+
+Only if design has no blocker:
+
+Recommend:
+PARISH/ACADEMIC STRUCTURE #002 — Schema + Entities + Migrations
+
+#002 should implement ONLY:
+- module skeletons
+- entities
+- migrations
+- constraints/indexes
+- metadata/integration tests
+
+No controllers/services yet.
+
+43. Prompt Count / Phase Status
+
+State:
+- #001/5 complete
+- approximately 4 prompts remain
+
+44. Commit Message Recommendation
+
+If no tracked changes:
+No code/config changes; no commit message required.
+
+If tracked changes genuinely exist:
+print exactly ONE appropriate conventional commit command.
+
+52. Final Response
+------------------
+When finished, respond concisely with:
+
+- PARISH/ACADEMIC #001 status
+- design ready for #002: YES/NO
+- selected module split
+- unresolved BLOCKER/HIGH count
+- report path:
+  docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to #002 automatically.

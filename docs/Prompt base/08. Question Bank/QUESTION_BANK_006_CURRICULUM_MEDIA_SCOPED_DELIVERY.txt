@@ -1,0 +1,579 @@
+CURSOR PROMPT — QUESTION BANK #006/8
+CURRICULUM / MEDIA INTEGRATION + SCOPED AUTHORIZATION + LEARNER-SAFE DELIVERY CONTRACTS
+
+Context
+-------
+Completed:
+- QUESTION BANK #001/8 — Domain Audit + Model Design
+- QUESTION BANK #002/8 — Schema + Entities + Migrations
+- QUESTION BANK #003/8 — Metadata CRUD + Tags/Curriculum Links + RBAC
+- QUESTION BANK #004/8 — Options + Correct Answers + Publish Workflow
+- QUESTION BANK #005/8 — Clone/Versioning + Learner Projection + Grading Contracts
+
+Current:
+QUESTION BANK #006 / 8
+
+Remaining:
+#007 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+Inherited guarantees:
+- QuestionBankModule exports only QuestionBankService
+- PUBLISHED/ARCHIVED immutable
+- clone-to-draft works
+- sourceContentHash is translation-source semantic
+- learner projection omits answers/explanation
+- grading supports PUBLISHED + ARCHIVED
+- no learner HTTP routes yet
+- Curriculum/Media stable
+
+Permanent rules
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports/code first
+- stay within #006
+- create docs report
+- not auto-proceed
+
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(question-bank): add scoped delivery integration"
+
+Do not execute it.
+
+Mandatory reading
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Reports:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+docs/QUESTION_BANK_004_OPTIONS_ANSWERS_PUBLISH_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/media/
+src/modules/class/
+src/modules/enrollment/
+src/modules/parish/
+src/modules/access-control/
+src/modules/auth/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Primary objective
+-----------------
+Implement/harden:
+A. Curriculum semantic link validation via public contracts
+B. Media validation for question prompt/option/explanation
+C. scoped author/admin preview/read
+D. Practice/Exam-facing public service contracts
+E. CATECHIST authoring policy finalization
+F. no answer leakage
+G. no cross-parish leakage
+H. tests + quality/full + Docker
+
+Do NOT implement:
+- PracticeModule
+- ExamModule
+- learner sessions/attempts
+- public grading HTTP
+- generic learner question browsing
+- search/import/export
+- translations
+- SHORT_TEXT/NUMBER
+- partial credit
+
+Architecture
+------------
+Allowed:
+QuestionBankModule -> CurriculumModule public service
+QuestionBankModule -> MediaModule public service
+QuestionBankModule -> Parish/Auth/AccessControl
+
+Future:
+Practice/Exam -> QuestionBankModule
+
+Disallowed:
+reverse dependencies into QuestionBank
+cross-module repository/entity imports
+forwardRef
+cycles
+
+QuestionBankModule continues to export ONLY QuestionBankService.
+
+Curriculum linkage
+------------------
+Validate root-level question_curriculum_links:
+- curriculum exists
+- same parish
+- ACTIVE for new link
+- authoringCurriculumVersionId belongs curriculum
+- canonicalLessonKey belongs curriculum lineage
+
+Use CurriculumService public APIs only.
+
+If missing, add narrow public read-only methods:
+- getCurriculumSnapshotById
+- assertVersionBelongsToCurriculum
+- assertCanonicalLessonKeyBelongsToCurriculum
+
+No ORM entity export.
+
+Existing links survive curriculum becoming INACTIVE.
+Do not auto-delete historical metadata.
+
+Do NOT add lessonId/topicId.
+canonicalLessonKey remains semantic stable lesson association.
+Topic direct linkage remains deferred.
+
+Media validation
+----------------
+Question media:
+- promptMediaJson
+- explanationMediaJson
+- option.mediaAssetId
+
+DRAFT save:
+- asset exists
+- READY
+- category IMAGE for MVP
+
+Publish:
+revalidate all media.
+
+Use MediaAssetService only.
+
+Prompt/explanation JSON:
+strict schema
+assetId only
+no raw URL/path/storage key.
+
+Option media:
+READY IMAGE
+at least text or media.
+
+If media status changes after draft save:
+publish blocks.
+
+Published historical content remains immutable.
+Document runtime implications if media later becomes unavailable.
+
+Learner delivery surface
+------------------------
+Do NOT create generic learner question directory.
+
+Do NOT grant PARENT/STUDENT questions.read.
+
+Practice/Exam-facing service contracts must be hardened:
+- getLearnerQuestionProjection(questionVersionId)
+- gradeAnswer(...)
+- getImmutableAssessmentSnapshot(questionVersionId)
+- optional getCurrentPublishedQuestionForSelection(questionId)
+
+No entities/repositories in contracts.
+
+Projection status
+-----------------
+Allow service-to-service learner projection for:
+PUBLISHED
+ARCHIVED
+
+Reject DRAFT for learner delivery contract.
+
+Reason:
+historical exams may reference archived version.
+
+New-session selection
+---------------------
+Optional public service method:
+getCurrentPublishedQuestionForSelection(questionId)
+
+Rules:
+- root ACTIVE
+- currentPublishedVersionId exists
+- exact version PUBLISHED
+- return safe snapshot/reference
+
+Historical consumers use exact versionId.
+
+Author/admin preview
+--------------------
+Optional HTTP:
+GET /api/v1/question-versions/:versionId/preview
+
+Permission:
+questions.read
+Scope:
+question parish
+
+Return learner-safe projection only.
+
+May allow DRAFT for editor preview if clearly documented.
+PUBLISHED/ARCHIVED allowed.
+
+This is author/admin preview, NOT learner delivery.
+
+CATECHIST policy — FINAL
+------------------------
+Finalize conservative MVP:
+
+CATECHIST:
+- questions.read own parish
+- NO questions.manage
+- NO questions.publish
+
+Reason:
+question authorship governance not fully specified.
+
+Do not broaden unless existing product requirement clearly contradicts this.
+
+PARENT:
+no Question Bank API access.
+
+STUDENT:
+role still deferred; do not add.
+
+DTO separation
+--------------
+Authoring DTO:
+- options
+- correctOptionIds
+- explanation
+- metadata
+
+Preview/learner-safe:
+- prompt
+- instruction
+- difficulty if desired
+- prompt media refs
+- options id/text/media/sortOrder
+- NO correct answers
+- NO answerDefinitionJson
+- NO explanation
+- NO option code
+- NO audit actor fields
+
+Media access strategy
+---------------------
+Learner projection may carry mediaAssetId only.
+
+Do NOT expose generic Media content route to learner roles.
+
+Future Practice/Exam must create contextual media routes analogous to Curriculum delivery.
+
+Admin preview can use existing generic Media admin route.
+
+Security
+--------
+Version-by-id routes must resolve question -> parish -> scope.
+
+Tests:
+- PARISH_ADMIN A cannot read/manage B
+- CATECHIST own parish read allowed
+- CATECHIST manage/publish denied
+- PARENT denied
+- SUPER_ADMIN global allowed
+
+No correct-answer HTTP exposure.
+
+Assessment snapshot
+-------------------
+Trusted service-to-service only.
+Can contain correct answers for Exam snapshot/grading.
+MUST NOT be exposed by controller.
+
+Grading
+-------
+gradeAnswer remains service-to-service only.
+No public HTTP grading.
+
+Tags/curriculum links
+---------------------
+Remain root-level classification metadata.
+Can mutate after publish.
+Historical grading does not depend on them.
+
+Practice integration contract
+-----------------------------
+Document future flow:
+1 select current published question/version
+2 get learner projection
+3 render
+4 submit selected option IDs
+5 call gradeAnswer
+6 Practice owns attempt/progress
+7 feedback reveal policy owned by Practice
+
+Exam integration contract
+-------------------------
+Document:
+1 Exam publish snapshots exact questionVersionIds
+2 stores option delivery order
+3 stores locale/translation revision later
+4 renders immutable snapshot
+5 grading uses exact snapshot/version
+6 newer publish never changes active/historical exam
+
+Multilingual
+------------
+Reconfirm:
+- root sourceLocale
+- translation-semantic sourceContentHash
+- correctness independent of display strings
+- no runtime translation
+- no localization tables yet
+
+Validation/tests
+----------------
+Unit:
+- curriculum same-parish valid
+- cross-parish invalid
+- canonicalLessonKey valid/invalid
+- authoring version valid/invalid
+- inactive curriculum new link denied
+- media prompt/explanation/option valid
+- missing/not-ready/wrong category media denied
+- learner projection no answers/explanation/code
+- PUBLISHED/ARCHIVED projection allowed
+- DRAFT learner projection denied if service contract policy requires
+- current published selection active only
+
+Integration:
+- real Curriculum link validation
+- real Media asset validation
+- root link survives curriculum inactive
+- publish revalidates media
+- public facade contracts work
+
+DB e2e:
+- CATECHIST own parish read 200
+- CATECHIST manage 403
+- CATECHIST publish 403
+- cross-parish 403
+- PARENT 403
+- SUPER_ADMIN allowed
+- preview route learner-safe if added
+- no public grading route
+
+Swagger/OpenAPI
+---------------
+Document preview route if added.
+No answer fields.
+No learner/public route.
+
+Evaluate:
+QUESTION BANK PUBLIC SERVICE CONTRACT READY FOR PRACTICE/EXAM: YES/NO
+
+Existing regression
+-------------------
+#003 metadata
+#004 options/publish
+#005 clone/grading
+Curriculum
+Media
+Auth
+
+quality:full
+------------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+
+Docker
+------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-integration .
+
+PASS required.
+
+Required commands
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:question-bank-integration .
+
+Required report
+---------------
+Create:
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #005
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final dependency graph
+7 Module boundary
+8 Curriculum public contracts
+9 Curriculum link validation
+10 canonicalLessonKey validation
+11 authoringCurriculumVersionId validation
+12 Cross-parish link security
+13 Curriculum inactive behavior
+14 Media validation architecture
+15 Prompt media validation
+16 Explanation media validation
+17 Option media validation
+18 Publish media revalidation
+19 Media lifecycle implications
+20 Learner delivery surface decision
+21 Practice/Exam service contracts
+22 Published/archived projection policy
+23 Current published selection contract
+24 Author/admin preview route decision
+25 Preview/learner-safe DTO
+26 Answer leakage protection
+27 Option code exposure decision
+28 Explanation exposure policy
+29 Question media access strategy
+30 Why generic Media learner access remains denied
+31 CATECHIST authoring policy FINAL
+32 CATECHIST read scope
+33 Parent/Student direct access policy
+34 Version-by-id scope
+35 Root tags/links mutability
+36 Assessment snapshot trust boundary
+37 Grade contract trust boundary
+38 Practice integration contract
+39 Exam integration contract
+40 Swagger/OpenAPI
+41 Public service contract readiness
+42 Unit tests
+43 Integration tests
+44 DB e2e
+45 Existing regression
+46 pristine quality:full
+47 Docker
+48 Multilingual readiness
+49 Security/privacy
+50 Microservice extraction
+51 Commands
+52 Validation matrix
+53 Known/deferred
+54 Out-of-scope
+55 QUESTION BANK #007 readiness
+56 Prompt count
+57 Commit recommendation
+
+Explicit PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- QuestionBankService only export
+- curriculum same-parish link
+- canonicalLessonKey validation
+- invalid canonicalLessonKey denied
+- authoring version valid
+- authoring version mismatch denied
+- inactive curriculum new link denied
+- historical link preserved
+- prompt IMAGE media validation
+- explanation IMAGE validation
+- option IMAGE validation
+- missing asset denied
+- wrong category denied
+- publish media revalidation
+- learner projection no answers
+- learner projection no explanation
+- learner projection no option code
+- no generic learner HTTP question route
+- no public grading HTTP
+- assessment snapshot service-only
+- CATECHIST read own parish
+- CATECHIST manage denied
+- CATECHIST publish denied
+- PARENT direct access denied
+- cross-parish denied
+- SUPER_ADMIN allowed
+- Practice/Exam service contracts ready
+- no entity/repo export
+- no translation tables
+- prior regression
+- Git rule compliance
+
+#007 readiness
+--------------
+Only if no unresolved BLOCKER/HIGH:
+
+QUESTION BANK #007/8 — Search/Filter + Import/Export Readiness + OpenAPI/FE/Mobile Hardening
+
+Prompt count
+------------
+QUESTION BANK #006/8 complete
+approximately 2 prompts remain (#007–#008)
+
+Final response
+--------------
+Respond concisely:
+- QUESTION BANK #006 status
+- Curriculum integration PASS/FAIL
+- Media validation PASS/FAIL
+- scoped authorization PASS/FAIL
+- Practice/Exam contracts PASS/FAIL
+- CATECHIST policy
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly:
+git commit -m "feat(question-bank): add scoped delivery integration"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #007 automatically.

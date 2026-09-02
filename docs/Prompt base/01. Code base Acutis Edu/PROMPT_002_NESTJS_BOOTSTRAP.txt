@@ -1,0 +1,608 @@
+CURSOR PROMPT #002 — NESTJS BACKEND BOOTSTRAP & CODE QUALITY FOUNDATION
+
+1. Context
+----------
+We are building a long-term parish catechism platform.
+
+This repository is the BACKEND repository only.
+
+Technical baseline:
+- Node.js v22.23.1
+- NestJS
+- TypeScript
+- MSSQL
+- Docker / Docker Compose for local development
+- Bitbucket Pipelines for CI/CD
+- Frontend will be a completely separate ReactJS repository
+
+Prompt #001 has already established mandatory project rules and repository hygiene.
+
+Before making ANY change:
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all applicable .cursor/rules/*.mdc.
+4. Read:
+   docs/PROMPT_001_PROJECT_RULES_REPORT.md
+5. Inspect the current repository state.
+
+The rules already established in Prompt #001 are authoritative.
+
+Do NOT weaken or bypass them.
+
+2. Current Phase
+----------------
+We are currently working on:
+
+Backend Foundation
+Prompt #002 / approximately 7 prompts
+
+This prompt is specifically responsible for:
+
+NestJS application bootstrap + Node/npm baseline + TypeScript strictness + ESLint + Prettier + minimal application structure.
+
+Do NOT try to complete the whole backend foundation in this prompt.
+
+Future prompts will separately handle:
+- environment/config validation
+- structured logging
+- global validation
+- exception handling
+- Swagger
+- MSSQL
+- ORM/data-access
+- migrations
+- Docker
+- integration/e2e database testing
+- CI quality gates
+- final foundation hardening
+
+3. Primary Objective
+--------------------
+Bootstrap a clean, production-oriented NestJS application from the currently minimal repository while preserving all rules and files created in Prompt #001.
+
+At the end of this task, the repository should have a working NestJS skeleton that:
+- installs deterministically
+- runs locally
+- builds successfully
+- passes TypeScript type checking
+- passes ESLint
+- passes Prettier checks
+- passes basic tests
+- explicitly targets Node.js v22.23.1
+- contains no catechism business modules yet
+
+4. Important Repository Preservation Rules
+------------------------------------------
+The repository already contains important files created in Prompt #001.
+
+DO NOT overwrite, delete, regenerate, or weaken:
+- PROJECT_RULES.md
+- AGENTS.md
+- .cursor/rules/
+- .gitignore
+
+Be especially careful if using Nest CLI scaffolding.
+
+Do NOT blindly run a command that overwrites the existing repository root.
+
+If Nest CLI generation would overwrite existing project files:
+- use a safe temporary-generation/merge strategy, or
+- manually establish the NestJS structure.
+
+Choose the safest approach after inspecting the repository.
+
+Document the approach in the final report.
+
+5. Package Manager
+------------------
+Use:
+npm
+
+Do not introduce:
+- yarn
+- pnpm
+- multiple lockfiles
+
+The repository must use:
+package-lock.json
+
+Dependency installation must be deterministic.
+
+6. Node.js Version Pinning
+--------------------------
+The required Node version is exactly:
+22.23.1
+
+Create:
+.nvmrc
+
+containing:
+22.23.1
+
+Also declare the expected Node version in package.json using engines.
+
+Prefer an exact project expectation rather than an ambiguous broad Node range.
+
+Do not silently change the required Node version.
+
+7. NestJS Bootstrap
+-------------------
+Create a clean NestJS application skeleton.
+
+Use stable NestJS packages compatible with Node.js 22.23.1.
+
+Document the exact major versions installed in the report.
+
+The application should minimally contain:
+src/
+  main.ts
+  app.module.ts
+
+Add only infrastructure required for this prompt.
+
+Do NOT generate future modules such as:
+- auth
+- users
+- roles
+- students
+- parents
+- catechists
+- classes
+- lessons
+- questions
+- exams
+- practice
+- gamification
+- notifications
+- media
+
+Those will be introduced only when their phases begin.
+
+8. Minimal Health Endpoint
+--------------------------
+Instead of retaining a meaningless default "Hello World" endpoint, provide one minimal infrastructure endpoint for smoke testing:
+
+GET /api/v1/health
+
+Expected purpose:
+- confirm application is running
+- support local development
+- support future Docker health checks
+- support future CI smoke tests
+
+Keep it simple in this prompt.
+
+Example response conceptually:
+{
+  "status": "ok"
+}
+
+Do NOT add database health checks yet.
+
+MSSQL is a later prompt.
+
+Prefer a small dedicated infrastructure-oriented health implementation rather than keeping the default NestJS sample application.
+
+9. API Prefix
+-------------
+Configure the application baseline so API endpoints use:
+/api/v1
+
+The health endpoint should therefore resolve as:
+GET /api/v1/health
+
+Do not introduce URI versioning or additional versioning schemes unless clearly required.
+
+10. TypeScript Configuration
+----------------------------
+Configure TypeScript for strong type safety in accordance with PROJECT_RULES.md.
+
+Requirements include:
+- strict mode
+- no implicit any
+- appropriate strict null checks
+- safe compiler configuration
+- no broad compiler suppression
+- no skip mechanisms merely to hide application errors unless they are legitimate ecosystem compatibility settings
+
+Do NOT use:
+- any
+- @ts-ignore
+- @ts-nocheck
+
+to make bootstrap code compile.
+
+If NestJS tooling requires a compiler option that is weaker than ideal, document exactly why.
+
+11. Path Aliases
+----------------
+Evaluate whether a simple source alias such as:
+@/*
+
+or an equivalent clear convention should be established now.
+
+Only introduce it if it works consistently with:
+- TypeScript
+- Nest build
+- Jest/tests
+- runtime/build output
+
+Do NOT add aliases that create tool inconsistency.
+
+If relative imports are currently simpler and safer for this minimal skeleton, that is acceptable.
+
+Document the decision.
+
+12. Prettier
+------------
+Configure Prettier according to PROJECT_RULES.md.
+
+Baseline:
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "semi": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "printWidth": 100,
+  "endOfLine": "lf"
+}
+
+Add appropriate ignore configuration if necessary.
+
+Package scripts should include clear commands equivalent to:
+- format
+- format:check
+
+format may modify files.
+format:check must only validate formatting.
+
+13. ESLint
+----------
+Configure modern TypeScript-aware ESLint compatible with the selected NestJS and TypeScript versions.
+
+Prefer the current ESLint configuration style supported by the installed ecosystem.
+
+The lint configuration must prioritize real TypeScript correctness.
+
+At minimum, carefully evaluate/enforce rules concerning:
+- unused variables
+- unused imports
+- floating promises
+- misused promises
+- unsafe TypeScript usage
+- accidental any
+- async correctness
+- unreachable code
+
+Do NOT globally disable strict rules just to make lint green.
+
+Do NOT create large numbers of arbitrary rule exceptions.
+
+If a rule must be relaxed because of NestJS framework behavior, explain it in the report.
+
+Prettier and ESLint must not fight each other over formatting.
+
+14. Package Scripts
+-------------------
+Create a clean script baseline.
+
+Expected scripts should cover concepts equivalent to:
+- start
+- start:dev
+- build
+- typecheck
+- lint
+- lint:fix
+- format
+- format:check
+- test
+- test:watch
+- test:cov
+- test:e2e
+
+Use standard NestJS conventions where appropriate.
+
+Do not create fake scripts that do not work.
+
+Every script introduced in this prompt must be executable successfully or clearly documented if intentionally reserved for a later phase.
+
+In particular, do NOT create a database integration command that requires MSSQL yet.
+
+15. Testing Baseline
+--------------------
+Retain/create a minimal test foundation.
+
+At minimum, test the infrastructure behavior created in this prompt.
+
+The health endpoint should have appropriate automated coverage.
+
+Tests must be deterministic.
+
+Do NOT require:
+- MSSQL
+- Docker
+- network access
+- external services
+
+for these tests.
+
+Keep testing architecture simple at this stage.
+
+Do not over-engineer test helpers before real domain modules exist.
+
+16. Environment Files
+---------------------
+Do NOT implement full configuration management yet.
+
+That belongs to Prompt #003.
+
+However:
+- preserve .env ignore behavior
+- preserve the .env.example exception already established if present
+- do not add secrets
+- do not hard-code environment credentials
+
+If no environment variables are required by this prompt, do not invent them.
+
+17. Swagger
+-----------
+OUT OF SCOPE for Prompt #002.
+
+Swagger will be intentionally configured in Prompt #003 together with:
+- global API bootstrap conventions
+- validation
+- error contract
+- configuration
+- logging
+
+Do not implement Swagger yet.
+
+18. MSSQL / ORM / Migration
+---------------------------
+STRICTLY OUT OF SCOPE.
+
+Do not install or configure:
+- MSSQL driver
+- TypeORM
+- Prisma
+- MikroORM
+- Sequelize
+- Drizzle
+- migration framework
+- database entities
+- repositories
+
+We will make the ORM/data-access decision deliberately in Prompt #004.
+
+Do not guess it now.
+
+19. Docker
+----------
+STRICTLY OUT OF SCOPE.
+
+Do not create yet:
+- Dockerfile
+- docker-compose.yml
+- compose.yml
+- docker/
+
+Docker will be handled after MSSQL/data access architecture is settled.
+
+20. Authentication & Business Modules
+-------------------------------------
+STRICTLY OUT OF SCOPE.
+
+Do NOT implement:
+- authentication
+- users
+- authorization
+- RBAC
+- parish
+- academic years
+- catechism levels
+- students
+- parents
+- catechists
+- classes
+- lessons
+- question bank
+- exams
+- games
+- communication features
+
+This prompt is infrastructure bootstrap only.
+
+21. Avoid Premature Architecture
+--------------------------------
+Do not create speculative folders such as:
+- common/
+- shared/
+- utils/
+- helpers/
+- core/
+- domain/
+- infrastructure/
+
+unless there is an actual requirement in this prompt.
+
+The application is intentionally small right now.
+
+Allow architecture to emerge from real requirements.
+
+22. Git Behavior
+----------------
+DO NOT commit.
+
+Do not run:
+- git add
+- git commit
+- git push
+
+We will review the implementation report before deciding when to create the first commit.
+
+You may use read-only Git commands such as:
+- git status
+- git diff
+- git diff --stat
+
+23. Required Validation
+-----------------------
+Before finishing, run all applicable commands and record their actual results.
+
+At minimum validate:
+- node --version
+- npm --version
+- npm install / npm ci as appropriate
+- npm run format:check
+- npm run lint
+- npm run typecheck
+- npm test
+- npm run build
+
+If test:e2e exists and is fully functional without Docker/MSSQL, run it as well.
+
+Start the application locally if practical and verify:
+GET /api/v1/health
+
+returns the expected successful response.
+
+Do not claim a command passed unless it was actually executed successfully.
+
+If something fails:
+1. investigate
+2. fix it if within scope
+3. rerun
+4. report the final result
+
+24. Dependency Review
+---------------------
+Before finishing:
+- inspect package.json
+- remove unused dependencies
+- ensure dependency categories make sense
+- ensure there is only one package manager lockfile
+- ensure no unnecessary database/Docker/business packages were introduced
+
+Document important package choices.
+
+25. Required Cursor Report
+--------------------------
+Create:
+docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+
+Remember that docs/ is intentionally ignored by Git.
+
+The report must be detailed enough for another engineer or ChatGPT session to continue the project without guessing.
+
+Include:
+
+1. Objective
+
+2. Repository State Before Implementation
+Briefly describe the state inherited from Prompt #001.
+
+3. Bootstrap Approach
+Explain how NestJS was introduced without damaging the existing rules files.
+
+4. Runtime & Package Manager
+Include:
+- actual Node version
+- actual npm version
+- .nvmrc
+- package.json engines
+- package manager/lockfile
+
+5. NestJS / TypeScript Versions
+List important exact installed versions.
+
+6. Project Structure
+Show the resulting relevant directory tree.
+
+7. Files Created
+List them.
+
+8. Files Modified
+List them and explain meaningful changes.
+
+9. Health Endpoint
+Document:
+GET /api/v1/health
+and its response.
+
+10. TypeScript Configuration
+Explain important strictness settings.
+
+11. ESLint Configuration
+Explain important rules and any exceptions.
+
+12. Prettier Configuration
+Document formatter settings.
+
+13. Package Scripts
+List scripts and their purpose.
+
+14. Tests
+Describe tests added and what they validate.
+
+15. Commands Executed
+List actual commands.
+
+16. Validation Results
+Explicit PASS/FAIL for:
+- Node version
+- dependency installation
+- format check
+- lint
+- typecheck
+- unit tests
+- e2e tests if applicable
+- build
+- health endpoint smoke check
+
+17. Dependency Summary
+Important production/dev dependencies and why they exist.
+
+18. Git Diff / Git Status Summary
+Show the scope of repository changes.
+
+19. Rules Compliance Review
+Confirm compliance with PROJECT_RULES.md.
+
+20. Known Issues / Assumptions
+Anything the next prompt must know.
+
+21. Out-of-Scope Confirmation
+Explicitly confirm that this prompt did NOT implement:
+- MSSQL
+- ORM
+- migrations
+- Docker
+- Swagger
+- auth
+- catechism business modules
+
+22. Recommended Next Step
+Recommend preparation for:
+
+Prompt #003
+Application Bootstrap Infrastructure:
+- configuration validation
+- structured logging
+- global validation
+- global exception handling
+- request/correlation context if appropriate
+- Swagger/OpenAPI baseline
+
+Do NOT implement Prompt #003 work yet.
+
+26. Final Response to User
+--------------------------
+When finished, respond concisely with:
+1. Prompt #002 completion status.
+2. Whether all validation passed.
+3. The generated report path:
+   docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+4. Any blocking issue, if one exists.
+
+Do not proceed to Prompt #003 automatically.

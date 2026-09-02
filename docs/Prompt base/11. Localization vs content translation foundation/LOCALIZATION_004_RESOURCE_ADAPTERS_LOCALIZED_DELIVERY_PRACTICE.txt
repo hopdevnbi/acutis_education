@@ -1,0 +1,681 @@
+CURSOR PROMPT — LOCALIZATION #004/6
+RESOURCE ADAPTERS + LOCALIZED DELIVERY + QUESTION BANK INTEGRATION + PRACTICE SNAPSHOT
+
+CONTEXT
+-------
+Completed:
+- LOCALIZATION #001/6 — Cross-Domain Audit + Translation Model Design
+- LOCALIZATION #002/6 — Locale Preferences + Translation Persistence Foundation
+- LOCALIZATION #003/6 — Provider Abstraction + DB Jobs + Catholic Glossary Foundation
+
+Current:
+LOCALIZATION #004 / 6
+
+Remaining:
+#005 Admin/review/approve APIs + RBAC + FE/Mobile contract hardening
+#006 Final audit + demo/Postman + quality/full + Docker
+
+Inherited guarantees:
+- LocalizationService + LocaleResolutionService are sole exports
+- translation_resources/revisions/jobs ready
+- Catholic glossary ready
+- mock/Google provider abstraction ready
+- DB worker ready
+- learner GET never calls provider
+- revisions immutable
+- approved + matching source hash required for learner translation
+- stale derived by source hash mismatch
+- no admin HTTP yet
+- no localized learner delivery yet
+- no Practice translation snapshot yet
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001–#003 reports/current code first
+- keep scope inside #004
+- create detailed docs report
+- not auto-proceed #005
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(localization): integrate localized content delivery"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/LOCALIZATION_002_LOCALE_PREFERENCES_TRANSLATION_PERSISTENCE_REPORT.md
+docs/LOCALIZATION_003_PROVIDER_JOBS_CATHOLIC_GLOSSARY_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Inspect:
+src/modules/localization/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/learning-content/
+src/modules/question-bank/
+src/modules/practice/
+src/modules/media/
+src/modules/users/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+- real resource adapters
+- Curriculum metadata/version/topic/lesson localization
+- Learning Content structured adapter
+- Question Bank version adapter
+- source snapshot/hash validation
+- LocalizationService localized read resolution + batch resolution
+- locale-aware CurriculumDelivery tree/content GET
+- user preferredLocale + Accept-Language + parish default resolution
+- approved-only merge + SOURCE/MISSING/STALE fallback
+- Practice translationRevisionId/deliveredLocale snapshot
+- review-wrong inheritance
+- grading unchanged
+- FE/Mobile additive metadata
+- tests + quality:full + Docker
+
+Do NOT implement:
+admin translation APIs/RBAC/Exam/translated search/export/import/notifications.
+
+RESOURCE ADAPTERS
+-----------------
+Complete TranslationSourceAdapter and real registry.
+
+Adapters use owning-module PUBLIC SERVICES only.
+No source repo/entity imports.
+
+Need adapters for:
+CURRICULUM_METADATA
+CURRICULUM_VERSION
+CURRICULUM_TOPIC
+CURRICULUM_LESSON
+LEARNING_CONTENT_DOCUMENT
+QUESTION_BANK_VERSION
+
+If fewer composite Curriculum adapters are cleaner, preserve same resource identities.
+
+CURRICULUM HASHES
+-----------------
+Implement deterministic SHA-256 canonical semantic hashes.
+
+Curriculum metadata: name + description only.
+Version label: label semantics.
+Topic: title + description.
+Lesson: title + summary.
+
+Exclude IDs, timestamps, audit fields, sort order unless visibly translatable meaning requires it.
+
+LEARNING CONTENT
+----------------
+Use existing contentHash.
+Translate:
+heading/paragraph/callout text
+bullet/numbered items
+scripture_ref reference/text as schema defines
+image/video alt/caption
+
+Preserve:
+block order/index
+type
+assetId
+level
+variant
+other structural fields
+
+MVP block identity:
+blockIndex + type.
+No reordering.
+Invalid shape rejected.
+
+QUESTION BANK
+-------------
+Use existing sourceContentHash.
+
+Translate:
+prompt
+instruction
+explanation
+option text
+translatable media alt fields
+
+Preserve:
+questionVersionId
+option UUIDs
+option order
+correctOptionIds
+answerDefinitionJson
+internal option code
+question type
+media asset IDs
+
+Translation payload must NOT contain/mutate correctness semantics.
+
+TRANSLATION UNIT IDS
+--------------------
+Deterministic examples:
+curriculum.name
+topic:<id>:title
+lesson:<canonicalLessonKey>:summary
+block:<index>:text
+option:<optionId>:text
+
+Provider output IDs must match exactly.
+
+LOCALIZATION RESOLVE API
+------------------------
+Add facade methods:
+resolveLocalizedResource(...)
+resolveLocalizedResources(...)
+
+Flow:
+1 source adapter snapshot
+2 normalize requested locale
+3 requested==source -> SOURCE, no translation lookup needed
+4 lookup existing translation_resource (GET path must not create)
+5 latest APPROVED revision for target
+6 compare source hash
+7 valid + current -> validate/apply payload -> APPROVED
+8 missing -> source fallback MISSING
+9 stale -> source fallback STALE
+10 invalid approved payload -> safe source fallback + metadata/logging
+
+Never call provider on GET.
+
+READ METADATA
+-------------
+requestedLocale
+resolvedLocale
+sourceLocale
+translationStatus
+isFallback
+translationRevisionId?
+sourceContentHash
+
+Learner read statuses:
+SOURCE
+APPROVED
+MISSING
+STALE
+
+MACHINE_TRANSLATED must NOT be served as learner translation.
+
+LOCALE RESOLUTION
+-----------------
+CurriculumDelivery learner read precedence:
+user preferredLocale
+Accept-Language
+parish defaultLocale
+vi-VN
+
+If current API has an explicit locale input, audit backward compatibility; admin query override belongs #005 unless already contractual.
+
+Use shared proper Accept-Language parser, replacing naive first-tag logic.
+
+CURRICULUM DELIVERY
+-------------------
+Existing class/enrollment curriculum-tree routes:
+localize curriculum metadata, version label, topics, lessons.
+
+Preserve all IDs/codes/status/order/canonicalLessonKey/duration.
+
+No new parallel learner route.
+
+Performance:
+collect resource refs then batch lookup.
+No DB lookup per node.
+
+LESSON CONTENT DELIVERY
+-----------------------
+Existing lesson content route:
+return translated structured document when APPROVED/current.
+
+Fallback source otherwise.
+
+Preserve contextual media asset IDs/routes.
+
+Add localization envelope metadata additively.
+
+NO WRITE ON GET
+---------------
+Localized GET must NOT call getOrCreateResource.
+Only look up existing binding/revision.
+Translation resources are created by job/admin workflow.
+
+QUESTION LEARNER DELIVERY
+-------------------------
+QuestionBank admin/source APIs unchanged.
+
+Practice should use LocalizationService/Question adapter to produce localized learner display snapshot.
+
+Avoid QuestionBank -> Localization dependency.
+Preferred dependency:
+Practice -> Localization -> QuestionBank.
+
+Localization must NOT import Practice.
+
+PRACTICE SCHEMA
+---------------
+Audit practice_session_questions.
+
+Add additive migration as needed:
+translation_revision_id UUID NULL
+delivered_locale varchar(32) NULL/NOT NULL per safe compatibility
+
+Strong preference:
+NO SQL FK Practice -> Localization.
+Scalar revision ID only.
+
+Old rows must remain valid.
+
+PRACTICE SESSION CREATE
+-----------------------
+At first creation:
+- resolve effective session/request locale
+- select exact questionVersionIds as before
+- batch resolve localized question display
+- persist exact translationRevisionId nullable + deliveredLocale per session question
+- option/question order remains persisted
+
+If no translation:
+revision null
+deliveredLocale = sourceLocale
+
+Same clientRequestId replay must return existing session and never re-resolve newer translation.
+
+PRACTICE SESSION GET
+--------------------
+Existing session:
+use persisted exact translationRevisionId.
+
+Add Localization exact revision lookup by ID if necessary.
+
+Never use latest approved for an existing session.
+
+If revision unexpectedly unavailable/invalid:
+fallback safely to pinned source question; grading/session remains usable.
+
+NEW APPROVAL AFTER SESSION
+--------------------------
+Approving translation revision N+1 must NOT alter old session pinned to revision N.
+
+Test explicitly.
+
+REVIEW-WRONG
+------------
+Child review inherits from source:
+questionVersionId
+question order
+option order
+translationRevisionId
+deliveredLocale
+
+Do not re-resolve latest translation.
+
+GRADING
+-------
+No changes to:
+gradeAnswer
+selected IDs
+correct IDs
+answerDefinition
+retry
+feedback timing
+session completion
+idempotency
+
+Localization is display-only.
+
+FEEDBACK
+--------
+Localized explanation/correct-option visible text must use same pinned revision as prompt/options.
+
+Approved question translation should be complete for all translatable fields to avoid language mixing.
+
+PRACTICE RESPONSE METADATA
+--------------------------
+Add compact per-question:
+deliveredLocale
+translationRevisionId?
+translationStatus
+isFallback
+
+Session requested locale remains available.
+
+Avoid duplicative metadata per option.
+
+PRACTICE LOCALE INPUT
+---------------------
+Audit existing create locale contract.
+
+If explicit client locale already exists:
+keep it highest priority for Practice session because locale participates in generation/idempotency.
+
+If omitted:
+user preferredLocale -> Accept-Language -> parish default -> vi-VN.
+
+SOURCE MODULE PUBLIC APIs
+-------------------------
+If narrow source snapshots missing, add public service methods only:
+CurriculumService
+LearningContentService
+QuestionBankService
+
+Return pure snapshot/DTO.
+No entities/repos exported.
+
+EXACT REVISION LOOKUP
+---------------------
+TranslationRevisionService/LocalizationService:
+get exact revision by ID for Practice replay.
+
+Validate resource/revision consistency where needed.
+
+Do not delete old approved revisions.
+
+CROSS-PARISH
+------------
+Resource parish scope must match source parish.
+Never resolve another parish's translation.
+
+SECURITY
+--------
+No provider on GET.
+No PII/provider content.
+No answer leakage.
+No correctness mutation.
+No unsafe HTML behavior.
+No cross-parish leakage.
+No secret logging.
+
+PERFORMANCE
+-----------
+Curriculum tree:
+batch translation lookup, bounded queries.
+
+Practice generation:
+batch resolve selected question versions.
+No one translation query per question.
+
+FAILURE BEHAVIOR
+----------------
+Missing/stale/invalid translation:
+source fallback.
+
+Translation problem alone should not make learner content unavailable.
+
+Authorization/source-not-found errors still propagate normally.
+
+OPENAPI
+-------
+Update CurriculumDelivery + Practice DTOs/documentation:
+Accept-Language behavior
+requested/resolved/source locale
+translationStatus
+isFallback
+translationRevisionId
+source hash/content hash
+
+FE READINESS
+------------
+Verdict:
+FE LOCALIZED CONTENT DELIVERY CONTRACT READY: YES/NO
+
+Must support localized curriculum tree, lesson content, Practice, fallback metadata, old source-language behavior.
+
+MOBILE READINESS
+----------------
+Verdict:
+MOBILE LOCALIZED CONTENT DELIVERY CONTRACT READY: YES/NO
+
+Cache key guidance:
+locale + source/content hash + translationRevisionId.
+
+Offline Practice replay must remain deterministic.
+
+TESTS
+-----
+Adapter unit:
+- hashes stable/change appropriately
+- structured merge
+- invalid payload rejected
+- IDs/order/media/correctness preserved
+
+Localization resolve:
+- SOURCE
+- APPROVED
+- MISSING fallback
+- STALE fallback
+- machine-only fallback
+- invalid approved payload safe fallback
+- cross-parish
+- batch resolution
+- exact revision lookup
+
+CurriculumDelivery integration:
+- source vi-VN
+- approved en-US tree
+- partial/missing fallback
+- stale fallback
+- translated lesson document
+- asset IDs preserved
+- malformed Accept-Language
+- preferredLocale/header/parish/system precedence
+
+Practice integration:
+- translated session create
+- persisted revision/locale
+- GET exact revision
+- newer approval doesn't change old session
+- review-wrong inheritance
+- missing fallback source
+- grading/retry/idempotency unchanged
+- contextual media unchanged
+- batch translation resolution
+
+DB E2E:
+localized curriculum tree/content
+Practice localized session
+fallback/stale
+scopes unchanged
+no answer leakage
+
+MODULE BOUNDARY
+---------------
+Allowed:
+Localization -> Curriculum/LearningContent/QuestionBank
+CurriculumDelivery -> Localization
+Practice -> Localization
+
+Forbidden:
+Curriculum -> Localization
+LearningContent -> Localization
+QuestionBank -> Localization
+Localization -> Practice
+LearningProgress -> Localization
+
+No cycles/forwardRef.
+
+REGRESSION
+----------
+Keep all existing modules green.
+
+QUALITY
+-------
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require one clean PASS.
+
+DOCKER
+------
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:localization-delivery ."
+
+PASS required.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/LOCALIZATION_004_RESOURCE_ADAPTERS_LOCALIZED_DELIVERY_PRACTICE_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #003
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final dependency graph
+7 Resource adapter registry
+8 Curriculum metadata adapter
+9 Curriculum version adapter
+10 Curriculum topic adapter
+11 Curriculum lesson adapter
+12 LearningContent adapter
+13 Block identity strategy
+14 QuestionBankVersion adapter
+15 Question semantic preservation
+16 Translation unit IDs
+17 Hash strategy
+18 Source snapshot APIs added
+19 LocalizationService resolve API
+20 Batch resolve API
+21 Same-locale SOURCE behavior
+22 Approved translation behavior
+23 Missing fallback
+24 Stale fallback
+25 Invalid payload fallback
+26 Response metadata
+27 Locale resolution in Delivery
+28 User preferred locale
+29 Parish default locale
+30 Curriculum tree localization
+31 Curriculum tree query count/N+1
+32 Lesson content localization
+33 Media asset preservation
+34 Question localized learner projection
+35 PracticeModule localization dependency
+36 Practice schema additions
+37 Practice session create localization
+38 Practice exact revision snapshot
+39 Session replay behavior
+40 Practice session GET
+41 Feedback localization
+42 Review-wrong inheritance
+43 Grading invariants
+44 Practice idempotency
+45 Practice localization metadata DTO
+46 Batch question localization
+47 Cross-parish scope
+48 Security
+49 Performance
+50 FE readiness
+51 Mobile readiness
+52 Unit tests
+53 Integration tests
+54 DB e2e
+55 Existing regression
+56 pristine quality:full
+57 Docker
+58 Swagger/OpenAPI
+59 Multilingual readiness
+60 Microservice extraction
+61 Commands
+62 Validation matrix
+63 Known/deferred
+64 Out-of-scope
+65 LOCALIZATION #005 readiness
+66 Prompt count
+67 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- format/lint/typecheck/unit/e2e/build/audit/quality
+- pristine DB reset/migrations/integration/DB e2e
+- quality:full one clean run
+- Docker
+- no cycle/forwardRef
+- adapters public-service-only
+- no source repo/entity imports
+- Curriculum/LearningContent/QB adapters
+- deterministic hashes
+- option IDs/correctness/media IDs preserved
+- SOURCE/APPROVED/MISSING/STALE
+- machine translation not learner-visible
+- invalid approved payload fallback
+- no write-on-GET
+- proper Accept-Language
+- user preferred + parish default
+- localized curriculum tree without N+1
+- localized lesson content
+- Practice translationRevisionId snapshot
+- deliveredLocale persisted
+- old session exact revision
+- newer approval no mutation of old session
+- review-wrong inherits
+- grading unchanged
+- idempotency regression
+- no Practice->Localization FK
+- cross-parish safe
+- no provider on GET
+- FE/Mobile contracts ready
+- prior regression
+- Git compliance
+
+#005 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH.
+
+Recommend:
+LOCALIZATION #005/6 —
+ADMIN REVIEW/APPROVAL APIs + RBAC + FE/MOBILE CONTRACT HARDENING
+
+PROMPT COUNT
+------------
+LOCALIZATION #004/6 complete
+approximately 2 prompts remain
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- LOCALIZATION #004 status
+- adapters PASS/FAIL
+- Curriculum Delivery localization PASS/FAIL
+- Question localization PASS/FAIL
+- Practice snapshot PASS/FAIL
+- FE readiness
+- Mobile readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then exactly:
+git commit -m "feat(localization): integrate localized content delivery"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.

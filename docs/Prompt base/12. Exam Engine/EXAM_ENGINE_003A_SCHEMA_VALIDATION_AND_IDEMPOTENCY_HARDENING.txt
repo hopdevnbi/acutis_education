@@ -1,0 +1,491 @@
+CURSOR PROMPT — EXAM ENGINE #003A
+CORRECTIVE HARDENING — SCHEMA VALIDATION + CROSS-MODULE FK AUDIT + ANSWER IDEMPOTENCY DECISION
+
+CONTEXT
+-------
+EXAM #003/8 implemented:
+- 7 Exam-owned tables
+- ExamModule shell
+- ExamService export
+- schema constraints/indexes
+- module boundary tests
+
+But the #003 report did NOT close all mandatory gates from the prompt.
+
+Missing/incomplete:
+1. No pristine `quality:full` evidence
+2. No full migration/integration/DB e2e evidence
+3. No Docker production build evidence
+4. No explicit answer-idempotency design decision
+5. Cross-module SQL FKs were added to parish/user/class/enrollment and must be re-audited against extraction rules
+
+This is a CORRECTIVE prompt.
+
+Do NOT implement Exam authoring APIs yet.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001/#002/#003 reports
+- inspect actual migration/entity code
+- fix only schema/foundation issues
+- create detailed corrective report
+- not auto-proceed #004
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "fix(exam): harden schema foundation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/EXAM_003_EXAM_SCHEMA_AND_MODULE_SHELL_REPORT.md
+
+Inspect:
+src/modules/exam/
+src/database/migrations/1788064000000-create-exam-schema.ts
+src/modules/module-boundaries.spec.ts
+src/database/exam*.spec.ts
+test/
+package.json
+Dockerfile
+
+PRIMARY OBJECTIVES
+------------------
+A. Close all missing validation gates
+B. Audit/fix cross-module SQL FK policy
+C. Finalize answer idempotency semantics
+D. Verify one-active-attempt and clientRequestId indexes
+E. Verify all 7-table constraints/indexes against #001 design
+F. Keep module boundary clean
+G. Run pristine quality:full
+H. Run Docker production build
+
+1. CROSS-MODULE FK AUDIT
+------------------------
+Current #003 report says SQL FKs exist to:
+- parishes
+- users
+- classes
+- enrollments
+
+This must be audited against:
+PROJECT_RULES modular extraction policy
+Exam #001 cross-module FK recommendation
+Practice precedent
+
+For each cross-module FK, explicitly classify:
+KEEP
+REMOVE
+or JUSTIFIED EXCEPTION
+
+Strong architecture preference:
+Exam-owned tables should store scalar IDs and validate cross-module ownership through public services.
+
+Recommended:
+NO SQL FK to:
+- parish
+- class
+- enrollment
+- student
+- QuestionBank
+- Localization
+- Curriculum
+
+User actor FKs may be retained if project-wide convention consistently uses `users` FK with NO ACTION and extraction tradeoff is accepted.
+
+Do not keep a FK merely because it is convenient.
+
+If removing FKs:
+migration must be corrected safely before Exam APIs begin.
+
+2. INTERNAL FK POLICY
+---------------------
+Keep Exam-owned internal FKs:
+exam_versions -> exams
+exam_version_questions -> exam_versions
+exam_assignments -> exam_versions
+exam_attempts -> exam_assignments / exam_versions / exams as appropriate
+exam_attempt_questions -> exam_attempts
+exam_attempt_answers -> exam_attempt_questions
+
+Audit cascade behavior carefully.
+Historical Exam attempt data must not be accidentally deleted by deleting authoring roots.
+
+Strong preference:
+PUBLISHED/attempt-backed records are not physically deletable later.
+Avoid cascade chains that could destroy formal-assessment history.
+
+3. CASCADE DELETE AUDIT
+-----------------------
+The #003 report says "exam-owned cascades".
+
+Audit each cascade.
+
+Formal Exam history is auditable data.
+
+Required:
+- deleting a DRAFT may safely remove its draft questions if no downstream references
+- deleting/archiving a published exam/version must NOT cascade-delete assignments/attempts/history
+- attempt answers/questions must remain while attempt exists
+- no accidental root delete destroys graded attempts
+
+If current FK cascades could destroy historical attempts:
+FIX before #004.
+
+This may be HIGH severity if present.
+
+4. ANSWER IDEMPOTENCY — MANDATORY DECISION
+------------------------------------------
+Current table:
+`exam_attempt_answers`
+one mutable current answer row per attempt question.
+
+Prompt #003 explicitly warned:
+this cannot provide arbitrary historical replay for multiple old `clientAnswerId` values.
+
+Audit actual columns/indexes and choose exact MVP semantics.
+
+Allowed options:
+
+OPTION A — Stable clientAnswerId per attempt question
+- client generates one UUID for the question-answer resource
+- every edit reuses same clientAnswerId
+- row updates payload/hash
+- retry of same latest payload is idempotent
+- conflicting replay semantics clearly defined
+
+OPTION B — Latest-request idempotency only
+- each edit may use new clientAnswerId
+- only latest saved key/hash can be replayed safely
+- older request replay after a newer edit returns conflict/stale request
+- document Mobile contract clearly
+
+OPTION C — Add history/idempotency table
+- ONLY if analysis proves A/B unsafe
+- this changes 7-table plan and must be justified as HIGH-level requirement
+
+Strong preference:
+remain 7 tables using A or B.
+
+Do NOT claim arbitrary historical request replay unless actually supported.
+
+5. ANSWER SEMANTIC HASH
+-----------------------
+Define deterministic answer semantic hash:
+- canonical selected option UUID set/order semantics according to question type
+- no timestamps/client metadata
+- lowercase normalized UUIDs where relevant
+
+Even though grading comes later, persistence contract must be ready.
+
+Document whether option order affects semantic hash:
+Strong preference: selected option set semantics should be order-insensitive for MULTIPLE_CHOICE unless QuestionBank grading requires otherwise.
+
+6. CLIENT REQUEST IDEMPOTENCY
+-----------------------------
+Verify `exam_attempts` filtered unique index:
+(enrollment_id, exam_assignment_id, client_request_id)
+WHERE client_request_id IS NOT NULL
+
+Verify semantic hash column exists and is length/format constrained if practical.
+
+No duplicate start rows under retry.
+
+7. ONE ACTIVE ATTEMPT
+---------------------
+Verify filtered unique:
+(enrollment_id, exam_assignment_id)
+WHERE status='IN_PROGRESS'
+
+Ensure MSSQL filtered index syntax is correct and migration actually creates it.
+
+8. PUBLISHED VERSION UNIQUE
+---------------------------
+Verify filtered unique:
+one `PUBLISHED` version per exam.
+
+Ensure clone/publish flow planned for #004 can archive old version transactionally before new publish.
+
+9. SCHEMA CHECK AUDIT
+---------------------
+Verify:
+- root status enum
+- version status enum
+- assignment status enum
+- attempt status enum
+- finalization reason
+- duration >0
+- maxAttempts >=1
+- passing score 0..100 or NULL
+- review policy ISJSON
+- closesAt > opensAt
+- attemptNumber >=1
+- deadlineAt >= startedAt
+- score 0..100 or NULL
+- correctCount <= questionCount if practical
+- option order JSON ISJSON
+- answer JSON ISJSON
+- source hash lowercase SHA-256
+- semantic hashes length/format
+
+Do not add brittle checks that conflict with lifecycle nullability.
+
+10. VERSION QUESTION PINNING
+----------------------------
+Confirm:
+question_version_id nullable in DRAFT
+must be non-null after PUBLISHED by service rule later
+
+No DB cross-FK to QB.
+
+11. UUID STRATEGY
+-----------------
+Application-generated UUID v4 only.
+No NEWID()/NEWSEQUENTIALID() DB defaults.
+
+12. ENTITY RELATION AUDIT
+-------------------------
+Zero cross-module TypeORM relations.
+
+Prefer scalar IDs internally too unless actual relation metadata is needed.
+
+No entity/repository exports.
+
+13. EXAMSERVICE SHELL
+---------------------
+`ExamService` may remain minimal/empty at #003A.
+
+But:
+- no fake public TODO methods
+- no NotImplemented throws
+- exported facade boundary must compile
+
+14. MIGRATION TESTS — REQUIRED
+------------------------------
+Real MSSQL tests must prove:
+- exactly 7 Exam tables
+- all columns
+- intended FKs only
+- no forbidden cross-module FKs after audit
+- no dangerous cascade path
+- filtered one-active-attempt unique index
+- filtered clientRequestId unique index
+- one-published-version filtered unique
+- constraints/checks
+- down/up migration integrity where project pattern supports
+- no DB UUID defaults
+
+15. CONSTRAINT BEHAVIOR TESTS
+-----------------------------
+Real DB:
+- duplicate active attempt rejected
+- second non-IN_PROGRESS historical attempt allowed
+- duplicate same attemptNumber rejected
+- null clientRequestId multiple rows allowed
+- duplicate non-null clientRequestId rejected
+- invalid review JSON rejected
+- invalid assignment window rejected
+- invalid hash rejected
+- invalid enum rejected
+- invalid score rejected
+
+16. MODULE BOUNDARY
+-------------------
+ExamModule:
+exports ExamService only.
+No Practice import.
+No Localization import yet.
+No forwardRef.
+Graph acyclic.
+
+17. REGRESSION
+-------------
+Must remain green:
+Auth/User
+Student learner self-scope
+Enrollment/Class
+QuestionBank
+Practice
+LearningProgress
+Localization
+
+18. PRISTINE QUALITY:FULL — REQUIRED
+------------------------------------
+Run exactly:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+Do not report only targeted tests.
+
+19. DOCKER — REQUIRED
+---------------------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-schema ."
+
+PASS required.
+
+20. NPM AUDIT
+-------------
+Run:
+npm audit --audit-level=moderate
+
+No unresolved HIGH vulnerabilities.
+
+21. REQUIRED COMMANDS
+---------------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+Docker build.
+
+22. REQUIRED REPORT
+-------------------
+Create:
+
+docs/EXAM_003A_SCHEMA_VALIDATION_AND_IDEMPOTENCY_HARDENING_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Why #003A was required
+3 State inherited from #003
+4 Files created
+5 Files modified
+6 Cross-module FK audit
+7 Parish FK decision
+8 User actor FK decision
+9 Class FK decision
+10 Enrollment FK decision
+11 Student FK decision
+12 Internal FK policy
+13 Cascade delete audit
+14 Historical attempt retention
+15 Answer idempotency problem
+16 Final answer idempotency decision
+17 Mobile retry semantics
+18 Answer semantic hash
+19 Attempt start idempotency
+20 One-active-attempt index
+21 Published-version unique index
+22 Schema checks audit
+23 Version-question pinning
+24 UUID strategy
+25 ORM relation audit
+26 ExamService shell
+27 Migration tests
+28 Constraint behavior tests
+29 Module boundary
+30 Regression
+31 pristine quality:full
+32 Docker
+33 npm audit
+34 Commands
+35 Validation matrix
+36 Risks/deferred
+37 BLOCKER/HIGH/MEDIUM/LOW
+38 EXAM #004 readiness
+39 Prompt count
+40 Commit recommendation
+
+23. REQUIRED VERDICTS
+---------------------
+EXAM SCHEMA FOUNDATION READY: YES/NO
+
+CROSS-MODULE FK POLICY READY: YES/NO
+
+HISTORICAL ATTEMPT RETENTION SAFE: YES/NO
+
+ANSWER IDEMPOTENCY MODEL READY: YES/NO
+
+ONE ACTIVE ATTEMPT DB GUARD READY: YES/NO
+
+START IDEMPOTENCY DB GUARD READY: YES/NO
+
+PUBLISHED VERSION UNIQUENESS READY: YES/NO
+
+PRISTINE QUALITY:FULL: PASS/FAIL
+
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+24. EXAM #004 GATE
+------------------
+Proceed to #004 only if:
+- BLOCKER=0
+- HIGH=0
+- historical retention safe
+- answer idempotency semantics explicit
+- schema constraints proven
+- pristine quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+EXAM #004/8 —
+AUTHORING + PUBLISH + CLASS ASSIGNMENT APIs
+
+Do not auto-proceed.
+
+25. PROMPT COUNT
+----------------
+This is corrective `#003A`.
+Main plan remains 8 prompts unless a schema correction changes scope.
+
+26. FINAL RESPONSE
+------------------
+Respond concisely:
+- #003A status
+- cross-module FK result
+- cascade/history safety
+- answer idempotency decision
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(exam): harden schema foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

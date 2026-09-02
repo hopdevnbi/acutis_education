@@ -1,0 +1,951 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #001/5
+DOMAIN AUDIT + ORCHESTRATION BOUNDARY DESIGN + BASELINE VALIDATION
+
+1. ROADMAP POSITION
+-------------------
+Completed backend phases:
+- Foundation
+- CI/CD
+- Auth/RBAC
+- Parish/Academic/Catechism Level
+- Class/Student/Catechist/Parent/Enrollment
+- Curriculum/Learning Content
+- Media
+- Question Bank
+- Practice
+- Learning Progress
+- Localization
+- Exam Engine
+
+Next planned module from master roadmap:
+"Catechist + Parent supporting APIs"
+Estimated 4–5 prompts.
+
+Use 5 prompts unless audit proves 4 is cleaner.
+
+Provisional sequence:
+#001/5 Domain audit + orchestration design + baseline validation
+#002/5 Catechist context + assigned class dashboard/roster APIs
+#003/5 Parent context + linked-child progress snapshot APIs
+#004/5 RBAC/security/performance/contract hardening
+#005/5 Final audit + demo seed + Postman + quality/full + Docker
+
+This #001 is AUDIT / DESIGN ONLY.
+Do NOT implement production business APIs yet.
+
+2. IMPORTANT HANDOFF STATE
+--------------------------
+Read:
+docs/BACKEND_PHASE_HANDOFF_CATECHIST_PARENT_READINESS_REPORT.md
+
+Handoff verdict:
+- backend architecturally ready
+- recommended 4–5 prompts
+- stateless orchestration/read-model facade
+- do NOT duplicate Class/Enrollment/Practice/LearningProgress/Exam logic
+- defer Attendance, Schedule, Prayer, Notifications
+
+However:
+the handoff notes that a fresh `quality:full` baseline should be re-run before this phase.
+
+Therefore this #001 MUST validate the current repository baseline before declaring #002 ready.
+
+3. PERMANENT WORKFLOW / GIT RULES
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect current implementation deeply
+- not modify production code/schema in #001
+- create one detailed report in docs/
+- not auto-proceed #002
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+Audit-only:
+no commit recommendation unless tracked files were accidentally changed, which should not happen.
+
+4. MANDATORY READING
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/BACKEND_PHASE_HANDOFF_CATECHIST_PARENT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LOCALIZATION_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Also inspect relevant Auth/RBAC and Student/Enrollment reports.
+
+Inspect:
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/practice/
+src/modules/learning-progress/
+src/modules/exam/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/localization/
+src/modules/auth/
+src/modules/access-control/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+test/
+README.md
+package.json
+Dockerfile
+
+Inspect git status read-only.
+
+5. PRIMARY OBJECTIVE
+--------------------
+Design the new orchestration bounded context.
+
+Answer:
+
+A. Should this be a new module or extend EnrollmentModule/MeController?
+B. What is the best bounded-context/module name?
+C. Should it own any tables?
+D. What exact public services does it depend on?
+E. What exact APIs should be delivered for Catechist?
+F. What exact APIs should be delivered for Parent?
+G. What existing permissions can be reused?
+H. Are new permissions needed?
+I. What scope guards are mandatory?
+J. What public methods are missing from PracticeService/ExamService/etc.?
+K. How to avoid N+1 orchestration?
+L. What data is safe for Parent vs Catechist?
+M. What should remain explicitly deferred?
+N. Is 4 or 5 prompts the correct delivery count?
+
+No production implementation.
+
+6. MODULE TYPE
+--------------
+Strong default:
+stateless orchestration/read-model facade.
+
+It should compose public APIs from:
+- Class
+- Enrollment
+- Student
+- Practice
+- Learning Progress
+- Exam
+- possibly Curriculum/Localization
+
+It should NOT own:
+- class data
+- enrollment data
+- progress rows
+- practice sessions
+- exam attempts
+- guardian links
+- catechist assignments
+
+Prefer ZERO new business tables.
+
+If audit recommends a table:
+must justify why a durable read-model/cache is necessary.
+MVP preference = no table.
+
+7. MODULE NAME DECISION
+-----------------------
+Compare:
+
+A. `family-engagement`
+B. `portal-orchestration`
+C. `catechist-parent`
+D. another justified name
+
+Criteria:
+- reflects BOTH catechist and parent use
+- orchestration, not ownership
+- future maintainability
+- microservice extraction boundary
+- English naming
+- avoids becoming a generic god module
+
+Required verdict:
+FINAL MODULE NAME: <name>
+
+8. NEW MODULE VS ENROLLMENT MODULE
+----------------------------------
+Compare:
+
+OPTION A:
+extend `EnrollmentModule` / `MeController`
+
+OPTION B:
+create dedicated orchestration module
+
+Strong concern:
+Enrollment should not become a god module that composes Practice + LearningProgress + Exam + Class dashboards.
+
+Likely preference:
+dedicated orchestration module with `/me/...` controllers.
+
+But audit actual dependency graph before deciding.
+
+9. ZERO-TABLE PREFERENCE
+------------------------
+Expected:
+no entities
+no migrations
+no repositories
+
+If stateless:
+new module may contain:
+- controllers
+- facade/orchestration service
+- mappers
+- DTOs
+- scope/access coordinator if needed
+
+Public exports:
+prefer one facade only, or no export if purely HTTP orchestration.
+
+Audit.
+
+10. DEPENDENCY DIRECTION
+------------------------
+Potential new module ->:
+ClassModule
+EnrollmentModule
+StudentModule
+PracticeModule
+LearningProgressModule
+ExamModule
+possibly CurriculumModule
+possibly LocalizationModule
+
+Forbidden:
+owning modules importing orchestration module.
+
+No reverse dependency.
+
+No forwardRef.
+
+No repository/entity imports.
+
+11. EXISTING PUBLIC APIs
+------------------------
+Audit exact exports/methods currently available.
+
+Class:
+- ClassService
+- ClassCatechistAssignmentService
+- ClassScopeService
+
+Enrollment:
+- EnrollmentService
+- EnrollmentAccessService
+- EnrollmentGuardianScopeService
+- EnrollmentQueryService
+
+Student:
+- StudentService
+- StudentGuardianService
+- StudentAccessService
+- LearnerSelfScopeService
+
+Practice:
+- PracticeService
+
+Learning Progress:
+- LearningProgressService
+
+Exam:
+- ExamService
+
+Curriculum:
+- CurriculumService / TopicService / LessonService
+
+Localization:
+- LocalizationService / LocaleResolutionService
+
+For each required dashboard field:
+state which PUBLIC method supplies it.
+
+If method is missing:
+recommend narrow additive public method in owning module.
+Do NOT reach into repositories.
+
+12. CATECHIST CONTEXT API
+-------------------------
+Candidate:
+GET /api/v1/me/catechist/context
+
+Should return only current actor's scope.
+
+Potential fields:
+- user identity minimal
+- assigned active classes
+- parish context
+- academic year / catechism level identifiers
+- class summary counts
+
+Do NOT include full roster for every class if that creates heavy payload.
+
+Audit whether context + class summaries should be separate.
+
+13. CATECHIST ASSIGNED CLASS API
+--------------------------------
+Candidate:
+GET /api/v1/me/catechist/classes
+
+or:
+GET /api/v1/me/catechist/class-summaries
+
+Potential fields per class:
+- classId
+- name/code
+- parishId
+- academicYear
+- catechismLevel
+- active enrollment count
+- maybe aggregate learning/practice/exam summary
+
+Avoid overloading the base class list.
+
+Recommend exact contract.
+
+14. CATECHIST ROSTER API
+------------------------
+Candidate:
+GET /api/v1/me/catechist/classes/:classId/roster
+
+For assigned class only.
+
+Potential per learner:
+- studentId
+- enrollmentId
+- display name/minimal profile
+- enrollment status
+- learning progress summary
+- practice summary
+- exam summary
+
+Do NOT include:
+- guardian private data unless justified
+- unrelated contact info
+- other class history
+- raw answers
+- private notes
+
+Need pagination if roster may be large.
+
+15. CATECHIST CLASS AGGREGATE
+-----------------------------
+Audit whether roster endpoint should include:
+- class learning aggregate
+- practice aggregate
+- exam aggregate
+
+Existing:
+LearningProgress class aggregate
+Practice class progress
+Exam class summaries
+
+Prefer composition using public APIs.
+
+Do not calculate hidden domain semantics inside orchestration.
+
+16. PARENT CONTEXT API
+----------------------
+Candidate:
+GET /api/v1/me/parent/context
+
+Potential:
+- linked active children
+- active enrollments
+- class identifiers
+- available high-level progress pointers
+
+Parent scope must derive from persisted guardian relationship.
+Role alone is NEVER sufficient.
+
+17. PARENT CHILDREN API
+-----------------------
+Candidate:
+GET /api/v1/me/parent/children
+
+Decide:
+- active guardian links only?
+- include historical/inactive enrollment?
+- include student status?
+- include all children across parishes?
+
+Strong MVP recommendation:
+return currently active linked children + active enrollment context;
+historical data can be separately queried later.
+
+Audit actual guardian status model.
+
+18. PARENT CHILD PROGRESS API
+-----------------------------
+Candidate:
+GET /api/v1/me/parent/children/:studentId/progress
+
+Alternative:
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Compare.
+
+Strong architecture preference:
+enrollment-scoped progress because learning/practice/exam are academic-context specific.
+
+Possible final shape:
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Response composes:
+- Learning Progress
+- Practice summary
+- Exam summary/result availability
+- curriculum/class context
+
+No class-wide aggregate.
+
+19. PARENT EXAM POLICY
+----------------------
+Carry invariant:
+Parent CANNOT:
+- start formal exam
+- save formal exam answers
+- submit formal exam
+
+Parent MAY:
+- read linked child's released result according to Exam review policy
+
+Do not weaken.
+
+20. PARENT PRACTICE POLICY
+--------------------------
+Practice currently allows guardian proxy.
+
+New orchestration may expose summary only.
+
+Do not implement duplicate Practice mutation routes.
+
+21. RBAC STRATEGY
+-----------------
+Audit whether to add:
+`family-engagement.read`
+or similar.
+
+Strong preference:
+reuse existing domain read permissions + actor relationship/scope guard if sufficient.
+
+Why:
+new permission could falsely suggest access is safe without guardian/class relationship.
+
+Potential:
+controller requires role + orchestration-specific permission, then service checks scope.
+
+But permission proliferation may be unnecessary.
+
+Recommend exact approach.
+
+22. ROLE IS NOT SCOPE
+---------------------
+Non-negotiable:
+
+PARENT role alone != child access.
+CATECHIST role alone != class access.
+
+Parent:
+persisted Guardian->Student relationship.
+
+Catechist:
+active Catechist->Class assignment.
+
+Every orchestration method must enforce server-side scope.
+
+23. SUPER ADMIN / PARISH ADMIN
+------------------------------
+Question:
+Should `/me/parent/*` and `/me/catechist/*` be usable by admin roles?
+
+Strong preference:
+NO role impersonation.
+
+These are actor-specific portals.
+
+Admins already have domain/admin routes.
+
+Audit and decide.
+
+24. DATA MINIMIZATION
+---------------------
+Minors platform.
+
+Parent response:
+only own linked child.
+
+Catechist:
+only assigned class learners.
+
+Avoid:
+- DOB unless needed
+- addresses
+- phone/email
+- guardian details
+- sibling information
+- raw Exam answers
+- raw Practice answers
+- private notes
+
+Recommend DTO field set.
+
+25. N+1 RISK
+------------
+This is the biggest architectural risk.
+
+Bad:
+for 30 students:
+call LP + Practice + Exam separately 30*3 times.
+
+Audit public batch capabilities.
+
+For each:
+PracticeService
+LearningProgressService
+ExamService
+
+Determine whether there are:
+- class aggregate methods
+- batch enrollment summary methods
+
+If missing:
+recommend narrow batch public APIs in owning modules.
+
+Strong rule:
+orchestration must not loop DB-heavy service calls per student if a bounded batch API can be added.
+
+26. CACHING
+-----------
+MVP:
+no new cache table.
+
+Could use request-level batching.
+
+Do not add Redis/cache unless required.
+
+27. PAGINATION / BOUNDS
+-----------------------
+Roster:
+paginated.
+
+Children list:
+likely bounded naturally but still stable ordering.
+
+Class summaries:
+pagination if catechist can have many classes.
+
+No unbounded class-wide response.
+
+28. RESPONSE COMPOSITION
+------------------------
+Recommend DTO boundaries:
+
+CatechistContextDto
+CatechistClassSummaryDto
+CatechistRosterResponseDto
+CatechistRosterStudentDto
+
+ParentContextDto
+ParentChildSummaryDto
+ParentEnrollmentProgressDto
+
+Do not reuse internal domain DTOs directly across module boundaries.
+
+29. LOCALE
+----------
+Determine whether orchestration should localize labels.
+
+Strong MVP:
+orchestration returns domain data/IDs/statuses.
+Curriculum content remains localized by owning delivery APIs.
+
+Do not translate human names/status codes server-side unnecessarily.
+
+Accept-Language may still pass through when composing content labels if needed.
+
+30. ERRORS
+----------
+Design stable errors:
+
+ActorNotCatechist
+ActorNotParent
+CatechistClassAccessDenied
+ParentChildAccessDenied
+ParentEnrollmentAccessDenied
+ClassNotFound
+EnrollmentNotFound
+StudentNotFound
+
+Prefer existing domain errors when possible.
+
+Do not leak foreign-resource existence:
+consider 403 vs 404 convention.
+
+31. ATTENDANCE — EXPLICIT DEFER
+-------------------------------
+Not implemented.
+
+Do NOT create fake attendance field or endpoint.
+
+Document hook:
+future AttendanceModule can provide class-day attendance summary.
+
+32. SCHEDULE — EXPLICIT DEFER
+-----------------------------
+No Schedule/Event module.
+
+Do not invent calendar ownership.
+
+Future module integrates through public API.
+
+33. PRAYER MEMORIZATION — EXPLICIT DEFER
+----------------------------------------
+No domain yet.
+
+Do not put placeholder persisted fields in progress DTO unless contract intentionally uses nullable extension object.
+
+34. NOTIFICATIONS — EXPLICIT DEFER
+----------------------------------
+No notification/push implementation here.
+
+Future Notification module consumes relationship/scope targeting.
+
+Do not make orchestration own notification preferences or deliveries.
+
+35. CLASS MATERIALS — DEFER / REUSE
+-----------------------------------
+Existing curriculum/media partly covers content.
+
+Do not create dedicated class materials business module here.
+
+If dashboard needs content link/count:
+reuse public curriculum delivery only.
+
+36. RECENT ACTIVITY — OPTIONAL
+------------------------------
+Audit value/cost.
+
+Potential:
+recent Practice session
+recent Exam result
+
+If public batch API is absent or expensive:
+defer.
+
+Do not over-expand 4–5 prompt scope.
+
+37. MODULE EXPORT
+-----------------
+If dedicated module:
+prefer one facade:
+CatechistParentPortalService
+or selected module-specific name
+
+But if no other module consumes it:
+could export nothing and keep HTTP-only.
+
+Audit extraction/read-model reuse.
+
+38. API CONTRACT DRAFT
+----------------------
+Required report must propose exact MVP endpoints.
+
+Expected candidate set:
+
+Catechist:
+GET /api/v1/me/catechist/context
+GET /api/v1/me/catechist/classes
+GET /api/v1/me/catechist/classes/:classId/roster
+
+Parent:
+GET /api/v1/me/parent/context
+GET /api/v1/me/parent/children
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Avoid redundant endpoints if context already includes children/classes.
+
+Recommend final set.
+
+39. IDEMPOTENCY
+---------------
+This module is read-only MVP.
+No idempotency keys required.
+
+If audit introduces writes:
+STOP and justify why.
+
+Strong expectation:
+all #002/#003 APIs are GET read-models.
+
+40. FE CONTRACT
+---------------
+Catechist Web/Mobile should be able to render:
+- assigned classes
+- class roster
+- each learner's compact learning/practice/exam status
+
+Parent Web/Mobile:
+- linked children
+- current enrollment/class
+- compact child progress
+- released Exam information
+
+No Attendance/Schedule/Prayer/Notification claims.
+
+41. MOBILE CONTRACT
+-------------------
+Responses should:
+- be bounded
+- avoid excessive round trips
+- stable IDs
+- stable enum codes
+- ISO UTC timestamps
+- no huge nested payloads
+
+42. TEST STRATEGY
+-----------------
+Plan:
+
+Unit:
+- mapper/composition
+- access guards
+- batching
+
+Integration:
+- public service composition
+- assigned class
+- guardian child
+- batch summaries
+
+DB e2e:
+- Parent A cannot read Parent B child
+- Catechist A cannot read unassigned class
+- Parent denied class-wide data
+- Parent cannot use exam attempt
+- Catechist cannot use learner attempt
+- admin cannot impersonate `/me` portal if chosen
+
+Performance:
+- query/service-call budget for roster
+- no N+1
+
+43. BASELINE VALIDATION — REQUIRED
+----------------------------------
+Before #002 readiness, run current repository baseline:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+Also:
+npm audit --audit-level=moderate
+
+Docker:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:portal-orchestration-baseline ."
+
+If Docker tag name changes after module-name choice, that's fine.
+
+If quality:full or Docker FAIL:
+#002 readiness = NO.
+Report exact failure.
+Do not implement around unrelated failures blindly.
+
+44. VALIDATION COMMANDS
+-----------------------
+node --version
+npm --version
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm audit --audit-level=moderate
+
+Docker production build.
+
+45. REQUIRED REPORT
+-------------------
+Create:
+
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Roadmap position
+3 Baseline repository state
+4 Baseline quality:full
+5 Baseline Docker
+6 Existing ownership map
+7 Existing public APIs
+8 Gap analysis
+9 New module vs EnrollmentModule
+10 Module-name comparison
+11 Final module name
+12 Bounded-context definition
+13 Table ownership
+14 Public export decision
+15 Dependency graph
+16 Cross-module boundary rules
+17 Catechist actor model
+18 Catechist context API
+19 Catechist class summaries API
+20 Catechist roster API
+21 Catechist aggregate composition
+22 Parent actor model
+23 Parent context API
+24 Parent children API
+25 Parent enrollment progress API
+26 Active vs historical children/enrollments decision
+27 Parent Exam policy
+28 Parent Practice policy
+29 RBAC strategy
+30 New permission decision
+31 Admin impersonation decision
+32 Data minimization
+33 N+1 audit
+34 Practice public API gaps
+35 LearningProgress public API gaps
+36 Exam public API gaps
+37 Class/Enrollment/Student API gaps
+38 Batch API recommendations
+39 Pagination/bounds
+40 Locale strategy
+41 Error contract
+42 Attendance defer
+43 Schedule defer
+44 Prayer defer
+45 Notifications defer
+46 Class materials decision
+47 Recent activity decision
+48 FE contract
+49 Mobile contract
+50 Test strategy
+51 Risks
+52 BLOCKER/HIGH/MEDIUM/LOW
+53 Files created
+54 Files modified
+55 Commands
+56 Validation
+57 Exact API contract
+58 Exact prompt plan
+59 #002 readiness
+60 Commit recommendation
+
+46. REQUIRED VERDICTS
+---------------------
+BASELINE QUALITY:FULL: PASS/FAIL
+BASELINE DOCKER: PASS/FAIL
+
+GO / NO-GO FOR IMPLEMENTATION: GO/NO-GO
+
+NEW MODULE REQUIRED: YES/NO
+
+FINAL MODULE NAME: <name>
+
+NEW BUSINESS TABLES REQUIRED: YES/NO
+
+NEW ORCHESTRATION PERMISSION REQUIRED: YES/NO
+
+CATECHIST CONTEXT CONTRACT READY: YES/NO
+
+CATECHIST CLASS/ROSTER CONTRACT READY: YES/NO
+
+PARENT CONTEXT CONTRACT READY: YES/NO
+
+PARENT CHILD/ENROLLMENT PROGRESS CONTRACT READY: YES/NO
+
+N+1 STRATEGY READY: YES/NO
+
+PUBLIC SERVICE DEPENDENCY MAP READY: YES/NO
+
+ATTENDANCE DEFERRED: YES
+SCHEDULE DEFERRED: YES
+PRAYER DEFERRED: YES
+NOTIFICATIONS DEFERRED: YES
+
+FINAL RECOMMENDED PROMPT COUNT: 4/5
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+47. PROMPT PLAN
+---------------
+Audit and recommend exact 4 or 5.
+
+Preferred if normal complexity:
+
+#001 audit/design
+#002 Catechist context/class/roster
+#003 Parent context/child progress
+#004 RBAC/security/performance/contract hardening
+#005 Demo/Postman/final gate
+
+If module is genuinely tiny and all hardening fits:
+merge #004 + #005 only if quality is not compromised.
+
+Strong preference:
+5 prompts.
+
+48. #002 READINESS
+------------------
+Only if:
+- baseline quality:full PASS
+- Docker PASS
+- BLOCKER=0
+- HIGH=0
+- module boundary selected
+- exact API contract ready
+- N+1 strategy ready
+- required public method additions identified
+
+Then recommend:
+CATECHIST + PARENT SUPPORTING APIs #002/5 —
+CATECHIST CONTEXT + ASSIGNED CLASS + ROSTER READ MODELS
+
+Do not auto-proceed.
+
+49. FINAL RESPONSE
+------------------
+Respond concisely:
+- #001 status
+- baseline quality:full
+- Docker
+- GO/NO-GO
+- final module name
+- tables yes/no
+- permission decision
+- exact Catechist APIs
+- exact Parent APIs
+- N+1 plan
+- prompt count
+- BLOCKER/HIGH
+- #002 readiness
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed #002 automatically.

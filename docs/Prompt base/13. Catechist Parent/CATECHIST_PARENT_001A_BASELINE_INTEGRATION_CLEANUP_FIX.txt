@@ -1,0 +1,339 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #001A
+CORRECTIVE BASELINE HYGIENE — FIX INTEGRATION CLEANUP FK ORDER + RE-RUN FULL GATES
+
+1. Context
+----------
+CATECHIST + PARENT #001/5 audit is complete.
+
+Design verdicts:
+- FINAL MODULE NAME: family-portal
+- dedicated orchestration module required
+- zero business tables
+- no new orchestration permission
+- Catechist API contract ready
+- Parent API contract ready
+- N+1 strategy ready
+- exact 5-prompt plan ready
+
+BUT:
+`npm run quality:full` FAILED during integration tests.
+
+Known blocker:
+older integration seed cleanup SQL does not delete Exam Engine rows before deleting classes/enrollments.
+
+Observed FK:
+FK_exam_assignments_class_id_classes_id
+
+Affected integration specs:
+- test/integration/parish-academic-seed.integration-spec.ts
+- test/integration/class-enrollment-seed.integration-spec.ts
+- test/integration/curriculum-demo-seed.integration-spec.ts
+
+This is a small corrective hygiene prompt.
+
+DO NOT implement FamilyPortalModule yet.
+DO NOT implement any /me/catechist or /me/parent API yet.
+
+2. Permanent workflow / Git rules
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect the exact cleanup helpers/SQL in affected tests
+- fix only cleanup/dependency hygiene needed to restore pristine baseline
+- avoid unrelated production changes
+- create a detailed report under docs/
+- not auto-proceed #002
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly one manual commit command:
+
+git commit -m "test: fix exam-aware integration cleanup"
+
+Do not execute it.
+
+3. Mandatory reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Inspect:
+test/integration/parish-academic-seed.integration-spec.ts
+test/integration/class-enrollment-seed.integration-spec.ts
+test/integration/curriculum-demo-seed.integration-spec.ts
+
+Also inspect:
+- shared integration cleanup helpers, if any
+- Exam migration/entity FK order
+- other integration specs that already clean Exam tables correctly
+- test DB reset utilities
+- package.json quality:full flow
+
+4. Primary objective
+--------------------
+Restore a clean baseline so Family Portal #002 can safely begin.
+
+Required:
+A. identify exact FK dependency chain
+B. fix cleanup order safely
+C. avoid duplicated brittle cleanup logic if a shared helper is clearly appropriate
+D. run affected specs individually
+E. run full integration suite
+F. run pristine quality:full
+G. run Docker production build
+H. ensure no new BLOCKER/HIGH
+
+5. Cleanup dependency principle
+-------------------------------
+Test cleanup must delete dependent rows before parent rows.
+
+At minimum inspect dependencies involving:
+
+Exam:
+- exam_attempt_answers
+- exam_attempt_questions
+- exam_attempts
+- exam_assignments
+- exam_version_questions
+- exam_versions
+- exams
+
+Then:
+- enrollments
+- class catechist assignments / related child tables
+- classes
+- students / guardian links as relevant
+- parish/academic records
+
+Do not assume exact order.
+Derive it from actual FKs in migration/schema.
+
+6. Historical safety
+--------------------
+This prompt is TEST cleanup only.
+
+Do NOT change production FK semantics just to make tests pass unless audit finds an actual production defect.
+
+Preferred fix:
+test cleanup order/helper.
+
+If production FK/cascade is truly wrong:
+STOP and report as HIGH rather than casually changing schema.
+
+7. Scope
+--------
+Allowed:
+- affected integration spec cleanup code
+- shared test cleanup helper if justified
+- test-only helper imports
+- docs report
+
+Not allowed:
+- FamilyPortalModule
+- FamilyPortalService
+- new controllers
+- new routes
+- new RBAC
+- production business entities
+- migrations unrelated to a proven production defect
+- Exam business behavior changes
+- Parent/Catechist API implementation
+
+8. Shared helper decision
+-------------------------
+Audit whether these 3 specs duplicate the same cleanup SQL.
+
+If yes and a shared helper already exists:
+extend it.
+
+If no helper exists but extraction clearly reduces future FK drift:
+creating a narrowly scoped test utility is acceptable.
+
+Do not create a giant generic DB truncate framework.
+
+9. Verify all Exam dependencies
+-------------------------------
+Do not fix only `exam_assignments`.
+
+A future failure could remain from:
+- attempts
+- attempt questions
+- answers
+- versions
+- root references
+
+Audit actual FK tree and make cleanup complete.
+
+10. Affected-spec validation
+----------------------------
+Run individually:
+- parish-academic seed integration spec
+- class-enrollment seed integration spec
+- curriculum-demo seed integration spec
+
+All must PASS.
+
+11. Full integration validation
+-------------------------------
+Run:
+npm run test:db:prepare -- --reset
+npm run test:integration
+
+Must PASS.
+
+12. Full DB e2e regression
+--------------------------
+Run:
+npm run test:e2e:db
+
+Must PASS.
+
+13. Pristine quality:full — mandatory
+-------------------------------------
+Then reset again:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS, exit code 0.
+
+Do not substitute targeted tests.
+
+14. npm audit
+-------------
+Run:
+npm audit --audit-level=moderate
+
+No unresolved HIGH.
+
+15. Docker
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:family-portal-baseline-fixed ."
+
+PASS required.
+
+16. Git cleanliness
+-------------------
+Inspect:
+git status --short
+
+Only expected test/docs changes.
+
+No production Family Portal implementation.
+
+17. Required report
+-------------------
+Create:
+
+docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Why #001A was required
+3 Original failing command
+4 Original FK failure
+5 Affected specs
+6 Actual FK dependency chain
+7 Cleanup strategy
+8 Shared helper decision
+9 Files created
+10 Files modified
+11 Production schema changed? YES/NO
+12 Production behavior changed? YES/NO
+13 Affected targeted tests
+14 Full integration
+15 DB e2e
+16 pristine quality:full
+17 npm audit
+18 Docker
+19 Git status
+20 Risks
+21 BLOCKER/HIGH/MEDIUM/LOW
+22 #002 readiness
+23 Commit recommendation
+
+18. Required verdicts
+---------------------
+BASELINE INTEGRATION CLEANUP FIXED: YES/NO
+
+PRODUCTION SCHEMA CHANGE REQUIRED: YES/NO
+
+AFFECTED INTEGRATION SPECS: PASS/FAIL
+
+FULL INTEGRATION: PASS/FAIL
+
+DB E2E: PASS/FAIL
+
+PRISTINE QUALITY:FULL: PASS/FAIL
+
+NPM AUDIT: PASS/FAIL
+
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+CATECHIST + PARENT #002 READINESS: YES/NO
+
+19. #002 Gate
+-------------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- full integration PASS
+- DB e2e PASS
+- pristine quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+CATECHIST + PARENT SUPPORTING APIs #002/5 —
+FAMILY PORTAL MODULE FOUNDATION + CATECHIST CONTEXT / CLASSES / ROSTER
+
+Expected #002 scope:
+- `FamilyPortalModule`
+- `FamilyPortalService`
+- no tables
+- Catechist context
+- assigned classes
+- roster
+- Exam batch summary public API
+- optional Class batch snapshot public API
+- no Parent APIs yet
+
+Do not auto-proceed.
+
+20. Final response
+------------------
+Respond concisely:
+- #001A status
+- root cause
+- cleanup fix
+- production schema changed yes/no
+- integration
+- DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH
+- #002 readiness
+- report path
+
+Then exactly:
+git commit -m "test: fix exam-aware integration cleanup"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #002 automatically.

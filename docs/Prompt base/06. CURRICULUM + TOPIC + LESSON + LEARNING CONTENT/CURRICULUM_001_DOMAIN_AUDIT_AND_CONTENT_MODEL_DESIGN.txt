@@ -1,0 +1,1292 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #001/6
+DOMAIN AUDIT + BOUNDED CONTEXT + CONTENT MODEL DESIGN
+
+1. Context
+----------
+Completed backend phases:
+- Backend Foundation: COMPLETE
+- Bitbucket CI Foundation: COMPLETE
+- Auth / User / Role / Permission: COMPLETE
+- Parish / Academic Year / Catechism Level: COMPLETE
+- Class / Student / Catechist / Parent / Enrollment: COMPLETE
+
+The latest final architecture gate confirmed:
+- no class-domain forwardRef
+- acyclic dependency graph
+- FE class/people/enrollment contract ready
+- Mobile class/people/enrollment contract ready
+
+Current phase:
+CURRICULUM + TOPIC + LESSON + LEARNING CONTENT
+
+Planned phase size:
+6 prompts
+
+Proposed sequence:
+
+#001 Domain audit + bounded-context/content model design
+#002 Schema + entities + migrations
+#003 Curriculum + Topic services/API/RBAC
+#004 Lesson + Learning Content services/API/versioning/publishing
+#005 Cross-domain integration + scoped authorization + content delivery contract
+#006 Final audit + seed/Postman + FE/Mobile contract readiness
+
+This prompt is #001/6.
+
+DO NOT implement schema, entities, migrations, services, controllers, seeds, or APIs yet.
+
+2. Mandatory Reading
+--------------------
+Before doing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/parish/
+   src/modules/academic-structure/
+   src/modules/class/
+   src/modules/student/
+   src/modules/enrollment/
+   src/modules/access-control/
+   src/database/
+   test/
+   README.md
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Permanent Architecture Rules
+-------------------------------
+Apply all existing rules:
+
+- modular monolith now
+- future microservice extraction readiness
+- each bounded context owns persistence
+- no cross-module repository/entity access
+- no ORM entities as public contracts
+- scalar IDs across module boundaries
+- no circular dependencies
+- no forwardRef workaround
+- no god services
+- no giant generic content module if distinct ownership is clearer
+- SQL FKs allowed in monolith
+- public services/snapshots across modules
+- React Web and React Native Mobile are independent repositories
+- both consume HTTP/OpenAPI contracts only
+- BE / Web / Mobile Docker/CI/CD stay independent
+
+4. Primary Objective
+--------------------
+Perform a deep audit/design for:
+
+- Curriculum
+- Topic
+- Lesson
+- Learning Content
+
+The key design problem is:
+
+How do we represent structured catechism curriculum and lesson content so it supports:
+
+- parish-owned curriculum
+- catechism levels
+- academic-year usage
+- ordered topics and lessons
+- draft/published lifecycle
+- future content versioning
+- rich text/media
+- future question bank linkage
+- future practice/exam linkage
+- future mobile/web delivery
+- historical correctness when lessons change
+- future microservice extraction
+
+No implementation yet.
+
+5. Define Domain Terms Precisely
+--------------------------------
+Propose exact definitions:
+
+Curriculum
+= a structured curriculum definition/program for a parish/level or reusable catalog.
+
+Topic
+= ordered unit/chapter/theme within a curriculum.
+
+Lesson
+= teachable unit within a topic.
+
+Learning Content
+= the actual instructional content attached to a lesson:
+text blocks, sections, references, media references, activities, etc.
+
+Do not treat all four as synonyms.
+
+6. Curriculum Ownership Question
+--------------------------------
+Audit whether Curriculum should belong to:
+
+A. Parish only
+B. Parish + CatechismLevel
+C. Parish + AcademicYear + CatechismLevel
+D. Reusable/global curriculum + parish assignment
+
+Preferred starting direction likely:
+
+Curriculum belongs to:
+- parishId
+- catechismLevelId
+
+Academic year should reference/use curriculum rather than duplicate curriculum every year.
+
+But audit carefully.
+
+Reason:
+curriculum definitions often persist beyond a single academic year.
+
+7. Academic Year Relationship
+-----------------------------
+Do NOT automatically put academicYearId directly on Curriculum.
+
+Audit alternatives:
+
+A. curriculum has academicYearId
+B. separate curriculum_assignments / curriculum_usage
+C. class references curriculum
+D. level/year resolves current curriculum
+
+We need future flexibility where:
+- parish reuses curriculum next year
+- new curriculum version becomes active next year
+- different classes may use different curriculum revisions
+
+Document best option.
+
+8. Class Relationship
+---------------------
+Audit whether Class should eventually reference:
+- curriculumId
+- curriculumVersionId
+- curriculumAssignmentId
+- none (derive via parish/year/level)
+
+Do NOT modify Class schema now.
+
+Design the future contract.
+
+9. Curriculum Versioning — CRITICAL
+-----------------------------------
+Curriculum/lesson content changes over time.
+
+We need to avoid changing historical teaching/exam context unexpectedly.
+
+Audit versioning strategies:
+
+A. mutable curriculum, only status fields
+B. versioned curriculum root
+C. immutable published snapshots
+D. lesson content revisions
+
+Preferred likely:
+- draft working state
+- published version immutable or effectively immutable
+- edits after publish create a new revision/version
+
+But avoid overengineering.
+
+Choose a practical MVP + future-safe design.
+
+10. Topic Versioning
+--------------------
+Decide whether Topic itself needs independent versioning.
+
+Likely:
+Topic structure belongs inside curriculum version context.
+
+Could be:
+curriculums
+curriculum_versions
+topics
+lessons
+
+where topics/lessons reference curriculum_version_id.
+
+Audit.
+
+11. Lesson Identity
+-------------------
+Important question:
+
+Should Lesson have a stable identity across curriculum versions?
+
+Possible:
+
+A. each version creates entirely new lesson rows
+B. stable lesson root + lesson revisions
+C. curriculum version snapshots lesson content
+
+Need future implications:
+- progress history
+- bookmarks
+- question bank mapping
+- lesson analytics
+- exam references
+
+Likely a stable Lesson root plus revisions/content versions may be valuable.
+
+But audit complexity.
+
+12. Learning Content Model
+--------------------------
+Decide whether content is:
+
+A. one large HTML/Markdown body
+B. JSON block document
+C. normalized content blocks table
+D. hybrid
+
+For React Web + React Native:
+portable structured content is desirable.
+
+Audit:
+- plain HTML can be awkward/sensitive on mobile
+- JSON block model is portable but requires schema/versioning
+- normalized block rows can create complexity
+
+Preferred likely:
+JSON document with controlled block schema, versioned explicitly.
+
+But justify.
+
+13. Rich Text / JSON Contract
+-----------------------------
+If choosing JSON blocks, propose v1 schema conceptually:
+
+documentVersion
+blocks[]
+
+Block types may include:
+- HEADING
+- PARAGRAPH
+- QUOTE
+- SCRIPTURE_REFERENCE
+- BULLET_LIST
+- ORDERED_LIST
+- IMAGE
+- VIDEO
+- AUDIO
+- FILE_REFERENCE
+- PRAYER
+- ACTIVITY
+- CALLOUT
+
+Do NOT add every possible type now.
+
+Choose minimal safe v1.
+
+14. Scripture / Catechism References
+------------------------------------
+Catholic learning content may reference:
+- Bible passages
+- Catechism paragraphs
+- prayers
+- saints
+- Church documents
+
+Do not hard-wire complex theology tables yet.
+
+Design content block/reference fields capable of holding citations/labels safely.
+
+15. Media References
+--------------------
+File/Media Storage abstraction is a future separate phase.
+
+Therefore Learning Content should not own raw binary storage.
+
+Design media references as scalar media/file IDs or external-safe references.
+
+No upload implementation now.
+
+16. Lesson Structure
+--------------------
+Potential fields:
+
+id
+topic_id
+code?
+title
+summary?
+sort_order
+status
+estimated_duration_minutes?
+created_at
+updated_at
+
+Be conservative.
+
+Audit whether code is needed for deterministic import/reference.
+
+17. Topic Structure
+-------------------
+Potential:
+
+id
+curriculum_id or curriculum_version_id
+code?
+title
+description?
+sort_order
+status?
+created_at
+updated_at
+
+Audit whether Topic needs status separately or inherits version publication.
+
+18. Curriculum Structure
+------------------------
+Potential:
+
+curriculum
+- id
+- parish_id
+- catechism_level_id
+- code
+- name
+- status
+- current_published_version_id?
+- timestamps
+
+curriculum_versions
+- id
+- curriculum_id
+- version_number
+- status DRAFT/PUBLISHED/ARCHIVED
+- published_at
+- timestamps
+
+Audit carefully.
+
+19. Publishing Model
+--------------------
+Design lifecycle:
+
+DRAFT
+PUBLISHED
+ARCHIVED
+
+Question:
+Can published version be edited?
+
+Preferred:
+No.
+
+Editing published curriculum should create a new DRAFT version.
+
+PUBLISHED remains immutable.
+
+20. Single Published Version
+----------------------------
+Do we allow:
+- multiple historical PUBLISHED versions
+- one CURRENT published version
+
+Likely yes:
+multiple historical published versions,
+one current effective version.
+
+Design how to identify current version.
+
+Possibilities:
+- curriculum.current_published_version_id
+- version status CURRENT/PUBLISHED_ARCHIVED
+- effective dates
+- assignment table
+
+Choose clean model.
+
+21. Curriculum Assignment / Usage
+---------------------------------
+Strongly audit separate table:
+
+curriculum_assignments
+
+Potential fields:
+id
+parish_id
+academic_year_id
+catechism_level_id
+curriculum_version_id
+status
+effective_from?
+effective_to?
+
+This can bind published content to a particular year/level.
+
+Question:
+Does Class need explicit assignment or derive by year+level?
+
+Likely:
+year+level assignment sufficient initially.
+
+But if one year/level can have multiple classes on different curricula, class-level override may be needed later.
+
+Document.
+
+22. Avoid Duplication Across Years
+----------------------------------
+Core rule:
+
+Do NOT duplicate all topics/lessons/content merely because a new academic year starts.
+
+Historical usage should reference a published version.
+
+23. Future Learning Progress Link
+--------------------------------
+LearningProgress later needs stable reference.
+
+Audit preferred IDs:
+
+studentId
+lessonId
+lessonRevisionId/contentVersionId
+curriculumVersionId
+enrollmentId optional
+
+We need progress not to break when new lesson revision publishes.
+
+24. Future Practice/Question Bank Link
+-------------------------------------
+Question Bank later may link to:
+
+lessonId
+topicId
+curriculumVersionId
+tags
+
+Need stable semantic IDs.
+
+Do not make Question Bank depend directly on mutable content blocks.
+
+25. Future Exam Link
+--------------------
+Exam snapshots should not depend on current mutable lesson content.
+
+Document:
+Exam Question definitions may reference lesson/topic for taxonomy,
+but exam attempts/results keep their own snapshots later.
+
+26. Lesson Content Revision Strategy
+------------------------------------
+Audit whether each Lesson should have:
+
+lesson_revisions
+- id
+- lesson_id
+- revision_number
+- content_json
+- status
+- published_at
+
+or whether content is owned by curriculum version.
+
+Compare.
+
+27. Stable Lesson Root
+----------------------
+Strong candidate:
+
+lessons = stable semantic identity
+lesson_versions/revisions = content revisions
+
+Topic ordering per curriculum version may then need mapping table.
+
+This gets complex.
+
+Alternative:
+lesson rows immutable per curriculum version, with stable `canonical_key`.
+
+Audit tradeoff.
+
+Do NOT over-design unless future requirements justify it.
+
+28. Recommended Complexity Ceiling
+----------------------------------
+This phase should stay understandable.
+
+Avoid:
+- full CMS framework
+- arbitrary schema-less document engine
+- nested revision trees
+- event sourcing
+- CRDT collaborative editing
+- generalized workflow engine
+
+Need pragmatic educational content model.
+
+29. Likely Module Split
+-----------------------
+Evaluate:
+
+Option A:
+CurriculumModule owns:
+- curriculums
+- curriculum_versions
+- topics
+- lessons
+
+LearningContentModule owns:
+- lesson_content_versions/revisions
+
+Option B:
+CurriculumModule owns everything
+
+Option C:
+CurriculumModule
+LessonContentModule
+
+Strong candidate:
+- CurriculumModule
+- LearningContentModule
+
+But only split if content lifecycle truly warrants independent ownership.
+
+30. Module Boundary Candidate
+-----------------------------
+Potential:
+
+CurriculumModule:
+- curricula
+- curriculum_versions
+- topics
+- lessons
+- curriculum_assignments
+
+LearningContentModule:
+- lesson_contents / lesson_content_versions
+
+Dependency:
+LearningContentModule -> CurriculumModule
+
+No reverse dependency.
+
+Audit whether this creates clean future extraction.
+
+31. Alternative Simpler Split
+-----------------------------
+If CurriculumModule can own:
+- curricula
+- versions
+- topics
+- lessons
+- lesson content JSON
+
+without becoming a god module,
+that may be simpler.
+
+Report must justify chosen split.
+
+32. Parish Dependency
+---------------------
+Curriculum domain may depend on:
+ParishModule
+
+via:
+ParishService
+
+No ParishEntity imports.
+
+33. AcademicStructure Dependency
+--------------------------------
+Curriculum may depend on:
+CatechismLevelService
+AcademicYearService if assignments use year.
+
+Use public services only.
+
+34. Class Dependency
+--------------------
+Avoid CurriculumModule -> ClassModule if possible.
+
+If class curriculum usage is needed later,
+prefer Class/Enrollment downstream referencing Curriculum public contracts.
+
+No cycle.
+
+35. Scope Authorization
+-----------------------
+Audit capability vs scope.
+
+Potential permissions:
+
+curricula.read
+curricula.manage
+curricula.publish
+
+lessons.read
+lessons.manage
+lesson-content.read
+lesson-content.manage
+lesson-content.publish
+
+Avoid too many permissions if unnecessary.
+
+Maybe:
+curricula.read/manage/publish
+
+and content follows curriculum ownership.
+
+Decide minimal namespace.
+
+36. Parish Scope Security
+-------------------------
+PARISH_ADMIN:
+manage curriculum only in parish membership.
+
+CATECHIST:
+read published curriculum for assigned class/level.
+
+PARENT:
+read published lessons visible to linked child's enrollment/class.
+
+STUDENT:
+read published lessons visible to own enrollment/class.
+
+SUPER_ADMIN:
+global.
+
+Do not implement now.
+Design scope evidence.
+
+37. Draft Visibility
+--------------------
+Draft content:
+SUPER_ADMIN/PARISH_ADMIN/catechist editors only based on permission/scope.
+
+Parents/students must never receive DRAFT unintentionally.
+
+38. Publishing Security
+-----------------------
+Publishing is high-impact content mutation.
+
+Strongly consider separate permission:
+curricula.publish
+or content.publish
+
+This prevents all editors from publishing.
+
+39. Content Visibility
+----------------------
+Potential visibility:
+
+PRIVATE_DRAFT
+PUBLISHED
+
+Avoid complex ACL per lesson initially.
+
+If future teacher-only notes needed:
+separate capability later.
+
+40. Ordering
+----------------
+Topics and lessons need deterministic sortOrder.
+
+Use integer >=0.
+
+Audit uniqueness:
+(curriculumVersionId, sortOrder)
+(topicId, sortOrder)
+
+or allow temporary duplicates while editing.
+
+DB uniqueness may make reorder operations cumbersome.
+
+Preferred:
+index, application ordering;
+not necessarily strict unique sort order.
+
+Justify.
+
+41. Codes / Slugs
+-----------------
+Audit need for:
+curriculum.code
+topic.code
+lesson.code
+
+Codes can support:
+- imports
+- stable API references
+- seed idempotency
+
+But avoid forcing human-managed codes everywhere.
+
+Likely:
+Curriculum code required.
+Topic/Lesson code optional or generated stable key.
+
+Document.
+
+42. Multilingual Future
+-----------------------
+Initial content likely Vietnamese.
+
+Do not build full localization now.
+
+But audit whether text columns/json need Unicode and language field.
+
+Potential:
+language_code = vi
+
+Maybe defer until multi-language product requirement.
+
+43. Search
+----------
+Initial search:
+curriculum/topic/lesson title.
+
+Do not add Elasticsearch.
+
+MSSQL LIKE/simple indexes initially.
+
+Full-text search later if needed.
+
+44. Content JSON Validation
+---------------------------
+If JSON selected:
+
+Validate with application schema.
+
+Options:
+- class-validator DTOs
+- Zod/Ajv
+- custom validator
+
+Do not add a new library unless justified.
+
+Need versioned JSON schema:
+contentSchemaVersion = 1
+
+Reject unknown/unsafe executable content.
+
+45. HTML Safety
+--------------
+If HTML content is allowed anywhere:
+must sanitize server/client.
+
+Preferred:
+avoid arbitrary raw HTML in v1.
+
+Structured blocks safer for Web + Mobile.
+
+46. URLs / External Media
+-------------------------
+Do not allow javascript: URLs.
+
+Validate URLs if block schema supports links.
+
+Media references should be IDs where possible.
+
+47. Content Size Limits
+-----------------------
+Set reasonable application limit conceptually.
+
+Prevent giant JSON payload abuse.
+
+Report recommended max.
+
+48. Lesson Preview
+------------------
+Admin/catechist editors need draft preview later.
+
+Do not publish to enable preview.
+
+Design API distinction:
+draft editor endpoint vs published delivery endpoint.
+
+49. Delivery API
+----------------
+Conceptual public/authorized read API:
+
+GET /api/v1/curricula/:id
+GET /api/v1/curriculum-versions/:id
+GET /api/v1/curriculum-versions/:id/topics
+GET /api/v1/topics/:id/lessons
+GET /api/v1/lessons/:id
+GET /api/v1/lessons/:id/content
+
+But optimize for FE/mobile round trips.
+
+Audit possible:
+GET /api/v1/curriculum-versions/:id/tree
+
+Could return structure without full content bodies.
+
+50. Tree API
+-----------
+Strong candidate:
+
+GET /api/v1/curriculum-versions/:id/tree
+
+returns:
+curriculum version
+topics
+lesson summaries
+
+No heavy lesson content JSON inline.
+
+Then:
+GET /api/v1/lessons/:lessonId/content
+
+This is efficient for Web/Mobile.
+
+51. Admin API Planning
+----------------------
+Conceptual:
+
+POST /parishes/:parishId/curricula
+GET /parishes/:parishId/curricula
+GET /curricula/:id
+PATCH /curricula/:id
+
+POST /curricula/:id/versions
+GET /curricula/:id/versions
+GET /curriculum-versions/:id
+
+POST /curriculum-versions/:id/topics
+PATCH /topics/:id
+
+POST /topics/:id/lessons
+PATCH /lessons/:id
+
+PUT/PATCH /lessons/:id/content
+
+POST /curriculum-versions/:id/publish
+
+No implementation.
+
+52. Publishing Transaction
+--------------------------
+Publishing may need transaction:
+
+- validate all topics/lessons/content
+- freeze version
+- mark previous current version non-current
+- mark new current PUBLISHED
+- maybe create/update assignment
+
+Audit boundary.
+
+53. Clone Draft From Published
+------------------------------
+Admin flow likely needs:
+
+createDraftFromPublishedVersion(curriculumId)
+
+This clones structure/content into new draft.
+
+Do we implement in this phase?
+Maybe later prompt #004/#005.
+
+Design now.
+
+54. Draft Editing
+-----------------
+Draft structure can mutate:
+- reorder topics
+- add/remove lessons
+- edit titles
+- edit content
+
+Published structure immutable.
+
+55. Soft Delete
+----------------
+For DRAFT rows:
+hard delete may be acceptable if never published/referenced.
+
+For published/historical:
+no hard delete.
+
+Audit policy.
+
+56. Curriculum Status vs Version Status
+---------------------------------------
+Avoid redundant confusing statuses.
+
+Potential:
+Curriculum:
+ACTIVE | INACTIVE
+
+Version:
+DRAFT | PUBLISHED | ARCHIVED
+
+Or Curriculum no status unless soft disabled.
+
+Choose.
+
+57. Assignment Lifecycle
+------------------------
+If curriculum_assignments selected:
+
+status:
+ACTIVE | ENDED
+
+One ACTIVE assignment per:
+(parishId, academicYearId, catechismLevelId)
+
+DB filtered unique possible.
+
+Or use effective date.
+
+Audit.
+
+58. Class Activation Dependency
+-------------------------------
+Do classes need curriculum assignment before activation?
+
+Probably not yet.
+
+Do not modify Class lifecycle without explicit product requirement.
+
+59. Content Publication Before Learning
+---------------------------------------
+Future learning delivery should require:
+published curriculum/content.
+
+Draft must not leak.
+
+60. Seed Strategy
+-----------------
+Plan local/dev seed later:
+
+- demo curriculum for demo parish/level
+- one published version
+- 2 topics
+- several lessons
+- synthetic Catholic educational content
+- no copyrighted long-form copied text
+- safe short sample content only
+
+Seed through public services.
+
+61. Copyright Awareness
+-----------------------
+Do not seed copyrighted catechism textbook content.
+
+Use original synthetic sample text.
+
+Bible/Catechism references can be citation metadata, not copied large passages.
+
+62. FE Contract Planning
+------------------------
+React Web needs:
+- curriculum admin
+- tree editor
+- lesson editor
+- draft/publish
+- list/filter
+- preview
+
+React Native needs:
+- published curriculum tree
+- lesson detail/content
+- progress-compatible stable IDs
+- offline/cache-friendly responses
+
+Design DTOs accordingly.
+
+63. Mobile Offline Readiness
+----------------------------
+Mobile may cache published lessons.
+
+Therefore:
+- published content should have stable version/revision IDs
+- ETag/version hash could be useful later
+- content responses should be immutable per published revision if possible
+
+Audit.
+
+64. API Cache Semantics
+-----------------------
+Published version immutable:
+good candidate for long-lived caching.
+
+Draft:
+no-cache/private.
+
+No implementation now.
+
+65. Content Hash
+---------------
+Audit whether lesson content revision should store:
+content_hash
+
+Useful for:
+- cache validation
+- idempotency
+- change detection
+
+Maybe defer unless easy.
+
+66. Audit History
+-----------------
+Do we need editor userId/publisher userId now?
+
+Potential:
+createdByUserId
+publishedByUserId
+
+This crosses UsersModule by scalar ID only.
+
+Could be valuable for content governance.
+
+Audit privacy and complexity.
+
+67. Authoring Ownership
+-----------------------
+Who can edit:
+PARISH_ADMIN
+perhaps CATECHIST with content manage permission
+
+Do not assume all catechists edit.
+
+68. Review Workflow
+-------------------
+Do NOT build multi-step editorial approval workflow yet.
+
+DRAFT -> PUBLISHED sufficient initially.
+
+Future REVIEW_PENDING can be added if needed.
+
+69. Entity Ownership Matrix
+---------------------------
+Required report table:
+
+Table/concept
+Owner module
+Public writer
+Public readers/contracts
+Future microservice owner
+
+70. Dependency Graph
+--------------------
+Required explicit acyclic dependency graph.
+
+No forwardRef.
+
+71. Schema Plan
+---------------
+For every proposed table:
+- field
+- SQL type
+- nullable
+- FK
+- unique
+- indexes
+- lifecycle
+- historical behavior
+
+72. Public Contract Plan
+-----------------------
+Define narrow snapshots:
+
+CurriculumSnapshot
+CurriculumVersionSnapshot
+TopicSnapshot
+LessonSnapshot
+LessonContentSnapshot
+CurriculumAssignmentSnapshot if used
+
+No entities.
+
+73. API Plan
+------------
+Required report:
+admin routes
+published delivery routes
+tree route
+content route
+publish command
+draft clone command if recommended
+
+74. Validation Rules
+--------------------
+Define:
+code format
+name/title lengths
+sortOrder
+content JSON max size
+block type validation
+safe URL/reference rules
+
+75. Future Microservice Extraction
+----------------------------------
+Possible future:
+
+Curriculum Service
+Learning Content Service
+
+or one Content Service.
+
+Document extraction boundary and dependencies:
+Parish Service
+Academic Structure Service
+File/Media Service later
+
+76. Existing Quality Baseline Note
+----------------------------------
+Latest CLASS #007A report still noted:
+`quality:full` can flake on a pre-existing parallel class-people-enrollment test issue.
+
+Do NOT try to fix it in this audit-only prompt unless current checks expose a direct regression.
+
+Carry it as technical-debt context.
+
+77. Validation
+-------------
+Audit/design only.
+
+Run:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+No DB/Docker required because this prompt should create only a gitignored report.
+
+78. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If only gitignored report is created:
+no commit recommendation required.
+
+If tracked architecture rules genuinely need update:
+print exactly ONE commit command.
+
+Do not manufacture tracked changes.
+
+79. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from previous phases
+3. Rules applied
+4. Domain definitions
+5. Curriculum ownership decision
+6. Academic year relationship decision
+7. Class relationship decision
+8. Curriculum versioning strategy
+9. Topic versioning strategy
+10. Lesson identity strategy
+11. Learning content model decision
+12. Content JSON/block schema v1
+13. Media/reference strategy
+14. Publishing lifecycle
+15. Draft editing semantics
+16. Published immutability
+17. Current published version model
+18. Curriculum assignment/usage decision
+19. Historical correctness strategy
+20. Learning Progress integration
+21. Question Bank integration
+22. Exam integration
+23. Module split decision
+24. Data ownership matrix
+25. Dependency graph
+26. Public contract plan
+27. Curriculum schema plan
+28. Curriculum version schema plan
+29. Topic schema plan
+30. Lesson schema plan
+31. Learning content schema plan
+32. Curriculum assignment schema plan if selected
+33. Status enums/lifecycles
+34. Uniqueness constraints
+35. Index strategy
+36. Ordering strategy
+37. Code/slug strategy
+38. Cross-module FK strategy
+39. Cross-module ORM rules
+40. Parish scope authorization design
+41. Draft/published visibility security
+42. Permission namespace plan
+43. Admin API plan
+44. Published delivery API plan
+45. Curriculum tree API
+46. Lesson content API
+47. Publish command
+48. Draft clone/version command
+49. FE Web contract planning
+50. React Native Mobile contract planning
+51. Mobile offline/cache implications
+52. Content validation/security
+53. Content size/sanitization rules
+54. Copyright/sample content policy
+55. Seed strategy
+56. Future File/Media integration
+57. Future microservice extraction map
+58. Risks/open questions
+59. Files created
+60. Files modified
+61. Commands executed
+62. Validation results
+63. Out-of-scope confirmation
+64. CURRICULUM #002 readiness
+65. Prompt count status
+66. Commit recommendation
+
+80. Readiness Decision
+----------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+CURRICULUM/CONTENT #002 — Schema + Entities + Migrations
+
+#002 should implement ONLY:
+- selected module skeletons
+- entities/enums
+- migrations
+- FKs/indexes/checks
+- metadata/boundary/integration tests
+
+No business services/controllers yet.
+
+81. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #001/6 complete
+approximately 5 prompts remain
+
+82. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM/CONTENT #001 status
+- selected module split
+- versioning model ready YES/NO
+- learning content model ready YES/NO
+- published immutability strategy YES/NO
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #002 automatically.

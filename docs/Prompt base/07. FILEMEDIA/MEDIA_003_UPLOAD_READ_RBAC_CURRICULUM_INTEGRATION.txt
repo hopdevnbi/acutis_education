@@ -1,0 +1,983 @@
+CURSOR PROMPT — FILE/MEDIA #003/4
+UPLOAD / READ API + RBAC / SECURITY + CURRICULUM ASSET VALIDATION
+
+1. Context
+----------
+Completed:
+- FILE/MEDIA #001/4 — Domain Audit + Storage Provider Design
+- FILE/MEDIA #002/4 — Schema + MediaModule + Local/S3 Provider Foundation
+
+Current:
+FILE/MEDIA #003 / 4
+
+Remaining after this:
+#004 Final hardening + Docker volume + optional S3 verification + Postman + FE/Mobile readiness
+
+#002 status:
+- media_assets schema READY
+- Local provider READY
+- S3 provider READY
+- provider registry/runtime config READY
+- MediaAssetService foundation READY
+- module boundary compliant
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+Known carry-over:
+1. Full `quality:full` was not proven clean on a pristine test DB because previous manual seeds left dirty data.
+2. Previous report suggested `git add -A` even though it was NOT executed. This violates the permanent Git output rule.
+
+This prompt MUST correct both process issues.
+
+2. Permanent Git Rule — CRITICAL
+--------------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor also MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE command only:
+
+git commit -m "feat(media): add secure media APIs"
+
+Do not print any other Git mutation command.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/MEDIA_001_DOMAIN_AUDIT_AND_STORAGE_PROVIDER_DESIGN_REPORT.md
+docs/MEDIA_002_SCHEMA_LOCAL_S3_PROVIDER_FOUNDATION_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_004_LESSON_CONTENT_PUBLISH_CLONE_ASSIGNMENT_REPORT.md
+docs/CURRICULUM_005_SCOPED_LEARNER_DELIVERY_REPORT.md
+
+Inspect:
+src/modules/media/
+src/modules/learning-content/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/access-control/
+src/modules/auth/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+.env.example
+Dockerfile
+docker-compose files
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement:
+
+A. Authenticated multipart media upload
+B. Server-side MIME/signature validation
+C. Per-category size validation
+D. Media metadata read API
+E. Authenticated binary content read/stream API
+F. media.read / media.upload / media.manage RBAC permissions
+G. conservative media delete/soft-delete policy
+H. provider-per-asset read path
+I. Local and S3-safe delivery
+J. optional HTTP Range support where appropriate
+K. Curriculum image_ref/video_ref asset validation through public MediaAssetService
+L. publish-time validation that referenced media exists, READY, and correct category
+M. full tests
+N. pristine-DB `quality:full` proof
+
+Do NOT implement:
+- direct client-to-S3 presigned upload
+- Local→S3 migration tooling
+- malware scanner
+- CDN
+- Chat/Question Bank media linkage
+- FE/Mobile code
+
+5. Architecture Rules
+---------------------
+MediaModule owns:
+- media_assets
+- MediaAssetService
+- StorageProvider internals
+
+LearningContentModule may depend on:
+MediaModule public `MediaAssetService`
+
+Allowed direction:
+LearningContentModule -> MediaModule
+
+MediaModule MUST NOT depend on:
+CurriculumModule
+LearningContentModule
+ClassModule
+EnrollmentModule
+StudentModule
+
+No cycles.
+No forwardRef.
+No cross-module repositories/entities.
+
+6. Public Export
+----------------
+MediaModule exports:
+- MediaAssetService only
+
+Do NOT export:
+- entity
+- repository
+- TypeOrmModule
+- providers
+- registry
+- AWS SDK types
+
+7. RBAC Permissions
+-------------------
+Add:
+
+media.read
+media.upload
+media.manage
+
+Initial role matrix:
+
+SUPER_ADMIN:
+read/upload/manage
+
+PARISH_ADMIN:
+read/upload/manage
+
+CATECHIST:
+read only IF direct media metadata/content endpoint is safe and domain-scoped;
+otherwise withhold direct `media.read` from catechist and rely on Curriculum delivery integration.
+
+PARENT:
+do NOT grant generic media.read unless direct asset access is safely contextualized.
+
+Important:
+Permission alone must never authorize child-sensitive asset access.
+
+Be conservative.
+
+8. Generic Media Access Problem
+-------------------------------
+A global:
+GET /media/assets/:id/content
+
+can allow UUID enumeration if only `media.read` is checked.
+
+Therefore choose a safe access strategy.
+
+Preferred MVP:
+Generic media endpoints are admin/uploader-oriented only.
+
+Learner-facing Curriculum media should use contextual routes or scoped access tokens later.
+
+For this phase, audit two options:
+
+A. Generic asset content endpoint only for SUPER_ADMIN/PARISH_ADMIN/uploader
+B. Generic authenticated endpoint with media visibility rules
+
+Strong recommendation:
+Start with A for PRIVATE assets.
+
+Do NOT grant PARENT/CATECHIST arbitrary asset-by-ID access.
+
+9. Upload Route
+---------------
+Implement:
+
+POST /api/v1/media/assets
+
+multipart/form-data
+
+Fields:
+- file
+- intendedCategory: IMAGE | DOCUMENT | AUDIO | VIDEO
+- visibility optional, default PRIVATE
+
+Permission:
+media.upload
+
+Initial callers:
+SUPER_ADMIN
+PARISH_ADMIN
+
+No child/parent arbitrary upload.
+
+10. Upload Pipeline
+-------------------
+Flow:
+
+1. authenticate
+2. permission
+3. validate multipart exists
+4. enforce global/category size limit
+5. sanitize original filename
+6. inspect real file signature/magic bytes
+7. determine MIME
+8. ensure MIME allowed for intended category
+9. generate assetId
+10. generate storageKey
+11. compute SHA-256
+12. create PENDING metadata
+13. write through selected write provider
+14. mark READY
+15. on provider failure mark FAILED
+16. return safe MediaAssetSnapshot
+
+No provider fallback per request.
+
+11. Multipart Strategy
+----------------------
+Avoid unbounded memory.
+
+Audit existing Nest adapter/framework.
+
+For initial safe MVP:
+- memory upload may be acceptable for IMAGE/PDF if hard capped
+- VIDEO up to 100MB can be problematic
+
+Prefer:
+streaming or temp-file based upload if project setup supports it cleanly.
+
+If Multer memory storage is used:
+set strict global limit and consider disabling VIDEO in initial upload API until streaming is implemented.
+
+Do not pretend 100MB memory buffering is production-safe.
+
+12. AUDIO / VIDEO Decision
+--------------------------
+MEDIA #001 recommended IMAGE + PDF first.
+
+Re-evaluate now.
+
+Preferred initial upload API:
+- IMAGE: jpeg/png/webp
+- DOCUMENT: pdf
+
+AUDIO/VIDEO:
+provider/schema supports them,
+but public upload may remain disabled until Range/streaming path is validated.
+
+If implementing VIDEO:
+must support safe streaming and Range.
+
+State exact decision in report.
+
+13. MIME Detection
+------------------
+Use magic-byte/signature detection.
+
+If using `file-type`:
+verify Node 22 / TypeScript / module compatibility.
+
+Do not trust:
+- file extension
+- multipart contentType
+
+Validate detected MIME against whitelist.
+
+14. Initial MIME Whitelist
+--------------------------
+Required minimum:
+
+IMAGE:
+image/jpeg
+image/png
+image/webp
+
+DOCUMENT:
+application/pdf
+
+Blocked:
+image/svg+xml
+text/html
+application/javascript
+application/octet-stream
+archives
+executables
+
+If audio/video enabled:
+explicit whitelist only.
+
+15. Polyglot / Mismatch
+-----------------------
+If declared MIME differs from detected MIME:
+prefer detected MIME.
+
+If declared category incompatible:
+reject 415/422.
+
+Do not silently relabel executable-like content.
+
+16. Size Enforcement
+--------------------
+Use configuration from #002.
+
+Enforce:
+- before provider write where known
+- during streaming/read if necessary
+
+Oversize:
+413 Payload Too Large.
+
+No partial stored object should remain.
+Cleanup temp/provider object if needed.
+
+17. Filename
+------------
+Use sanitizer from #002.
+Return original sanitized filename in metadata.
+
+Do not expose it in storage key.
+
+18. Visibility
+-------------
+Default:
+PRIVATE
+
+For #003:
+PUBLIC uploads should preferably be rejected or restricted to SUPER_ADMIN until a true public-content product use case exists.
+
+AUTHENTICATED may be allowed only if policy clear.
+
+Given minors platform:
+strong recommendation:
+only PRIVATE in public upload API initially.
+
+If visibility field is accepted:
+enforce role/policy.
+
+19. Metadata Route
+------------------
+Implement:
+
+GET /api/v1/media/assets/:id
+
+Safe snapshot only.
+
+Authorization:
+SUPER_ADMIN
+PARISH_ADMIN if uploader/authorized admin context
+Uploader self if product policy permits
+
+Do not expose storageProvider/storageKey.
+
+20. Content Route
+-----------------
+Implement:
+
+GET /api/v1/media/assets/:id/content
+
+For PRIVATE asset:
+do not make generic learner access possible by UUID.
+
+Initial safe authorization:
+SUPER_ADMIN
+PARISH_ADMIN
+createdByUserId == current user if same uploader access is intended
+
+Curriculum learner delivery should not depend on this generic endpoint until contextual access is designed.
+
+Alternative:
+create a MediaAssetService stream method and let future domain-specific controllers proxy it after domain auth.
+
+If that is safer, keep generic content route admin-only.
+
+21. Provider-per-Asset Reads
+----------------------------
+Content read must:
+- load asset metadata
+- require READY
+- resolve provider from asset.storageProvider
+- fetch using asset.storageKey
+
+Never use current selected write provider to read arbitrary asset.
+
+22. Content Headers
+-------------------
+Set:
+Content-Type
+Content-Length if available
+safe Content-Disposition
+
+PDF:
+prefer attachment or inline only if safe policy decided.
+
+Images:
+inline.
+
+No cache/public headers that accidentally expose PRIVATE files.
+
+23. Range Support
+-----------------
+If AUDIO/VIDEO upload/read enabled:
+support `Range` requests and 206.
+
+If not implemented:
+do NOT claim production-ready video playback.
+
+Preferred:
+either implement Range now for LOCAL + S3 proxy
+OR keep VIDEO public upload disabled until #004.
+
+Document decision.
+
+24. S3 Proxy Read
+-----------------
+MVP may backend-proxy S3 object stream.
+
+Do NOT expose S3 bucket/key.
+
+Presigned URL remains optional #004 optimization.
+
+25. S3 Errors
+-------------
+Map provider errors to typed domain/HTTP errors:
+404 asset/object missing
+503 storage unavailable
+500 only for unexpected internal
+
+Do not leak AWS error body/credentials.
+
+26. Delete Policy
+-----------------
+Implement conservative admin soft delete only if safe.
+
+Possible:
+DELETE /api/v1/media/assets/:id
+
+Permission:
+media.manage
+
+Rules:
+- SUPER_ADMIN/PARISH_ADMIN/uploader policy
+- mark status DELETED + deletedAt
+- deny reads
+- provider object deletion can happen immediate if no reference guarantee is required
+
+BUT Curriculum may already reference assetId after #003.
+
+Therefore safer:
+Do NOT expose hard/provider delete yet.
+
+Option:
+soft-delete metadata only
+and publish validation refuses DELETED.
+
+However existing published Curriculum could break if referenced media is soft-deleted.
+
+Strong recommendation:
+Either:
+A. omit public delete endpoint in #003
+OR
+B. allow delete only for assets not yet referenced by Curriculum using a public reference check from owning domain.
+
+Avoid introducing Media -> Curriculum dependency.
+
+Prefer A unless product requires delete.
+
+27. MediaAssetService Additions
+-------------------------------
+Implement public provider-neutral methods:
+
+getAssetSnapshot
+assertAssetReady
+assertAssetCategory
+openAssetStream / openAssetContent
+
+Potential:
+createFromUpload
+
+Return provider-neutral contracts.
+
+No entity leakage.
+
+28. Curriculum Integration — CRITICAL
+-------------------------------------
+Current LearningContent block validator validates only UUID format.
+
+Upgrade safely:
+
+When writing DRAFT lesson content:
+for image_ref:
+- asset exists
+- READY
+- category IMAGE
+
+for video_ref:
+- asset exists
+- READY
+- category VIDEO
+
+But if VIDEO upload is disabled:
+video_ref can only reference imported/existing READY VIDEO assets.
+
+29. Publish-Time Asset Validation
+---------------------------------
+Publish must revalidate ALL asset references.
+
+Reason:
+asset may become FAILED/DELETED after draft content was saved.
+
+For each referenced media block:
+- assert READY
+- correct category
+
+If invalid:
+publish returns structured 422 issue.
+
+Add issue codes:
+ASSET_NOT_FOUND
+ASSET_NOT_READY
+ASSET_CATEGORY_MISMATCH
+
+Do not leak storage provider details.
+
+30. Cross-Module Transaction Concern
+------------------------------------
+Publish orchestration already spans Curriculum + LearningContent.
+
+Media validation is read-only.
+
+Do NOT add Media writes into publish transaction.
+
+No cross-module repository.
+
+31. Existing Published Content
+------------------------------
+Existing demo curriculum uses text only.
+
+No migration/backfill needed.
+
+If existing content has arbitrary asset UUIDs:
+publish-time test fixtures may need adjustment.
+
+Do not auto-create fake media for production data.
+
+32. LearningContent Dependency
+------------------------------
+LearningContentModule may import MediaModule.
+
+Required graph:
+MediaModule independent
+CurriculumModule independent of Media
+LearningContentModule -> CurriculumModule + MediaModule
+
+Ensure no cycle.
+
+33. Curriculum Demo Seed
+------------------------
+Do NOT modify demo seed to require media unless useful.
+
+Text-only seed remains valid.
+
+Optional:
+do not add binary seed files.
+
+34. Security — Asset Enumeration
+--------------------------------
+UUID alone is not authorization.
+
+Test direct media endpoint:
+- unrelated authenticated user cannot read PRIVATE asset
+- parent cannot read arbitrary asset
+- catechist cannot read arbitrary asset
+- uploader/admin allowed as policy
+
+35. Security — Path Traversal Regression
+----------------------------------------
+Re-run local provider traversal/symlink tests.
+
+36. Security — SVG/HTML/Executable
+----------------------------------
+Upload tests:
+- SVG rejected
+- HTML rejected
+- fake .jpg executable rejected
+- octet-stream rejected
+
+37. Security — Filename
+-----------------------
+Test:
+../../evil.jpg
+C:\fakepath\evil.jpg
+control chars
+Unicode filename
+
+No path impact.
+
+38. Checksum
+------------
+Upload response snapshot exposes checksumSha256.
+
+Verify against file bytes.
+
+39. Failed Upload Lifecycle
+---------------------------
+Provider write failure:
+metadata becomes FAILED
+no READY response
+HTTP 503
+no local fallback from S3
+
+If provider partially wrote object:
+best-effort cleanup if provider contract supports.
+
+Document.
+
+40. Idempotency
+---------------
+Each upload = new assetId.
+No checksum dedup.
+
+41. Rate Limiting
+-----------------
+Audit existing rate-limit infrastructure.
+
+Upload endpoints are expensive.
+Apply reasonable throttle if existing framework supports route-level limits.
+
+Do not invent distributed rate limiter.
+
+42. Logging
+-----------
+Safe fields only:
+assetId
+category
+size
+provider
+duration/status
+
+Never:
+file bytes
+presigned URL
+credentials
+Authorization
+PII filename at info level if avoidable
+
+43. Swagger
+-----------
+Document:
+- multipart upload
+- allowed categories/types
+- size limits
+- 413
+- 415/422
+- 503
+- metadata route
+- content route
+- PRIVATE semantics
+
+Do not expose entity fields.
+
+44. OpenAPI Multipart
+---------------------
+Ensure generated OpenAPI accurately marks binary file input.
+
+Web FE later needs generated/client-friendly contract.
+
+45. Unit Tests
+--------------
+MediaAssetService:
+- upload happy path local provider
+- provider selection
+- pending→ready
+- pending→failed
+- checksum
+- category
+- snapshot
+- content stream
+- private access policy if service owns it
+
+MIME:
+- jpeg/png/webp/pdf
+- spoof
+- unsupported
+- SVG
+- HTML
+- size limits
+
+46. Integration Tests
+---------------------
+Use real temp LocalStorageProvider + MSSQL:
+- upload metadata + bytes
+- READY
+- retrieve
+- content matches
+- checksum
+- failed provider marks FAILED
+- provider-per-asset read
+
+47. DB E2E
+----------
+HTTP:
+- 401 unauthenticated
+- 403 without permission
+- admin upload image 201
+- admin metadata 200
+- content 200
+- unsupported type rejected
+- oversized rejected
+- unrelated learner private access denied
+- S3 not configured does not break local mode
+
+48. Curriculum Integration Tests
+--------------------------------
+DRAFT content:
+- valid READY IMAGE accepted
+- missing asset rejected
+- FAILED asset rejected
+- DOCUMENT used as image rejected
+- valid VIDEO accepted only if supported fixture exists
+
+Publish:
+- valid assets publish
+- missing/deleted/not-ready asset blocks 422
+- category mismatch 422
+
+49. quality:full — MUST BE CLEAN
+-------------------------------
+Before full DB suites:
+
+RUN:
+npm run test:db:prepare -- --reset
+
+Then run all required commands.
+
+The #002 dirty DB issue must NOT be carried forward as unexplained partial result.
+
+Goal:
+ONE clean:
+npm run quality:full
+
+If failure remains:
+root-cause and fix if safe.
+Do not declare #003 READY with unexplained DB failures.
+
+50. Test Isolation
+------------------
+Do not assume developer DB state.
+
+Tests must prepare/reset deterministic test DB according to project conventions.
+
+No manual seed leftovers should be required.
+
+51. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:media-api .
+
+PASS required.
+
+52. S3 Tests
+------------
+No real AWS required.
+Mock S3 adapter tests remain.
+
+If S3 provider is selected without config:
+startup/config validation must fail clearly.
+
+Local mode remains default.
+
+53. No Direct S3 Upload
+-----------------------
+Do NOT add browser/mobile presigned upload flow.
+#004/future.
+
+54. No S3→Local Per-Request Fallback
+------------------------------------
+Strictly forbidden.
+
+55. No Local→S3 Migration
+-------------------------
+Not this prompt.
+
+56. No Malware Scanner
+----------------------
+Not this prompt.
+
+57. No Chat/Question Bank Link
+------------------------------
+Not this prompt.
+
+58. Required Validation
+-----------------------
+Run in this order:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:media-api .
+
+59. Required Report
+-------------------
+Create:
+
+docs/MEDIA_003_UPLOAD_READ_RBAC_CURRICULUM_INTEGRATION_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #002
+3. #002 dirty-DB/process carry-over
+4. Rules applied
+5. Files created
+6. Files modified
+7. Final dependency graph
+8. Module boundary audit
+9. RBAC permissions
+10. Role matrix
+11. Upload API
+12. Multipart implementation
+13. Upload buffering/streaming decision
+14. Enabled media categories
+15. MIME detection
+16. MIME whitelist
+17. Size limits
+18. Filename sanitization
+19. Checksum
+20. PENDING/READY/FAILED flow
+21. Provider-per-asset read
+22. Metadata API
+23. Content API
+24. Generic PRIVATE asset access policy
+25. Learner arbitrary asset denial
+26. Range support decision/result
+27. S3 proxy behavior
+28. Delete policy
+29. MediaAssetService public contracts
+30. Curriculum/LearningContent integration
+31. DRAFT asset validation
+32. Publish-time asset validation
+33. Structured publish errors
+34. Dependency/cycle audit
+35. forwardRef audit
+36. Security/path traversal
+37. MIME spoofing
+38. SVG/HTML/executable rejection
+39. child privacy
+40. logging
+41. Swagger/OpenAPI
+42. unit tests
+43. integration tests
+44. DB e2e
+45. Curriculum integration tests
+46. Existing regression
+47. pristine DB reset proof
+48. quality:full clean run
+49. Docker
+50. S3 optional behavior
+51. Local default behavior
+52. Files/commands
+53. Validation matrix
+54. Known/deferred
+55. Out-of-scope
+56. MEDIA #004 readiness
+57. Prompt count
+58. Commit recommendation
+
+60. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- upload image
+- upload PDF
+- unsupported MIME denied
+- MIME spoof denied
+- SVG denied
+- HTML denied
+- oversized denied
+- checksum
+- metadata read
+- private content read authorized
+- unrelated private read denied
+- provider-per-asset read
+- S3 errors wrapped
+- local default without AWS
+- no S3→local request fallback
+- Curriculum READY IMAGE validation
+- Curriculum wrong category denial
+- publish missing/not-ready asset denial
+- no cross-module repository/entity
+- prior regression
+- Git rule compliance (NO git add/commit/push executed or suggested except exact commit command below)
+
+61. MEDIA #004 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH and quality:full clean:
+
+Recommend:
+
+FILE/MEDIA #004/4 — FINAL HARDENING + DOCKER LOCAL VOLUME + OPTIONAL S3 VERIFICATION + POSTMAN + FE/MOBILE CONTRACT READINESS
+
+62. Prompt Count
+----------------
+State:
+FILE/MEDIA #003/4 complete
+approximately 1 prompt remains (#004)
+
+63. Final Response
+------------------
+Respond concisely:
+
+- FILE/MEDIA #003 status
+- upload/read PASS/FAIL
+- RBAC/security PASS/FAIL
+- Curriculum asset validation PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/MEDIA_003_UPLOAD_READ_RBAC_CURRICULUM_INTEGRATION_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(media): add secure media APIs"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

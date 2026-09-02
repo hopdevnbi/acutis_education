@@ -1,0 +1,917 @@
+CURSOR PROMPT — PRACTICE ENGINE #006/6
+FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION GATE
+
+CONTEXT
+-------
+Completed:
+#001 Domain Audit + Flow Design
+#002 Schema + Entities + Migrations
+#003 Generation + Session Lifecycle + Question Selection + Contextual Media
+#004 Answer + Grading + Retry + Feedback + Review-Wrong
+#004A Full Validation Gate ACCEPTED
+#005 Progress/Statistics + Scoped Parent/Catechist Access + FE/Mobile Hardening
+
+Current:
+PRACTICE ENGINE #006/6
+
+This is the FINAL completion gate.
+Do NOT start Exam, Localization, Notifications, or any new module automatically.
+
+WORKING TREE
+------------
+Inspect git status read-only.
+
+Preserve all valid #004A and #005 changes.
+Do not revert unrelated work.
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest git add.
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(practice): finalize quiz delivery foundation"
+
+Do not execute it.
+
+WORKFLOW
+--------
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+For this prompt:
+1. Audit #001–#005 first
+2. Identify BLOCKER/HIGH/MEDIUM/LOW
+3. Fix only phase-completion issues
+4. Add final demo seed/Postman/docs
+5. Run full validation
+6. Declare COMPLETE only if mandatory gates pass
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/PRACTICE_003_GENERATION_SESSION_DELIVERY_REPORT.md
+docs/PRACTICE_004_ANSWER_GRADING_RETRY_REVIEW_REPORT.md
+docs/PRACTICE_004A_FULL_VALIDATION_GATE_REPORT.md
+docs/PRACTICE_005_PROGRESS_STATISTICS_CONTRACT_HARDENING_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/practice/
+src/modules/question-bank/
+src/modules/enrollment/
+src/modules/class/
+src/modules/student/
+src/modules/curriculum/
+src/modules/media/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+docs/postman/
+README.md
+package.json
+Dockerfile
+docker-compose*.yml
+
+PRIMARY OBJECTIVE
+-----------------
+Close Practice phase only if all critical gates pass:
+
+- clean bounded context
+- clean Practice vs Exam separation
+- PracticeService sole export
+- exactly 3 Practice-owned tables
+- no cross-module repo/entity leakage
+- session lifecycle stable
+- Parent proxy model stable
+- exact questionVersion pinning
+- stable question/option order
+- generation idempotent
+- answer idempotent
+- server-side grading only
+- retry/finalization stable
+- feedback reveal safe
+- auto-completion stable
+- review-wrong stable
+- contextual media safe
+- progress/statistics correct
+- Catechist class progress safe
+- no raw answer leakage
+- FE contract ready
+- Mobile contract ready
+- multilingual foundation ready
+- demo seed
+- Postman
+- README/OpenAPI
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+FINAL ARCHITECTURE AUDIT
+------------------------
+Expected PracticeModule:
+
+PracticeController
+PracticeService                 PUBLIC / sole export
+PracticeGenerationService      internal
+PracticeAnswerService          internal
+PracticeReviewService          internal
+PracticeSessionQueryService    internal
+PracticeMediaService           internal
+PracticeAccessService          internal
+PracticeProgressService        internal
+
+Allowed dependencies:
+Practice -> QuestionBank public API
+Practice -> Enrollment public API
+Practice -> Class public API
+Practice -> Curriculum public API
+Practice -> Media public API
+Practice -> Parish/Auth/AccessControl
+
+Forbidden:
+reverse dependencies into Practice
+cross-module repos/entities
+forwardRef
+cycles
+
+Verify module-boundaries.spec.ts.
+
+DATA OWNERSHIP
+--------------
+Practice owns exactly:
+practice_sessions
+practice_session_questions
+practice_answer_attempts
+
+No:
+practice_progress aggregate table
+PracticeDefinition
+Exam tables
+Question Bank tables
+translation tables
+media blob tables
+
+SESSION LIFECYCLE
+-----------------
+Statuses:
+IN_PROGRESS
+COMPLETED
+ABANDONED
+
+Types:
+STANDARD
+REVIEW_WRONG
+
+Verify:
+- completed immutable
+- abandoned terminal
+- review source lineage safe
+- no invalid timestamps
+- no user hard-delete workflow
+
+LEARNER / ACTOR
+---------------
+Final invariant:
+enrollmentId = learner
+createdByUserId = actor
+submittedByUserId = actor
+
+Parent may act for linked child.
+No STUDENT role yet.
+Catechist/Parish Admin must not submit learner answers.
+
+GENERATION
+----------
+Verify:
+- eligible enrollment
+- guardian relationship
+- assigned curriculum
+- ACTIVE root + current PUBLISHED QB versions only
+- no duplicates
+- shortage -> 422
+- exact version pins
+- persisted question order
+- persisted option order
+- ARCHIVED pinned version remains deliverable
+
+CREATE IDEMPOTENCY
+------------------
+clientRequestId + generationRequestHash:
+same request -> replay existing
+same key/different normalized request -> 409
+
+ANSWER IDEMPOTENCY
+------------------
+clientAnswerId required.
+
+same key + same semantic selection:
+200 replay
+including when session already COMPLETED
+
+same key + different semantic selection:
+409
+
+UUID/order normalized.
+
+GRADING BOUNDARY
+----------------
+Practice grades only through:
+QuestionBankService.gradeAnswer
+
+No Practice correct-answer SQL.
+
+Client never controls:
+score
+isCorrect
+attemptNumber
+finalized
+sessionCompleted
+
+RETRY
+-----
+maxAttemptsPerQuestion default 3.
+
+Correct -> final.
+Wrong before max -> retry.
+Wrong at max -> final.
+No partial credit.
+No answer after final.
+
+FEEDBACK
+--------
+Explanation + correctOptionIds only after question finalization/session completion rules.
+
+QuestionBankService.getPracticeFeedback remains service-only.
+
+No QB HTTP feedback route.
+
+CONTEXTUAL MEDIA
+----------------
+Before feedback reveal:
+prompt/option media only.
+
+After reveal:
+explanation media may be allowed.
+
+Unreferenced assets denied.
+No generic learner Media route.
+
+REVIEW-WRONG
+------------
+Verify:
+- completed source
+- STANDARD or REVIEW_WRONG source
+- final-wrong only
+- eventually-correct excluded
+- exact versions reused
+- order preserved
+- option order preserved
+- fresh attempts
+- same enrollment
+- idempotent create
+- no-wrong 422
+- chained review
+
+PROGRESS
+--------
+No aggregate table.
+
+Raw sessions/questions/attempts are source of truth.
+
+Verify:
+enrollment progress
+class progress
+STANDARD metrics
+REVIEW metrics
+lastPracticedAt
+curriculum/lesson/date filters
+weighted class accuracy
+pagination
+no answer leakage
+no Question Bank calls in progress aggregation
+
+NO MASTERY
+----------
+Do not add:
+masteryScore
+spiritual score
+leaderboard
+badges
+
+PERFORMANCE AUDIT
+-----------------
+#005 reported MEDIUM risk for large class-wide SQL.
+
+Verify:
+- no N+1
+- summary single aggregate pass
+- learner rows paginated
+- indexes acceptable
+- parameterized SQL
+- no Cartesian explosion
+
+Final verdict:
+PRACTICE PROGRESS AGGREGATE TABLE REQUIRED NOW: YES/NO
+
+Do not add one without concrete evidence.
+
+ACCESS MATRIX
+-------------
+Enrollment progress:
+SUPER_ADMIN allowed
+PARISH_ADMIN same parish
+CATECHIST assigned class
+PARENT linked enrollment
+unrelated denied
+
+Class progress:
+SUPER_ADMIN allowed
+PARISH_ADMIN same parish
+CATECHIST assigned class
+PARENT denied
+
+Learner session submit:
+PARENT linked only under current MVP policy
+Catechist denied
+Parish Admin denied
+
+SECURITY / MINORS
+-----------------
+Verify:
+- relationship checks server-side
+- no child directory
+- no raw answers in progress
+- no correct answers in progress
+- no answer content in logs
+- no generic QB feedback endpoint
+- no generic learner media route
+- no SQL injection
+- no secrets in Postman
+- no inappropriate spiritual analytics
+
+MULTILINGUAL
+------------
+Final verdict:
+PRACTICE MULTILINGUAL FOUNDATION READY: YES/NO
+
+Require:
+session.locale
+Unicode
+exact version pins
+locale-neutral grading/progress
+future translationRevisionId can be added
+no runtime MT in answer hot path
+
+FE READINESS
+------------
+Final verdict:
+FE PRACTICE CONTRACT READY: YES/NO
+
+Must cover:
+generate
+resume
+abandon
+answer
+retry
+feedback
+review wrong
+contextual media
+learner progress
+class progress
+stable errors/idempotency
+
+MOBILE READINESS
+----------------
+Final verdict:
+MOBILE PRACTICE CONTRACT READY: YES/NO
+
+Verify:
+clientRequestId create
+clientAnswerId answer
+clientRequestId review
+stable IDs/order
+resume
+retry-safe POSTs
+progress
+contextual media
+server-authoritative state
+
+PRACTICE VS EXAM
+----------------
+Practice is NOT Exam.
+
+Do not add:
+exam duration
+exam publish
+exam attempts
+proctoring
+high-stakes submission
+result release
+
+Exam remains separate future bounded context.
+
+DEMO PRACTICE SEED — REQUIRED
+-----------------------------
+Create a safe DEV-ONLY idempotent Practice demo seed or equivalent project-standard demo bootstrap.
+
+Prefer dedicated optional dev Practice seed using existing demo:
+parish
+class
+enrollment
+parent
+Question Bank questions
+
+Demo should show:
+- one completed STANDARD session
+- at least one wrong-then-correct retry
+- at least one final-wrong question if practical
+- one REVIEW_WRONG child session completed or in-progress
+- non-zero progress metrics
+
+No real person data.
+No pastoral/sensitive data.
+Do not run in production startup.
+
+Prefer Practice public/service APIs over direct arbitrary writes.
+
+SEED IDEMPOTENCY
+----------------
+Stable IDs/clientRequestIds.
+
+Running twice:
+- no duplicate sessions
+- no duplicate attempts
+- no duplicate review children
+
+Integration test required.
+
+POSTMAN — REQUIRED
+------------------
+Create:
+docs/postman/Acutis-Education-Practice-Engine.postman_collection.json
+
+Variables:
+baseUrl
+parentEmail
+parentPassword
+catechistEmail
+catechistPassword
+parishAdminEmail
+parishAdminPassword
+enrollmentId
+classId
+curriculumId
+canonicalLessonKey
+practiceSessionId
+sessionQuestionId
+clientRequestId
+clientAnswerId
+reviewSessionId
+assetId
+
+No real tokens/secrets.
+
+Flow:
+1 Parent login
+2 Create STANDARD
+3 GET/resume
+4 stable order
+5 wrong answer
+6 retry
+7 correct/final answers
+8 feedback reveal
+9 auto-completion
+10 GET completed
+11 review-wrong
+12 idempotent review replay
+13 complete review if practical
+14 enrollment progress
+15 Catechist login
+16 assigned class progress
+17 Parent class progress denied
+18 Parish Admin progress
+19 abandon separate session
+20 contextual media if fixture allows
+
+POSTMAN ASSERTIONS
+------------------
+Capture IDs.
+Assert:
+201 new vs 200 replay
+feedback hidden/revealed
+completed state
+review behavior
+progress no leakage
+Parent class 403
+Catechist class 200
+
+README
+------
+Document:
+bounded context
+learner=enrollment
+Parent proxy
+lifecycle
+STANDARD/REVIEW_WRONG
+generation filters
+version pinning
+order persistence
+idempotency
+grading
+retry
+feedback
+auto-complete
+review wrong
+contextual media
+progress semantics
+first vs final accuracy
+RBAC/scope matrix
+FE/Mobile contracts
+no mastery
+Exam separation
+multilingual readiness
+scalability risk
+
+OPENAPI
+-------
+Audit every Practice endpoint:
+POST enrollment practice session
+GET session
+PATCH abandon
+POST answer
+POST review-wrong
+GET contextual media
+GET enrollment progress
+GET class progress
+
+Ensure:
+DTOs
+examples
+400/401/403/404/409/422
+replay semantics
+ratio semantics
+pagination
+no hidden answer fields
+
+TEST COMPLETENESS
+-----------------
+Must cover:
+generation
+create replay
+curriculum scope
+selection shortage
+resume
+abandon
+answer
+retry
+answer replay
+feedback
+auto-complete
+review
+review replay
+media
+Parent scope
+Catechist denied submit
+progress
+Catechist class scope
+Parent class denied
+no leakage
+ARCHIVED pinned compatibility
+
+Add only missing high-value tests.
+
+DEMO SEED TEST
+--------------
+First run creates sample.
+Second run idempotent.
+Progress matches sample history.
+No duplicate sessions/attempts.
+No cross-parish data.
+
+REGRESSION
+----------
+Must remain green:
+Auth
+Parish/Academic
+Class/Enrollment
+Curriculum/LearningContent
+Media
+Question Bank
+Practice
+
+QUALITY
+-------
+Run:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+Do not declare COMPLETE if DB unavailable.
+
+DOCKER
+------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:practice-final ."
+
+Use actual repo path.
+PASS required.
+
+Optional runtime smoke:
+verify production image boots/routes/DI.
+If skipped, document.
+
+NPM AUDIT
+---------
+npm audit --audit-level=moderate
+
+No unresolved HIGH security issue allowed for completion.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:practice-final ."
+
+Run Practice demo seed with actual project convention.
+
+REQUIRED FINAL REPORT
+---------------------
+Create:
+docs/PRACTICE_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #001–#005
+3 Working tree audit
+4 Rules applied
+5 Final findings summary/severity
+6 Final dependency graph
+7 Module boundary
+8 Public exports
+9 Data ownership
+10 Practice vs Exam boundary
+11 Learner/actor model
+12 Session lifecycle
+13 Session types
+14 Generation contract
+15 Curriculum-aware generation
+16 Question Bank selection
+17 Exact version pinning
+18 Question ordering
+19 Option ordering
+20 Generation idempotency
+21 Answer submission
+22 Answer idempotency
+23 Grading boundary
+24 Retry/finalization
+25 Feedback reveal
+26 Auto-completion
+27 Review-wrong
+28 Review idempotency
+29 Contextual media
+30 Progress source-of-truth
+31 STANDARD progress
+32 REVIEW progress
+33 Accuracy semantics
+34 Enrollment progress access
+35 Class progress access
+36 Privacy/data minimization
+37 Performance/scalability
+38 Aggregate-table final decision
+39 Multilingual readiness
+40 FE readiness
+41 Mobile/offline readiness
+42 Security/minors
+43 Error contract
+44 Swagger/OpenAPI
+45 Demo seed
+46 Seed idempotency
+47 Postman
+48 README/docs
+49 Unit tests
+50 Integration tests
+51 DB e2e
+52 Existing regression
+53 pristine quality:full
+54 npm audit
+55 Docker
+56 runtime smoke decision
+57 Microservice extraction
+58 Files created
+59 Files modified
+60 Commands
+61 Validation matrix
+62 Known/deferred
+63 Out-of-scope
+64 Final completion decision
+65 Next backend phase sequencing audit
+66 Prompt count
+67 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- PracticeService only export
+- exactly 3 Practice-owned tables
+- no aggregate progress table unless justified
+- no PracticeDefinition
+- no Exam tables
+- enrollment learner context
+- actor separation
+- Parent linked create/read/submit
+- unlinked Parent denied
+- Catechist submit denied
+- Parish Admin submit denied
+- ACTIVE/current PUBLISHED selection
+- no duplicate versions
+- exact version pinning
+- persisted question order
+- persisted option order
+- create replay
+- create mismatch
+- answer replay including COMPLETED
+- answer mismatch
+- server-side grading
+- PUBLISHED grading
+- ARCHIVED grading
+- retry
+- max attempts finalization
+- correct finalization
+- no premature feedback
+- feedback after final
+- no QB feedback HTTP
+- auto-completion
+- completed immutable
+- review-wrong
+- review exact versions
+- review order
+- review option order
+- review idempotency
+- chained review
+- prompt/option contextual media
+- explanation media reveal gate
+- enrollment progress
+- class progress
+- STANDARD metrics
+- REVIEW metrics
+- first-attempt accuracy
+- final accuracy
+- no retry double count
+- no mastery
+- Parent linked progress
+- Parent class denied
+- assigned Catechist class progress
+- unassigned Catechist denied
+- Parish Admin own parish
+- cross-parish denied
+- no selected answers in progress
+- no correct answers in progress
+- zero QB calls in progress aggregation
+- no N+1
+- aggregate-table decision
+- FE contract ready
+- Mobile contract ready
+- multilingual foundation ready
+- demo seed
+- seed idempotent
+- Postman
+- README/OpenAPI
+- no secrets
+- no entity/repo export
+- regression
+- Git compliance
+
+COMPLETION DECISION
+-------------------
+Only if:
+- BLOCKER = 0
+- HIGH = 0
+- mandatory feature gates PASS
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- Docker PASS
+- FE READY
+- MOBILE READY
+
+Then print exactly:
+
+PRACTICE ENGINE / QUIZ DELIVERY FOUNDATION PHASE COMPLETE
+
+PRACTICE DOMAIN READY: YES
+
+FE PRACTICE CONTRACT READY: YES
+
+MOBILE PRACTICE CONTRACT READY: YES
+
+PRACTICE MULTILINGUAL FOUNDATION READY: YES
+
+PRACTICE → QUESTION BANK INTEGRATION READY: YES
+
+Otherwise print:
+PRACTICE ENGINE / QUIZ DELIVERY FOUNDATION PHASE NOT COMPLETE
+and list blockers.
+
+NEXT PHASE SEQUENCING AUDIT
+---------------------------
+Only if Practice COMPLETE.
+
+Do not blindly start Exam.
+
+Compare at least:
+A. LOCALIZATION / CONTENT TRANSLATION FOUNDATION
+B. EXAM ENGINE / FORMAL ASSESSMENT
+
+Use current master roadmap.
+
+Important architecture sequencing:
+Localization should happen after Curriculum/Lesson + Media are stable, before deeper downstream content UX and before Exam/Notification become more entrenched.
+
+Question Bank and Practice are now deep enough that Localization sequencing must be reviewed explicitly.
+
+Final report must recommend one next phase and explain why.
+
+Do NOT implement either.
+
+PROMPT COUNT
+------------
+State:
+PRACTICE ENGINE #006/6 complete
+Practice phase COMPLETE or BLOCKED
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- PRACTICE #006 status
+- phase COMPLETE/NOT COMPLETE
+- architecture PASS/FAIL
+- demo seed PASS/FAIL
+- Postman PASS/FAIL
+- FE readiness
+- Mobile readiness
+- multilingual readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- aggregate-table decision
+- next phase recommendation
+- report path
+
+Then print exactly:
+git commit -m "feat(practice): finalize quiz delivery foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next phase automatically.

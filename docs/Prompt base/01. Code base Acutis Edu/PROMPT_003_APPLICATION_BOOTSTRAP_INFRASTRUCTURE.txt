@@ -1,0 +1,721 @@
+CURSOR PROMPT #003 — APPLICATION BOOTSTRAP INFRASTRUCTURE
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend technical baseline:
+- Node.js v22.23.1
+- NestJS 11.x currently selected and already bootstrapped
+- TypeScript strict
+- npm
+- MSSQL later
+- Docker / Docker Compose later
+- Bitbucket Pipelines later
+- Frontend is a separate ReactJS repository
+
+Prompt #001 established mandatory project rules.
+Prompt #002 bootstrapped the NestJS skeleton and code-quality foundation.
+
+Current foundation status:
+- PROJECT_RULES.md exists and is authoritative.
+- AGENTS.md exists.
+- .cursor/rules/*.mdc are always applied.
+- Node.js is pinned to exactly 22.23.1.
+- npm/package-lock.json is used.
+- NestJS 11.2.3 is currently used.
+- TypeScript strict mode is enabled.
+- ESLint and Prettier are configured.
+- GET /api/v1/health exists and passes unit/e2e/smoke tests.
+- MSSQL, ORM, migrations, Docker, Swagger, config system, structured logging, auth, and business modules are not yet implemented.
+
+Before making ANY change:
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all .cursor/rules/*.mdc.
+4. Read:
+   docs/PROMPT_001_PROJECT_RULES_REPORT.md
+5. Read:
+   docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+6. Inspect the existing repository and package versions.
+
+Do not weaken existing quality rules.
+
+2. Current Phase
+----------------
+Backend Foundation
+Prompt #003 / approximately 7 prompts
+
+Completed:
+- #001 Rules & repository hygiene
+- #002 NestJS bootstrap & code-quality baseline
+
+Current:
+- #003 Application bootstrap infrastructure
+
+Remaining after this prompt:
+- #004 MSSQL + ORM/data-access + migrations
+- #005 Docker + Docker Compose + MSSQL local
+- #006 Testing conventions + DB integration/e2e + quality gates
+- #007 Final foundation audit + hardening
+
+3. Objective
+------------
+Implement the application-level infrastructure that every future module will rely on:
+
+- environment/configuration management
+- startup configuration validation
+- global request validation
+- centralized/global exception handling
+- structured application logging
+- request/correlation ID support
+- Swagger/OpenAPI baseline
+- environment-driven HTTP port
+- application bootstrap organization that remains simple and maintainable
+
+Do NOT implement MSSQL, ORM, migrations, Docker, auth, RBAC, users, or catechism business modules.
+
+4. Preserve Existing Architecture
+---------------------------------
+Do not regenerate the NestJS project.
+
+Preserve:
+- PROJECT_RULES.md
+- AGENTS.md
+- .cursor/rules/
+- .gitignore
+- existing strict TypeScript configuration
+- ESLint/Prettier quality rules
+- health module behavior
+- /api/v1 global prefix
+- existing test conventions
+
+Do not perform unrelated refactors.
+
+If existing code requires a small refactor to avoid duplicating bootstrap configuration between production and e2e tests, keep it narrowly scoped and document it.
+
+5. Configuration Module
+-----------------------
+Introduce NestJS configuration support using an appropriate stable package compatible with NestJS 11.
+
+Preferred direction:
+- @nestjs/config
+
+Requirements:
+- Load environment variables centrally.
+- Do not read process.env throughout business/application code.
+- Validate environment variables at startup.
+- Fail fast on invalid required configuration.
+- Preserve strong typing as far as practical.
+- Avoid an over-engineered custom configuration framework.
+
+At this stage, define only configuration actually needed by the current foundation.
+
+Expected baseline values include concepts such as:
+- NODE_ENV
+- PORT
+
+Do NOT invent:
+- DB credentials
+- JWT secrets
+- storage credentials
+- SMTP configuration
+- Redis configuration
+- external APIs
+
+Those should be introduced only when their modules arrive.
+
+6. Environment Schema / Validation
+----------------------------------
+Implement startup validation for environment variables.
+
+Evaluate a stable validation approach compatible with the current stack, for example:
+- Joi
+or
+- a small explicit validation function
+
+Choose one clear approach and document why.
+
+Minimum expected behavior:
+- NODE_ENV accepts a controlled set such as:
+  development
+  test
+  production
+- PORT must be a valid TCP port integer.
+- sensible defaults may exist for local development where appropriate.
+- production behavior must not silently accept malformed values.
+
+Do not use unsafe casts merely to satisfy TypeScript.
+
+7. .env.example
+---------------
+Create a tracked:
+.env.example
+
+It should contain only non-secret example/default values required by the current application foundation.
+
+Do NOT place credentials or fake production secrets in it.
+
+The actual:
+.env
+
+must remain ignored.
+
+Document each current variable briefly using comments if useful.
+
+8. HTTP Port
+------------
+Remove the hard-coded HTTP port introduced in Prompt #002.
+
+The application should obtain its HTTP port through the centralized config layer.
+
+Keep a sensible local default such as 3000 if appropriate.
+
+Do not spread port parsing logic across files.
+
+9. Global Validation
+--------------------
+Install/configure:
+- class-validator
+- class-transformer
+
+Establish a global NestJS ValidationPipe baseline for all future request DTOs.
+
+Required behavior should carefully consider:
+- whitelist
+- forbidNonWhitelisted
+- transform
+- safe transformation options
+
+Prefer strict API behavior.
+
+Do not create fake DTOs just to demonstrate validation.
+
+If the current health endpoint takes no input, that is fine.
+
+The configuration should be ready for future DTOs.
+
+Document the exact ValidationPipe settings and rationale.
+
+10. Global Exception Handling
+-----------------------------
+Implement a centralized exception filter / error response contract.
+
+Goals:
+- all API errors should eventually have a predictable structure
+- known Nest HTTP exceptions should preserve the correct HTTP status
+- unexpected exceptions should return HTTP 500 without leaking stack traces/internal details
+- unexpected exceptions should be logged
+- response should include the request/correlation ID
+- error payload should be safe for clients
+
+Define a simple initial error schema.
+
+A reasonable conceptual structure could include:
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "...",
+  "path": "/api/v1/...",
+  "timestamp": "...",
+  "requestId": "..."
+}
+
+However, do not mechanically copy this if NestJS validation errors require a better structured message representation.
+
+Important:
+- preserve useful validation error details
+- never expose stack trace
+- never expose raw SQL/internal errors in future
+- do not catch/rethrow everywhere
+- centralize behavior
+
+Create explicit TypeScript types/interfaces for the public error contract where useful.
+
+11. Request / Correlation ID
+----------------------------
+Introduce a request ID/correlation ID mechanism.
+
+Requirements:
+- Every incoming HTTP request receives a stable request ID.
+- If a safe incoming request ID header is supported, validate/normalize it before trusting it.
+- Otherwise generate a UUID using a secure built-in approach where possible.
+- Make the ID available to:
+  - structured logs
+  - global exception responses
+  - response headers if appropriate
+- Avoid global mutable state that can leak request context across concurrent requests.
+
+Keep this implementation simple.
+
+Evaluate whether:
+- middleware
+- AsyncLocalStorage
+- logger request context
+or another Nest-friendly mechanism is appropriate.
+
+Do not introduce a large context framework without need.
+
+Document the decision.
+
+12. Structured Logging
+----------------------
+Replace ordinary scattered/default logging behavior with a deliberate structured logging baseline.
+
+Evaluate a stable NestJS-compatible approach.
+
+Preferred characteristics:
+- JSON structured logs
+- request-aware logging
+- request ID included automatically
+- log levels
+- production friendly
+- readable enough for local development
+- no secrets or entire sensitive bodies logged
+- compatible with future containerized environments
+
+A package such as:
+- nestjs-pino / pino
+may be considered if compatible with NestJS 11 and the project rules.
+
+Do NOT add a logging package blindly.
+Check compatibility and use a maintained stable version.
+
+Requirements:
+- no console.log in application code
+- log application startup
+- log unexpected exceptions
+- HTTP request logs should not expose sensitive request bodies
+- avoid logging Authorization, Cookie, or similar secrets
+- establish redaction for sensitive headers/fields if the chosen logger supports it
+
+If local pretty logging requires an optional dev-only dependency, keep production output structured and document the choice.
+
+13. Logging Privacy / Redaction
+-------------------------------
+At minimum, explicitly protect sensitive fields/headers such as:
+- authorization
+- cookie
+- set-cookie
+- password
+- token
+- accessToken
+- refreshToken
+
+Because this platform will eventually contain minors' information, default toward minimal request logging.
+
+Do not log complete request/response bodies globally.
+
+14. Swagger / OpenAPI
+---------------------
+Add Swagger/OpenAPI using packages compatible with NestJS 11.
+
+Preferred package:
+- @nestjs/swagger
+
+Requirements:
+- Swagger should describe API version/title/basic metadata.
+- Swagger UI should be available at a predictable path such as:
+  /api/docs
+or another well-justified path.
+
+Important:
+The API itself remains under:
+  /api/v1
+
+Do not accidentally make Swagger route:
+  /api/v1/api/docs
+
+Choose and document the route clearly.
+
+Swagger should be enabled by environment/configuration rather than assumed to be publicly available in every production deployment.
+
+Suggested behavior:
+- enabled by default for development
+- disabled by default or explicitly configurable for production
+
+Choose a small config variable if required, e.g.:
+SWAGGER_ENABLED
+
+If introduced:
+- add it to config validation
+- add it to .env.example
+- make boolean parsing predictable
+
+Do not add auth schemas yet because authentication does not exist.
+
+15. Health Endpoint
+-------------------
+Preserve:
+GET /api/v1/health
+
+Expected response:
+{
+  "status": "ok"
+}
+
+Do not add MSSQL readiness/liveness behavior yet.
+
+However, ensure the endpoint still works with:
+- config module
+- new logger
+- global filter
+- request ID middleware/context
+- Swagger bootstrap
+
+Update tests only where required by the new global bootstrap behavior.
+
+16. Bootstrap Organization
+--------------------------
+Prompt #002 currently has minimal bootstrap logic.
+
+If main.ts becomes crowded, extract narrowly scoped bootstrap helpers.
+
+Possible responsibilities:
+- application configuration
+- Swagger setup
+- global pipes/filter setup
+
+Do NOT create generic dumping grounds.
+
+Avoid speculative folders such as:
+- utils
+- helpers
+- common
+unless a real cross-cutting responsibility exists.
+
+A small configuration or bootstrap-specific structure is acceptable if justified.
+
+Prefer explicit names.
+
+17. Testing Requirements
+------------------------
+Add/adjust automated tests for the infrastructure introduced in this prompt.
+
+At minimum verify meaningful behavior for:
+
+A. Configuration
+- valid defaults/config accepted
+- invalid relevant values rejected where practical
+
+B. Global exception contract
+- unknown route or controlled HTTP exception returns expected safe structure
+- response contains request ID
+- no stack trace leakage
+
+C. Request ID
+- request ID exists
+- response/header and error response use consistent ID if designed that way
+
+D. Validation infrastructure
+If no natural DTO endpoint exists yet, do NOT add fake business endpoints solely for testing.
+A focused unit test of validation/bootstrap configuration is acceptable.
+
+E. Swagger
+- if enabled in test configuration, confirm docs/OpenAPI route can initialize or be reached
+or
+- test setup function directly if this avoids brittle UI/static asset assertions
+
+F. Existing health endpoint
+- existing unit/e2e behavior must continue to pass
+
+Keep tests deterministic.
+No MSSQL.
+No Docker.
+No external network.
+
+18. E2E Bootstrap Consistency
+-----------------------------
+Prompt #002 notes that e2e manually applies the API prefix.
+
+Review whether production application bootstrap and e2e application bootstrap risk drifting apart.
+
+If appropriate, introduce a reusable application setup function so both:
+- main.ts
+- e2e tests
+
+apply the same:
+- prefix
+- validation
+- filter
+- request ID behavior
+- logging setup where practical
+
+Do not over-engineer.
+The goal is to prevent tests from exercising a different application configuration than production.
+
+Document the decision.
+
+19. Dependencies
+----------------
+Only add dependencies required by this prompt.
+
+Expected categories may include:
+- @nestjs/config
+- class-validator
+- class-transformer
+- @nestjs/swagger
+- selected config-validation package if used
+- selected structured logging package(s) if used
+
+Review package compatibility with:
+- NestJS 11.2.3
+- Node.js 22.23.1
+- TypeScript 5.9.x
+
+Do not upgrade NestJS major version.
+
+Do not upgrade unrelated packages merely because newer versions exist.
+
+20. NestJS 11 Decision
+----------------------
+Prompt #002 deliberately selected NestJS 11.2.3 rather than NestJS 12.
+
+Accept that decision for this prompt.
+
+Do NOT migrate to NestJS 12.
+
+If a required package creates a serious incompatibility with NestJS 11, report it rather than forcing a framework upgrade.
+
+21. Node PATH Note
+------------------
+Prompt #002 found a local environment issue:
+- node and npm initially resolved through different Node installations
+- validation was completed using Node v22.23.1 + npm 10.9.8 consistently
+
+Before running commands:
+- verify `node --version`
+- verify `npm --version`
+- ensure npm is actually running under Node v22.23.1
+
+Do not change the project-required version.
+
+This is a developer-machine/environment concern, not application architecture.
+
+Record the actual versions used.
+
+22. Strictly Out of Scope
+-------------------------
+Do NOT implement:
+- MSSQL
+- database drivers
+- ORM
+- repositories
+- entities
+- migrations
+- Dockerfile
+- Docker Compose
+- Bitbucket Pipelines
+- auth
+- JWT
+- users
+- roles
+- permissions
+- parish
+- academic years
+- catechism levels
+- students
+- parents
+- catechists
+- classes
+- lessons
+- question bank
+- practice
+- exams
+- gamification
+- CMS
+- notifications
+- media storage
+
+Do not add database environment variables yet.
+
+23. Git Behavior
+----------------
+DO NOT commit.
+
+Do not run:
+- git add
+- git commit
+- git push
+
+Read-only Git inspection is allowed.
+
+Because there is still no initial commit, remember that many project files may appear as untracked.
+
+Do not interpret an empty `git diff` as meaning no files changed.
+Use:
+- git status --short --untracked-files=all
+- git diff --no-index where useful
+or other safe inspection techniques.
+
+24. Required Validation
+-----------------------
+Before finishing, run all applicable checks using Node v22.23.1:
+
+- node --version
+- npm --version
+- npm install or npm ci as appropriate
+- npm run format
+- npm run format:check
+- npm run lint
+- npm run typecheck
+- npm test
+- npm run test:e2e
+- npm run test:cov
+- npm run build
+
+Also perform local smoke validation of:
+- GET /api/v1/health
+- Swagger/OpenAPI route when enabled
+- one safe 404/error request to inspect the global error contract
+- request ID behavior
+
+Do not report PASS unless actually executed.
+
+If anything fails:
+1. diagnose
+2. fix within scope
+3. rerun
+4. report final outcome
+
+25. Security Review
+-------------------
+Before completion explicitly inspect:
+- no secrets added
+- .env remains ignored
+- .env.example contains no secret
+- logger does not expose Authorization/Cookie/password/token fields
+- stack traces are not returned in API responses
+- request IDs do not contain unsafe arbitrary unbounded input
+- Swagger exposure is environment-controlled
+- no request body is globally logged
+
+26. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_003_APPLICATION_BOOTSTRAP_INFRASTRUCTURE_REPORT.md
+
+The report must contain:
+
+1. Objective
+
+2. State Inherited From Prompt #002
+
+3. Files Created
+
+4. Files Modified
+
+5. Dependencies Added
+Include exact versions and reasons.
+
+6. Configuration Architecture
+Explain:
+- @nestjs/config setup
+- environment validation approach
+- config values currently supported
+- defaults
+- fail-fast behavior
+
+7. .env.example
+List variables introduced and explain them.
+
+8. HTTP Port Configuration
+Explain how the hard-coded port was removed.
+
+9. Global Validation
+Document exact ValidationPipe settings and rationale.
+
+10. Request / Correlation ID
+Explain:
+- generation
+- incoming header behavior if any
+- storage/propagation
+- response header behavior
+- concurrency safety
+
+11. Structured Logging
+Explain:
+- chosen library
+- versions
+- request logging
+- request ID integration
+- log format
+- local vs production behavior
+
+12. Sensitive Data Redaction
+List headers/fields protected from logging.
+
+13. Global Exception Handling
+Document:
+- response schema
+- HTTP exception behavior
+- unknown exception behavior
+- request ID inclusion
+- logging behavior
+- stack trace protection
+
+14. Swagger / OpenAPI
+Document:
+- packages
+- route
+- enable/disable configuration
+- API metadata
+- interaction with /api/v1 prefix
+
+15. Application Bootstrap Structure
+Explain any shared setup introduced for main/e2e consistency.
+
+16. Health Endpoint Regression
+Confirm GET /api/v1/health behavior remains unchanged.
+
+17. Tests Added / Updated
+Explain each important test and what it proves.
+
+18. Commands Executed
+
+19. Validation Results
+Explicit PASS/FAIL for:
+- Node runtime
+- install
+- format
+- lint
+- typecheck
+- unit tests
+- e2e tests
+- coverage
+- build
+- health smoke
+- Swagger smoke
+- error contract smoke
+- request ID smoke
+
+20. Security / Privacy Review
+Explicitly confirm logger/redaction/error safety.
+
+21. Git Status / Scope Summary
+
+22. Rules Compliance Review
+
+23. Known Issues / Assumptions
+
+24. Out-of-Scope Confirmation
+Confirm no MSSQL/ORM/migration/Docker/auth/business modules were implemented.
+
+25. Recommended Next Step
+Recommend:
+
+Prompt #004 — MSSQL + ORM/Data Access + Migration Architecture
+
+Do NOT implement Prompt #004 work.
+
+27. Final Response
+------------------
+When finished, respond concisely with:
+- Prompt #003 completion status
+- whether validation passed
+- generated report path:
+  docs/PROMPT_003_APPLICATION_BOOTSTRAP_INFRASTRUCTURE_REPORT.md
+- any blocker if present
+
+Do not proceed to Prompt #004 automatically.

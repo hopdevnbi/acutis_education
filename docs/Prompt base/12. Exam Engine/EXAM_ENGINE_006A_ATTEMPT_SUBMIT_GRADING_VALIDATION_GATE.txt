@@ -1,0 +1,734 @@
+CURSOR PROMPT — EXAM ENGINE #006A
+CORRECTIVE HARDENING — CLOSE #005A DEBT + VALIDATE ANSWER / SUBMIT / GRADING / EXPIRY CORE
+
+CONTEXT
+-------
+Timeline:
+- EXAM #001 — Domain audit/design
+- EXAM #002 — Student learner auth/self-scope
+- EXAM #003 — Schema/module shell
+- #003A corrective requested but skipped
+- EXAM #004 — Authoring/publish/assignment
+- #004A corrective requested but skipped
+- EXAM #005 — Attempt generation/localized delivery
+- #005A corrective requested but skipped
+- EXAM #006 — Answer save/submit/grade/time controls implemented
+
+Current #006 features:
+- answer upsert endpoint
+- clientAnswerId handling
+- option validation
+- no grading feedback during IN_PROGRESS
+- manual submit
+- QuestionBankService grading
+- unanswered = incorrect
+- result snapshot
+- lazy expiry/assignment-close finalization
+- score visibility gating
+
+BUT mandatory validation debt remains:
+- cross-module FK/cascade/history audit
+- exact answer idempotency semantics
+- real MSSQL schema behavior tests
+- full authoring/attempt integration
+- concurrency tests
+- IDOR/RBAC DB e2e
+- pristine quality:full
+- Docker
+- npm audit
+
+Do NOT implement #007 results/review/LearningProgress yet.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read all Exam reports #001–#006
+- inspect actual migration/entities/services/controllers
+- close all accumulated corrective debt
+- fix defects discovered
+- create detailed corrective report
+- NOT implement #007 scope
+- NOT auto-proceed #007
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "fix(exam): harden attempt submission and grading"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/EXAM_003_EXAM_SCHEMA_AND_MODULE_SHELL_REPORT.md
+docs/EXAM_004_AUTHORING_PUBLISH_ASSIGNMENT_APIS_REPORT.md
+docs/EXAM_005_ATTEMPT_GENERATION_LOCALIZED_DELIVERY_REPORT.md
+docs/EXAM_006_ANSWER_SAVE_SUBMIT_GRADE_REPORT.md
+
+Inspect:
+src/modules/exam/
+src/modules/student/
+src/modules/enrollment/
+src/modules/question-bank/
+src/modules/localization/
+src/modules/class/
+src/database/migrations/1788064000000-create-exam-schema.ts
+src/database/seeds/auth-rbac.seed.constants.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+Dockerfile
+
+PRIMARY OBJECTIVES
+------------------
+A. Close all accumulated schema/history debt
+B. Finalize and prove answer idempotency semantics
+C. Validate save/submit/grade on real MSSQL
+D. Validate lazy expiry/assignment-close finalization
+E. Validate concurrency races
+F. Validate Student self-scope and no staff/parent impersonation
+G. Validate zero answer/correctness leakage
+H. Validate localization snapshot stability
+I. Validate result snapshot correctness
+J. Run pristine quality:full
+K. Run Docker production build
+L. Decide #007 readiness
+
+1. CROSS-MODULE FK + HISTORY SAFETY — MANDATORY
+-----------------------------------------------
+Audit actual migration FKs and cascades.
+
+For every Exam FK, document:
+- source table/column
+- target table
+- ON DELETE
+- cross-module or internal
+- KEEP/REMOVE/JUSTIFIED EXCEPTION
+
+Strong preference:
+scalar IDs across module boundaries.
+
+Formal graded attempt history must survive:
+- exam root lifecycle changes
+- version archive
+- assignment close/cancel
+- class/enrollment later changes where data is retained
+- question newer versions
+- translation newer revisions
+
+NO cascade from authoring deletion may erase GRADED attempts.
+
+If current schema allows historical attempt deletion via cascade:
+FIX immediately.
+Treat previous state as HIGH.
+
+2. EXACT ANSWER IDEMPOTENCY MODEL — MANDATORY
+---------------------------------------------
+The system uses one current row per `exam_attempt_question`.
+
+Report #006 says:
+`clientAnswerId` mismatch → 409.
+
+You MUST state exact semantics.
+
+Determine whether implementation is:
+
+A. stable clientAnswerId per question resource
+or
+B. latest-request idempotency
+
+Prove behavior with tests.
+
+Required cases:
+- first save
+- replay same clientAnswerId + same semantic answer
+- same clientAnswerId + different semantic answer
+- newer edit
+- replay older request after newer edit
+- duplicate option UUID/casing normalization
+- network retry
+- concurrent save requests
+
+Do not claim historical replay if unsupported.
+
+3. ANSWER SEMANTIC HASH
+-----------------------
+Ensure answer comparison uses canonical semantics:
+
+- normalize UUID lowercase
+- dedupe
+- sort IDs
+- canonical JSON
+- SHA-256
+
+For SINGLE/TRUE_FALSE:
+validate cardinality later through QB snapshot/type.
+
+For MULTIPLE:
+selection order must not affect semantic hash.
+
+No request timestamps/client IDs in answer semantic hash.
+
+4. ANSWER VALIDATION
+--------------------
+Answer save must validate against PINNED questionVersionId.
+
+Do not validate only against delivered option-order blindly if this could admit invalid semantics.
+
+Required:
+- selected IDs all belong to pinned question version
+- no duplicates
+- SINGLE exactly <=1 / exact one when answered as applicable
+- TRUE_FALSE exactly one
+- MULTIPLE one or more if answer non-empty
+- empty selection semantics explicit: clear answer vs unanswered
+
+QuestionBank public API only.
+No correctness leakage.
+
+5. ANSWER CLEARING
+------------------
+Explicitly decide whether learner can clear a previously saved answer before submit.
+
+If yes:
+define request shape and persistence.
+If no:
+document.
+
+Do not let empty-array ambiguity create inconsistent scoring.
+
+6. SAVE AUTHORIZATION
+---------------------
+For PUT answer:
+- JWT authenticated
+- `exam.attempt`
+- attempt belongs to self-linked Student
+- attempt question belongs to that attempt
+- status IN_PROGRESS
+- before deadline
+- same parish/class/enrollment context
+
+Parent/guardian: denied.
+Catechist: denied.
+ParishAdmin: cannot impersonate.
+SuperAdmin: cannot impersonate.
+
+Permission alone is insufficient.
+LearnerSelfScopeService mandatory.
+
+7. SAVE VS EXPIRY
+-----------------
+If request arrives after deadline:
+- acquire attempt lock
+- finalize using answers saved BEFORE expiry
+- do not persist the late answer
+- return stable expired/graded response or domain error according to contract
+
+Prove transaction order.
+
+8. SAVE VS SUBMIT RACE
+----------------------
+Mandatory concurrency test:
+one answer save and submit race.
+
+Acceptable outcomes:
+- answer commits before locked submit and is graded
+or
+- submit wins, later save rejected
+
+Unacceptable:
+- answer saved after GRADED
+- score calculated from inconsistent intermediate state
+- lost/uncommitted answer counted unpredictably
+
+9. DOUBLE SAVE CONCURRENCY
+--------------------------
+Two saves same question simultaneously:
+- row remains one current answer
+- deterministic last/lock/conflict semantics
+- no duplicate rows
+- no raw unique DB error leaked
+
+10. SUBMIT AUTHORIZATION
+------------------------
+Same self-only learner protection as save.
+
+No Parent/staff submit.
+
+11. SUBMIT LIFECYCLE
+--------------------
+Manual submit:
+IN_PROGRESS -> SUBMITTED -> GRADED
+
+Use one transaction or rigorously safe sequence.
+
+If grade failure occurs:
+do not leave attempt permanently stranded in inconsistent SUBMITTED state without defined recovery.
+
+Audit rollback semantics.
+
+12. DOUBLE SUBMIT
+-----------------
+Mandatory:
+- first submit grades
+- replay returns same persisted result
+- no regrading mutation
+- no duplicate side effects
+- no score drift
+
+13. QUESTIONBANK GRADING BOUNDARY
+--------------------------------
+Only:
+QuestionBankService.gradeAnswer
+
+No direct correctness tables/repos/entities.
+
+For unanswered:
+skipping gradeAnswer and counting incorrect is acceptable if consistent.
+
+No partial credit.
+
+14. RESULT SNAPSHOT
+-------------------
+Persist:
+questionCount
+correctCount
+scorePercent
+passed nullable
+submittedAt
+gradedAt
+finalizationReason
+
+Verify:
+- immutable after GRADED
+- score range
+- correctCount <= questionCount
+- passing threshold uses pinned exam version config
+- null passing threshold => passed null
+- score rounding stable
+
+15. FINALIZATION REASON
+-----------------------
+Confirm exact enum:
+LEARNER_SUBMIT
+TIME_EXPIRED
+ASSIGNMENT_CLOSED
+
+Manual submit must be LEARNER_SUBMIT.
+
+If both deadline and assignment close are passed, define deterministic precedence.
+
+Recommended:
+if assignment.closesAt <= deadlineAt and now > closesAt => ASSIGNMENT_CLOSED;
+otherwise TIME_EXPIRED.
+
+Document.
+
+16. LAZY EXPIRY FINALIZATION
+----------------------------
+Triggers:
+- GET attempt
+- save answer
+- submit
+
+If expired IN_PROGRESS:
+- lock attempt
+- grade saved answers
+- unanswered incorrect
+- GRADED
+- idempotent on subsequent trigger
+
+No scheduler required for correctness.
+
+17. EXACT DEADLINE BOUNDARY
+---------------------------
+Define comparison:
+now >= deadlineAt or now > deadlineAt?
+
+Use one rule consistently.
+
+Strong preference:
+`now >= deadlineAt` means no further answer mutation.
+
+Test exact boundary using fake/injected clock.
+
+18. ASSIGNMENT CLOSE
+--------------------
+If closesAt arrives before duration deadline:
+attempt finalizes at assignment close.
+
+No answer accepted afterward.
+
+19. RESULT VISIBILITY
+---------------------
+#006 exposes score result when review policy allows.
+
+Audit policy:
+NEVER
+AFTER_SUBMIT
+AFTER_ASSIGNMENT_CLOSE
+
+Ensure:
+- GRADED does not automatically imply score visible if policy says NEVER
+- AFTER_ASSIGNMENT_CLOSE remains hidden until close
+- result payload does not leak per-question correctness yet (#007)
+
+20. ACTIVE ATTEMPT LEAKAGE
+--------------------------
+GET IN_PROGRESS MUST NOT expose:
+- correctOptionIds
+- correctness
+- answerDefinition
+- explanation
+- score
+- passed
+- correctCount
+- expected answers
+
+Saved selections are allowed.
+
+21. GRADED BUT REVIEW-HIDDEN LEAKAGE
+------------------------------------
+Even if score becomes visible:
+#007 per-question review is not implemented.
+
+Do not expose correct answer/explanation accidentally through localized QuestionBank payload.
+
+22. LOCALIZATION PINNING REGRESSION
+-----------------------------------
+Verify:
+- questionVersionId pinned
+- translationRevisionId pinned
+- deliveredLocale pinned
+- sourceContentHash pinned
+- GET after newer translation still uses exact old revision
+- source fallback if revision unavailable
+- no provider call on GET
+
+23. EXAM HEADER
+---------------
+Source-locale snapshot on attempt row remains accepted MVP.
+
+No cycle:
+Localization must not import Exam.
+
+Document as MEDIUM/deferred localization gap if still relevant.
+
+24. START/ATTEMPT REGRESSION
+----------------------------
+Re-run real MSSQL coverage:
+- available assignment
+- start
+- same clientRequestId replay
+- concurrent start
+- one active
+- attempt numbers
+- max attempts
+- shuffle snapshot
+- localization snapshot
+- deadline
+
+25. AUTHORING REGRESSION
+------------------------
+Re-run:
+- root
+- draft version
+- question order
+- publish
+- archive prior
+- clone
+- assignment
+
+26. SCHEMA GUARD REGRESSION
+---------------------------
+Prove:
+- exactly 7 tables
+- one PUBLISHED version
+- one IN_PROGRESS attempt
+- attemptNumber unique
+- clientRequestId filtered unique
+- JSON checks
+- range checks
+- no dangerous cascades
+- no forbidden cross-module FK
+- no DB UUID defaults
+
+27. DB E2E — MANDATORY
+----------------------
+Cover:
+- Student login
+- available assignment
+- start
+- save
+- edit
+- replay same answer
+- idempotency conflict
+- GET resume
+- manual submit
+- double submit
+- result visibility hidden/visible
+- expiry lazy finalize
+- assignment-close finalize
+- answer after expiry denied
+- Parent 403
+- Catechist 403
+- ParishAdmin/SuperAdmin cannot impersonate
+- Student B cannot access Student A attempt
+- cross-parish denied
+- no active-attempt answer leakage
+- no correctness leakage
+
+28. INTEGRATION — MANDATORY
+---------------------------
+Real MSSQL:
+- answer persistence
+- semantic normalization
+- grading
+- unanswered
+- passing threshold
+- save/submit race
+- double save
+- double submit
+- expiry
+- assignment close
+- rollback if grading error can be simulated
+- old localization revision replay
+- authoring/start regressions
+
+29. MODULE BOUNDARY
+-------------------
+Expected:
+Exam -> QuestionBank
+Exam -> Localization
+Exam -> Student
+Exam -> Enrollment
+Exam -> Class
+Exam -> Parish/Auth/AccessControl as needed
+
+Forbidden:
+Exam -> Practice
+Practice -> Exam
+Localization -> Exam
+LearningProgress -> Exam repositories
+
+No forwardRef.
+ExamService only public export.
+No repo/entity export.
+
+30. PRISTINE QUALITY:FULL
+------------------------
+Run exactly:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+31. DOCKER
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-submit-grade ."
+
+PASS required.
+
+32. NPM AUDIT
+-------------
+npm audit --audit-level=moderate
+
+No unresolved HIGH vulnerability.
+
+33. REQUIRED COMMANDS
+---------------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+Docker build.
+
+34. REQUIRED REPORT
+-------------------
+Create:
+
+docs/EXAM_006A_ATTEMPT_SUBMIT_GRADING_VALIDATION_GATE_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Why #006A was required
+3 State inherited #003–#006
+4 Files created
+5 Files modified
+6 Cross-module FK audit
+7 Cascade/history retention
+8 Answer idempotency exact model
+9 Answer semantic hash
+10 Answer validation
+11 Answer clearing policy
+12 Save authorization
+13 Save vs expiry
+14 Save vs submit race
+15 Double-save concurrency
+16 Submit authorization
+17 Submit lifecycle
+18 Grading rollback safety
+19 Double submit
+20 QuestionBank boundary
+21 Unanswered grading
+22 Result snapshot
+23 Score/pass computation
+24 Finalization reason
+25 Deadline boundary rule
+26 Lazy expiry
+27 Assignment-close finalize
+28 Result visibility
+29 Active leakage
+30 Graded hidden leakage
+31 Localization pinning
+32 Exam header localization decision
+33 Start/attempt regression
+34 Authoring regression
+35 Schema guard regression
+36 DB e2e
+37 Integration/concurrency tests
+38 Module boundary
+39 Regression
+40 pristine quality:full
+41 Docker
+42 npm audit
+43 Commands
+44 Validation matrix
+45 Risks/deferred
+46 BLOCKER/HIGH/MEDIUM/LOW
+47 EXAM #007 readiness
+48 Prompt count
+49 Commit recommendation
+
+35. REQUIRED VERDICTS
+---------------------
+EXAM SCHEMA/HISTORY SAFE: YES/NO
+
+ANSWER IDEMPOTENCY MODEL READY: YES/NO
+
+ANSWER SAVE READY: YES/NO
+
+SAVE/SUBMIT CONCURRENCY SAFE: YES/NO
+
+SUBMIT IDEMPOTENCY READY: YES/NO
+
+GRADING RESULT SNAPSHOT READY: YES/NO
+
+EXPIRY FINALIZATION READY: YES/NO
+
+ASSIGNMENT CLOSE FINALIZATION READY: YES/NO
+
+ACTIVE ATTEMPT LEAKAGE SAFE: YES/NO
+
+STUDENT SELF-SCOPE SAFE: YES/NO
+
+LOCALIZATION SNAPSHOT STABLE: YES/NO
+
+AUTHORING/ATTEMPT REGRESSION READY: YES/NO
+
+PRISTINE QUALITY:FULL: PASS/FAIL
+
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+36. EXAM #007 GATE
+------------------
+Proceed to #007 only if:
+- BLOCKER=0
+- HIGH=0
+- history safe
+- answer idempotency explicit and tested
+- save/submit races safe
+- grading/result snapshot stable
+- expiry stable
+- self-scope/IDOR safe
+- no leakage
+- quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+EXAM #007/8 —
+RESULTS / REVIEW / PARENT + STAFF ACCESS / LEARNING PROGRESS / CONTRACT HARDENING
+
+Scope:
+- per-question review policy
+- correct answers/explanations after permitted release
+- Student own result/review
+- Parent linked-child released result only
+- Catechist assigned-class results
+- ParishAdmin parish results
+- class summary
+- LearningProgress Exam summary integration
+- FE Admin/Learner contract
+- Mobile contract
+- no new core grading semantics
+
+Do not auto-proceed.
+
+37. PROMPT COUNT
+----------------
+Main Exam plan remains 8 prompts.
+This is corrective #006A.
+
+After #006A:
+#007 + #008 remain.
+
+38. FINAL RESPONSE
+------------------
+Respond concisely:
+- #006A status
+- schema/history safety
+- answer idempotency
+- save/submit concurrency
+- grading/result
+- expiry
+- leakage/security
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #007 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(exam): harden attempt submission and grading"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #007 automatically.

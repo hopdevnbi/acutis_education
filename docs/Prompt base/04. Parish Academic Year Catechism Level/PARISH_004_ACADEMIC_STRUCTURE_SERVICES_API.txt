@@ -1,0 +1,962 @@
+CURSOR PROMPT — PARISH/ACADEMIC STRUCTURE #004/5
+ACADEMIC YEAR + CATECHISM LEVEL SERVICES + API + RBAC
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- PARISH #001 Domain Audit
+- PARISH #002 Schema + Entities + Migrations
+- PARISH #003 Parish Service + API + RBAC
+
+Current:
+- PARISH/ACADEMIC #004 / 5 — Academic Year + Catechism Level Services + APIs
+
+Remaining:
+- #005 Integration hardening + final audit
+
+Frontend reminder:
+- ReactJS is a separate independent source/repository
+- FE calls BE via HTTP API only
+- FE and BE have independent Docker and CI/CD
+- do not modify FE in this BE prompt
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all `.cursor/rules/*.mdc`
+4. Read:
+   docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+   docs/PARISH_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/PARISH_003_PARISH_SERVICE_API_RBAC_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/academic-structure/
+   src/modules/parish/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/seeds/
+   test/
+   README.md
+6. Inspect Git status using read-only commands.
+
+3. Architecture Decisions Already Locked
+----------------------------------------
+Module ownership:
+
+ParishModule:
+- owns `parishes`
+- exports ParishService only
+
+AcademicStructureModule:
+- owns `academic_years`
+- owns `catechism_levels`
+- persistence private
+- scalar `parishId`
+- no ORM relation to ParishEntity
+
+Dependency direction:
+
+AcademicStructureModule -> ParishModule via ParishService public contract
+
+No entity/repository crossing.
+
+No `parish_id` on users.
+
+No tenant-scoped RBAC in this phase.
+
+4. Primary Objective
+--------------------
+Implement:
+
+AcademicYearService
+CatechismLevelService
+AcademicYearController
+CatechismLevelController
+DTOs
+safe snapshots
+domain errors
+RBAC permissions
+Swagger
+unit tests
+integration tests
+DB-aware e2e tests
+
+Business rules include:
+- parish must exist and be ACTIVE for create/update operations
+- one ACTIVE academic year per parish
+- academic year date validation
+- academic year lifecycle rules
+- level code normalization
+- level ordering/status
+- no hard delete
+
+5. AcademicStructureModule Public Exports
+-----------------------------------------
+Final exports:
+- AcademicYearService
+- CatechismLevelService
+
+Do NOT export:
+- TypeOrmModule
+- AcademicYearEntity
+- CatechismLevelEntity
+- repositories
+
+6. Parish Dependency
+--------------------
+AcademicStructureModule may import ParishModule.
+
+Services must use:
+ParishService.assertParishActive(parishId)
+or narrow snapshot methods.
+
+Do NOT:
+- import ParishEntity
+- inject parish repository
+- query parishes table directly
+
+7. AcademicYearSnapshot
+-----------------------
+Create safe public contract:
+
+AcademicYearSnapshot:
+- id
+- parishId
+- name
+- startDate
+- endDate
+- status
+- createdAt
+- updatedAt
+
+No entity exposure.
+
+8. CatechismLevelSnapshot
+-------------------------
+Create safe contract:
+
+CatechismLevelSnapshot:
+- id
+- parishId
+- code
+- name
+- sortOrder
+- status
+- createdAt
+- updatedAt
+
+No entity exposure.
+
+9. Academic Year Name Validation
+--------------------------------
+Name:
+- trim
+- required
+- max 128
+- Unicode supported
+
+Do not auto-generate from dates.
+
+10. Academic Year Date Validation
+---------------------------------
+Input format:
+YYYY-MM-DD
+
+Use deterministic date-only validation.
+
+Required:
+startDate < endDate
+
+DB CHECK exists, but service must validate first.
+
+Do not use JS Date in a way that introduces timezone shifts.
+
+Prefer explicit ISO date parsing/validation.
+
+11. Academic Year Status
+------------------------
+Enum:
+PLANNED
+ACTIVE
+CLOSED
+
+Creation default:
+PLANNED
+
+Do not default directly to ACTIVE.
+
+12. Academic Year Lifecycle
+---------------------------
+Define allowed transitions intentionally.
+
+Recommended:
+
+PLANNED -> ACTIVE
+PLANNED -> CLOSED (optional, if cancelled/abandoned)
+ACTIVE -> CLOSED
+
+Do NOT allow:
+CLOSED -> ACTIVE
+CLOSED -> PLANNED
+
+Evaluate whether ACTIVE -> PLANNED should be disallowed.
+
+Preferred:
+disallow backward transitions.
+
+Document exact state machine.
+
+13. One ACTIVE Year Per Parish
+------------------------------
+CRITICAL rule:
+
+At most one ACTIVE academic year per parish.
+
+When activating:
+- ensure target parish ACTIVE
+- check no other ACTIVE year exists for same parish
+- if one exists and it's not the same row -> reject with domain error
+
+Potential error:
+ActiveAcademicYearAlreadyExistsError
+
+This must be race-aware.
+
+14. Race Safety for One ACTIVE Rule
+-----------------------------------
+Service-level check alone may race.
+
+Audit possible approaches.
+
+Options:
+A. filtered unique index on `(parish_id)` where status='ACTIVE'
+B. transaction + lock
+C. service check only
+
+Since #001 intentionally deferred DB unique active rule, do not casually add index without considering migration.
+
+For current modular monolith:
+preferred robust solution:
+transaction + appropriate MSSQL lock/serialization on activation path.
+
+If that is too complex/brittle:
+document residual race and classify severity.
+
+Do NOT silently claim race-safe if not.
+
+If schema migration is genuinely required:
+create a new migration and justify it.
+
+15. Academic Year Creation
+--------------------------
+Conceptual method:
+
+createAcademicYear(parishId, input)
+
+Flow:
+1. ParishService.assertParishActive(parishId)
+2. validate name
+3. validate start/end
+4. default PLANNED
+5. save
+6. map duplicate `(parish_id,name)` -> 409 domain error
+7. return snapshot
+
+16. Academic Year Get/List
+--------------------------
+Implement:
+getAcademicYearById(id)
+
+listAcademicYears(parishId, query)
+
+List:
+- validate parish exists
+- deterministic ordering
+- pagination consistent with PROJECT_RULES
+- filters:
+  status
+  search/name if useful
+
+Sort whitelist only.
+
+17. Academic Year Update
+------------------------
+Allow update:
+- name
+- startDate
+- endDate
+
+Status should use dedicated lifecycle/status endpoint.
+
+When changing dates:
+- validate start < end
+
+If target year is CLOSED:
+decide whether editing name/dates is allowed.
+
+Preferred:
+CLOSED historical records should be immutable except perhaps name correction.
+
+Choose intentionally and document.
+
+18. Academic Year Status Endpoint
+---------------------------------
+Implement dedicated endpoint:
+
+PATCH /api/v1/academic-years/:id/status
+
+Body:
+{
+  status: PLANNED | ACTIVE | CLOSED
+}
+
+But enforce allowed transitions.
+
+If ACTIVE:
+run one-active rule.
+
+19. Academic Year No Delete
+---------------------------
+No DELETE endpoint.
+
+Historical data preserved.
+
+20. Catechism Level Code
+------------------------
+Normalize:
+- trim
+- lowercase
+- max 32
+- same style as parish code:
+  lowercase letters
+  digits
+  hyphen
+
+Examples:
+khai-tam
+ruoc-le
+them-suc
+
+Do not hard-code Catholic taxonomy.
+
+21. Catechism Level Name
+------------------------
+- trim
+- required
+- max 128
+- Unicode Vietnamese supported
+
+22. sortOrder Validation
+------------------------
+sortOrder:
+- integer
+- >= 0
+
+No unique constraint.
+
+Do not auto-renumber siblings in this prompt.
+
+23. Catechism Level Status
+-------------------------
+ACTIVE
+INACTIVE
+
+Creation default:
+ACTIVE
+
+Reactivation allowed.
+
+No hard delete.
+
+24. Catechism Level Create
+--------------------------
+Flow:
+1. ParishService.assertParishActive(parishId)
+2. normalize/validate code
+3. validate name
+4. validate sortOrder
+5. create ACTIVE
+6. map duplicate `(parish_id,code)` -> domain conflict
+7. return snapshot
+
+25. Catechism Level Get/List
+----------------------------
+Implement:
+getCatechismLevelById(id)
+
+listCatechismLevels(parishId, query)
+
+Default order:
+sortOrder ASC
+then name ASC
+
+Pagination per project conventions.
+
+Filters:
+- status
+- search
+optional.
+
+26. Catechism Level Update
+--------------------------
+Allow:
+- code
+- name
+- sortOrder
+
+Status via dedicated endpoint.
+
+On inactive parish:
+decide whether editing existing historical level metadata is allowed.
+
+Preferred:
+creation/activation requires ACTIVE parish.
+read/history remains allowed.
+simple metadata update on inactive parish should likely be blocked to avoid new operational changes.
+
+Use ParishService.assertParishActive for mutations.
+
+Document.
+
+27. Catechism Level Status Endpoint
+-----------------------------------
+PATCH /api/v1/catechism-levels/:id/status
+
+ACTIVE / INACTIVE
+
+Activation requires parent parish ACTIVE.
+
+Deactivation allowed even if parish inactive? Audit.
+
+Preferred:
+deactivation should be allowed for administrative shutdown, even if parish inactive.
+But activation requires parish ACTIVE.
+
+Document exact rule.
+
+28. Cross-Parish Safety
+-----------------------
+AcademicStructure endpoints with parishId in path must ensure returned/created objects belong to that parish.
+
+Nested list/create:
+- use parishId as filter
+
+Flat detail/update by id:
+- snapshot contains parishId
+- no false cross-parish mutation logic
+
+Future scope enforcement will use parishId.
+
+Do not claim tenant security yet.
+
+29. Controller Routes — Academic Year
+-------------------------------------
+Implement:
+
+POST /api/v1/parishes/:parishId/academic-years
+GET  /api/v1/parishes/:parishId/academic-years
+GET  /api/v1/academic-years/:id
+PATCH /api/v1/academic-years/:id
+PATCH /api/v1/academic-years/:id/status
+
+No DELETE.
+
+30. Controller Routes — Catechism Level
+---------------------------------------
+Implement:
+
+POST /api/v1/parishes/:parishId/catechism-levels
+GET  /api/v1/parishes/:parishId/catechism-levels
+GET  /api/v1/catechism-levels/:id
+PATCH /api/v1/catechism-levels/:id
+PATCH /api/v1/catechism-levels/:id/status
+
+No DELETE.
+
+31. RBAC Permissions
+--------------------
+Introduce:
+
+academic-years.read
+academic-years.manage
+
+catechism-levels.read
+catechism-levels.manage
+
+GET:
+read permission
+
+POST/PATCH/status:
+manage permission
+
+Use:
+JwtAuthGuard
+PermissionGuard
+@RequirePermissions
+
+No role-name bypass.
+
+32. Local/Dev Permission Seed
+-----------------------------
+Extend existing Auth/RBAC seed permissions.
+
+Recommended sample mapping:
+
+SUPER_ADMIN:
+- all
+
+PARISH_ADMIN:
+- academic-years.read/manage
+- catechism-levels.read/manage
+
+CATECHIST:
+- academic-years.read
+- catechism-levels.read
+
+PARENT:
+- academic-years.read
+- catechism-levels.read
+
+This is sample/dev policy only.
+
+No domain data seed yet unless explicitly deferred to #005.
+
+33. No Parish Scoped RBAC
+-------------------------
+Current permission checks remain global.
+
+Do NOT add scoped role assignment here.
+
+Document:
+future Class/Parish membership layer must enforce resource scope.
+
+34. DTOs
+--------
+Create:
+- CreateAcademicYearRequestDto
+- UpdateAcademicYearRequestDto
+- UpdateAcademicYearStatusRequestDto
+- AcademicYearListQueryDto
+- AcademicYearResponseDto
+- AcademicYearListResponseDto
+
+- CreateCatechismLevelRequestDto
+- UpdateCatechismLevelRequestDto
+- UpdateCatechismLevelStatusRequestDto
+- CatechismLevelListQueryDto
+- CatechismLevelResponseDto
+- CatechismLevelListResponseDto
+
+Use class-validator.
+
+35. Error Mapping
+-----------------
+Create concise domain errors.
+
+Academic year:
+- InvalidAcademicYearIdError
+- InvalidAcademicYearNameError
+- InvalidAcademicYearDateRangeError
+- AcademicYearNotFoundError
+- AcademicYearAlreadyExistsError
+- InvalidAcademicYearStatusTransitionError
+- ActiveAcademicYearAlreadyExistsError
+
+Catechism level:
+- InvalidCatechismLevelIdError
+- InvalidCatechismLevelCodeError
+- InvalidCatechismLevelNameError
+- InvalidCatechismLevelSortOrderError
+- CatechismLevelNotFoundError
+- CatechismLevelCodeAlreadyExistsError
+
+Map:
+400 validation/transition
+404 missing
+409 duplicate/conflict
+
+No SQL details.
+
+36. HTTP Statuses
+-----------------
+POST -> 201
+GET -> 200
+PATCH -> 200
+
+401 unauthenticated
+403 unauthorized
+404 missing
+409 duplicate/conflict
+
+37. Swagger
+-----------
+Document:
+- all routes
+- status enums
+- query params
+- bearer auth
+- response DTOs
+- lifecycle constraints in descriptions if helpful
+
+38. AcademicStructureModule Wiring
+----------------------------------
+Module imports:
+- TypeOrmModule.forFeature(...)
+- ParishModule
+- AuthModule
+- AccessControlModule
+
+Providers:
+- AcademicYearService
+- CatechismLevelService
+
+Controllers:
+- both controllers
+
+Exports:
+- AcademicYearService
+- CatechismLevelService
+
+39. Business Layer Dependency Purity
+------------------------------------
+AcademicYearService/CatechismLevelService may depend on:
+- own repositories
+- ParishService
+
+They MUST NOT depend on:
+- JwtAuthGuard
+- PermissionGuard
+- controllers
+
+Auth dependencies belong at module/controller wiring layer.
+
+40. Repository Boundaries
+-------------------------
+Repositories stay private.
+
+No entity/repository exports.
+
+41. Safe Snapshots
+------------------
+Services return snapshots/interfaces.
+
+Controllers map snapshots to response DTOs.
+
+No entity serialization.
+
+42. Query Performance
+---------------------
+List queries:
+- parameterized
+- whitelisted sort
+- no N+1
+
+No ParishEntity join required.
+
+Use scalar parish_id filters.
+
+43. Unit Tests — Academic Year
+------------------------------
+Test:
+- create default PLANNED
+- parish active validation
+- invalid dates
+- duplicate mapping
+- get/not found
+- update
+- allowed transitions
+- forbidden transitions
+- one ACTIVE rule
+- list/filter/pagination
+- safe snapshot
+
+44. Unit Tests — Catechism Level
+-------------------------------
+Test:
+- code normalization
+- name validation
+- sortOrder validation
+- create default ACTIVE
+- duplicate mapping
+- get/not found
+- update
+- activate/deactivate
+- list ordering
+- parish active validation
+
+45. Integration Tests
+---------------------
+Against catechism_api_test:
+
+Academic year:
+- create
+- same name same parish conflict
+- same name different parish allowed
+- invalid date rejected service-side
+- activation
+- second active rejected
+- close
+- list/filter
+
+Level:
+- create
+- duplicate per parish conflict
+- same code different parish allowed
+- sort order
+- status
+- list ordered
+
+Use ParishService to create parent parish where practical.
+
+46. DB-Aware E2E — Academic Year
+--------------------------------
+Test:
+- 401 unauthenticated
+- 403 missing read/manage
+- 201 create
+- 200 list/get
+- 200 update
+- activate
+- second active -> 409
+- invalid transition -> 400
+- inactive parish mutation rejected
+
+47. DB-Aware E2E — Catechism Level
+----------------------------------
+Test:
+- 401
+- 403
+- create
+- list
+- get
+- update
+- status
+- duplicate -> 409
+- invalid input -> 400
+- inactive parish activation/mutation rules
+
+48. Existing Parish/Auth Regression
+-----------------------------------
+All existing:
+- auth
+- refresh
+- RBAC
+- seed
+- parish API
+must continue passing.
+
+49. No FE Changes
+-----------------
+Do NOT touch frontend source.
+
+After this prompt succeeds, API contracts are considered sufficiently stable to start FE milestone in parallel with BE #005 final hardening.
+
+Document that readiness in report.
+
+50. No Domain Seed Data Yet
+---------------------------
+Do NOT seed sample Parish/AcademicYear/Level unless #004 testing requires temporary test data only.
+
+Persistent local/dev domain sample seed remains #005 decision.
+
+51. No Class Module
+-------------------
+Do not start:
+- Class
+- Student
+- Enrollment
+- Catechist
+- Parent
+
+52. No Membership / Scoped RBAC
+-------------------------------
+No:
+parish_memberships
+scoped roles
+tenant guards
+
+53. Security Review
+-------------------
+Audit:
+- all HTTP routes authenticated
+- correct permission guards
+- no entity leakage
+- no cross-module repo access
+- no SQL error leakage
+- lifecycle conflicts safe
+- parish inactivity handled
+- global RBAC limitation documented
+
+54. Microservice Extraction Review
+----------------------------------
+AcademicStructureModule future service:
+
+Owns:
+- academic_years
+- catechism_levels
+
+Depends on:
+- Parish public validation API
+
+Future ClassModule consumes:
+- AcademicYearService
+- CatechismLevelService snapshots/assertions
+
+No ORM entities cross.
+
+55. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:academic-api .
+
+56. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(parish): add academic structure APIs"
+
+Cursor must NOT execute it.
+
+57. Required Report
+-------------------
+Create:
+
+docs/PARISH_004_ACADEMIC_STRUCTURE_SERVICES_API_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #003
+3. Rules applied
+4. Files created
+5. Files modified
+6. AcademicStructureModule architecture
+7. Public exports
+8. AcademicYearSnapshot
+9. CatechismLevelSnapshot
+10. Academic year name/date validation
+11. Academic year lifecycle state machine
+12. One ACTIVE year rule
+13. Race/concurrency handling
+14. AcademicYearService API
+15. Academic year list/pagination
+16. Catechism level code/name/sort validation
+17. Catechism level status rules
+18. CatechismLevelService API
+19. Controller endpoints
+20. DTOs
+21. HTTP/error mapping
+22. RBAC permissions
+23. Local/dev permission seed update
+24. ParishService dependency usage
+25. Cross-module persistence audit
+26. Repository boundary
+27. Swagger
+28. Unit tests
+29. Integration tests
+30. DB-aware e2e
+31. Existing Auth/Parish regression
+32. Security review
+33. Docker validation
+34. Microservice extraction review
+35. FE parallel-readiness
+36. Commands executed
+37. Validation results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- academic create/list/get/update
+- one active year
+- lifecycle transition
+- level create/list/get/update
+- level ordering/status
+- auth 401
+- permission 403
+- duplicate 409
+- no cross-module entity/repository
+- safe snapshots
+38. Known issues/deferred
+39. Out-of-scope confirmation
+40. PARISH #005 readiness
+41. Prompt count status
+42. Commit recommendation
+
+58. PARISH #005 Readiness
+-------------------------
+Only if no BLOCKER/HIGH:
+
+Recommend:
+PARISH/ACADEMIC #005 — Final Integration Hardening + Domain Seed + Contract Audit
+
+#005 should:
+- independently audit Parish + AcademicStructure
+- run complete E2E matrix
+- review active-year concurrency
+- review parish inactivity behavior
+- add optional local/dev sample domain seed if useful
+- validate Postman/curl API flow
+- finalize module boundaries
+- confirm FE contract readiness
+- declare phase COMPLETE / NOT COMPLETE
+
+59. Final Response
+------------------
+Respond concisely:
+
+- PARISH/ACADEMIC #004 status
+- AcademicYear API PASS/FAIL
+- CatechismLevel API PASS/FAIL
+- boundary PASS/FAIL
+- FE parallel-ready YES/NO
+- report:
+  docs/PARISH_004_ACADEMIC_STRUCTURE_SERVICES_API_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(parish): add academic structure APIs"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #005 automatically.

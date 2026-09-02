@@ -1,0 +1,816 @@
+CURSOR PROMPT — CI/CD BE #003/4
+ADD MSSQL INTEGRATION + DOCKER BUILD GATES TO BITBUCKET PIPELINES
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend Foundation: COMPLETE.
+
+CI/CD Bitbucket phase:
+- CI #001 — Audit + Pipeline Conventions: COMPLETE
+- CI #002 — Bitbucket Pipeline Baseline: COMPLETE
+- CI #003 — MSSQL Integration + Docker Build Gates: CURRENT
+- CI #004 — Final CI Audit + Hardening: NEXT
+
+Current CI baseline already exists in:
+bitbucket-pipelines.yml
+
+Current baseline behavior:
+- image: node:22.23.1-bookworm-slim
+- npm cache
+- PR Quality step
+- master Quality step
+- commands:
+  npm ci
+  npm run quality
+  npm audit --audit-level=moderate
+- no MSSQL service
+- no Docker build service
+- no deployment
+- no secrets
+- no custom full-ci yet
+
+Important repository fact:
+- current Git remote is GitHub, not Bitbucket
+- pipeline can still be authored and statically validated
+- hosted execution requires Bitbucket repository/mirror later
+
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/CI_001_BITBUCKET_PIPELINE_AUDIT_AND_CONVENTIONS_REPORT.md
+5. Read:
+   docs/CI_002_BITBUCKET_PIPELINE_BASELINE_REPORT.md
+6. Read:
+   docs/PROMPT_006_DATABASE_INTEGRATION_E2E_QUALITY_GATES_REPORT.md
+7. Inspect:
+   bitbucket-pipelines.yml
+   package.json
+   package-lock.json
+   src/database/data-source.ts
+   src/config/*
+   test/database/*
+   .env.example
+   .env.test.example
+   Dockerfile
+   docker-compose.yml
+   README.md
+   .gitignore
+8. Inspect Git status using read-only commands.
+
+2. Primary Objective
+--------------------
+Extend the Bitbucket pipeline baseline with REAL heavy CI gates:
+
+A. MSSQL-backed full test validation
+B. Production Docker image build validation
+
+The final CI #003 design should provide:
+
+- PR pipeline:
+  - fast Quality step only
+
+- master/default branch:
+  1. Quality
+  2. Database Tests
+  3. Docker Build
+
+- custom/manual `full-ci`:
+  1. Quality
+  2. Database Tests
+  3. Docker Build
+
+Still NO:
+- deployment
+- staging
+- image push
+- registry auth
+- production migrations
+
+3. Git Policy — CRITICAL
+------------------------
+Cursor must NEVER run:
+
+git add
+git commit
+git push
+
+Permanent user rule.
+
+If tracked code/config/permanent docs change:
+Cursor must print exactly ONE recommended command:
+
+git commit -m "<concise message>"
+
+Cursor must NOT execute it.
+
+4. Preserve CI #002 Baseline
+----------------------------
+Do not weaken:
+- PR fast quality gate
+- exact Node 22.23.1 image
+- npm ci
+- npm cache
+- npm audit
+- secret-free PR step
+
+PR pipeline should remain DB-free and Docker-free.
+
+Do not make every pull request pay MSSQL/Docker cost yet.
+
+5. MSSQL CI Service
+-------------------
+Add a Bitbucket service definition for Microsoft SQL Server.
+
+Preferred image:
+mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+
+Use same release family as local Docker runtime.
+
+Required service variables conceptually:
+
+ACCEPT_EULA: 'Y'
+MSSQL_PID: 'Developer'
+MSSQL_SA_PASSWORD: $DB_PASSWORD
+
+Do NOT hard-code DB_PASSWORD.
+
+DB_PASSWORD must be a secured Bitbucket repository variable when hosted.
+
+The pipeline YAML must not contain a real password.
+
+6. MSSQL Service Networking
+---------------------------
+Inside the Bitbucket build step, determine the correct connection semantics.
+
+Preferred from CI #001 audit:
+DB_HOST=localhost
+DB_PORT=1433
+
+But verify Bitbucket service-container networking semantics before finalizing.
+
+Do not reuse local Compose service name `mssql` blindly if Bitbucket services are reached differently.
+
+Document the decision.
+
+7. Test DB Environment
+----------------------
+For Database Tests step, use:
+
+NODE_ENV=test
+DB_HOST=<validated CI service host>
+DB_PORT=1433
+DB_NAME=catechism_api_test
+DB_USER=sa
+DB_PASSWORD=$DB_PASSWORD
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=true
+SWAGGER_ENABLED=false
+
+Requirements:
+- DB_NAME must remain guarded `_test`
+- no dev DB
+- no prod DB
+- no arbitrary DB name
+- no real secret in YAML
+
+8. DataSource CI Bootstrap Gap
+------------------------------
+CI #001 identified:
+
+src/database/data-source.ts currently requires `.env`.
+
+This is a CI portability gap.
+
+Preferred fix:
+Adjust DataSource bootstrap so it supports:
+
+A. local CLI mode:
+- `.env` file required/used normally
+
+B. CI mode:
+- if `CI=true`, allow environment variables to be the source of truth without requiring `.env`
+
+Requirements:
+- local safety must NOT be weakened
+- local CLI should still fail clearly if `.env` is missing
+- CI must not need to generate secret-bearing `.env`
+- no fallback to `.env.example`
+- env validation/config parsing must remain shared
+
+Possible logic conceptually:
+
+if (!process.env.CI) {
+  require/load .env
+} else {
+  use process.env
+}
+
+But implement carefully and test it.
+
+Do not blindly trust arbitrary CI environment without existing validation/parsing.
+
+9. DataSource Tests
+-------------------
+Add/update tests proving:
+
+A. Local mode:
+- without `.env`, CLI bootstrap fails clearly
+
+B. CI mode:
+- with CI=true and complete env vars, DataSource options build without `.env`
+
+C. CI mode:
+- missing required DB env values still fail
+
+D. No `.env.example` fallback
+
+Keep tests deterministic and DB-free where possible.
+
+10. MSSQL Readiness
+-------------------
+SQL Server may take time to start in Bitbucket.
+
+Do NOT rely on a fixed arbitrary sleep only.
+
+Add a portable readiness mechanism.
+
+Preferred:
+a small Node/TypeScript script using existing `mssql` dependency.
+
+Example responsibility:
+- repeatedly attempt connection
+- SELECT 1
+- bounded retries
+- clear timeout
+- no password logging
+- exit non-zero on failure
+
+Possible file:
+scripts/wait-for-mssql.ts
+or
+test/database/wait-for-mssql.ts
+
+Choose a location that reflects CI/test infrastructure.
+
+Requirements:
+- portable Linux/Windows Node script
+- no WSL dependency
+- no shell-specific syntax
+- no new dependency if existing `mssql` suffices
+- no secret output
+
+Add package script such as:
+ci:wait-for-mssql
+
+or another clear name.
+
+11. Readiness Script Safety
+---------------------------
+The wait script should:
+
+- load connection settings from env
+- not require `.env`
+- validate required fields
+- use short connection timeout
+- retry at reasonable interval
+- cap total wait time
+- print only non-secret diagnostic info
+- close each pool/connection cleanly
+
+Do not print full connection config.
+
+12. Database Test Step
+----------------------
+Add a reusable pipeline step, e.g.:
+
+Database Tests
+
+It should:
+
+1. npm ci
+2. wait for MSSQL
+3. run:
+   npm run quality:full
+
+However, note:
+`quality:full` internally re-runs `quality`.
+
+This may duplicate Quality step work.
+
+Evaluate two options:
+
+A. Simplicity:
+Database Tests step runs `npm ci` + `npm run quality:full`
+- duplicates fast quality
+- easiest to reason about
+
+B. Efficiency:
+Database Tests step runs only:
+- test:db:migrations
+- test:integration
+- test:e2e:db
+
+Preferred initial v1:
+Choose maintainability over optimization.
+
+If using `quality:full`, clearly document duplication.
+
+If using DB-only scripts, ensure full gate semantics remain clear.
+
+Do not invent a new complex task runner.
+
+13. Recommended DB Step Direction
+---------------------------------
+Preferred direction for CI #003:
+
+Database Tests step:
+- npm ci
+- npm run ci:wait-for-mssql
+- npm run test:db:migrations
+- npm run test:integration
+- npm run test:e2e:db
+
+Reason:
+- Quality already passed in prior step
+- avoids rerunning entire quality suite
+- preserves existing `quality:full` for local/manual full validation
+
+For custom `full-ci`, using the same three-step pipeline is sufficient.
+
+Document this decision.
+
+14. DB Service on Step
+----------------------
+Attach MSSQL service ONLY to Database Tests step.
+
+Do not attach MSSQL to:
+- PR Quality
+- master Quality
+- Docker Build
+
+This reduces resource cost and secret exposure.
+
+15. Bitbucket Secured Variable
+------------------------------
+Document required Bitbucket secured repository variable:
+
+DB_PASSWORD
+
+Requirements:
+- SQL Server complexity compliant
+- secured/masked
+- not printed
+- not stored in YAML
+- not stored in README as a real value
+
+If README is updated, document variable name only.
+
+16. Docker Build Gate
+---------------------
+Add reusable pipeline step:
+
+Docker Build
+
+Requirements:
+- attach Bitbucket `docker` service
+- build production target only
+
+Command:
+
+docker build --target production -t catechism-api:ci .
+
+Do NOT:
+- docker login
+- docker push
+- export image tar unless justified
+- run Compose
+- deploy
+
+Goal:
+prove production Dockerfile remains buildable.
+
+17. Docker Service Definition
+-----------------------------
+Use Bitbucket's Docker service appropriately.
+
+Do not over-customize daemon settings.
+
+If memory configuration is supported and necessary, keep it minimal.
+
+Do not invent unsupported YAML.
+
+18. Docker Build Cache
+----------------------
+For CI #003 baseline:
+do NOT introduce complex remote Docker layer caching.
+
+Keep deterministic/simple first version.
+
+npm cache in Node steps is enough.
+
+Docker build should work without registry cache.
+
+CI #004 may audit optimization if needed.
+
+19. Master Pipeline
+-------------------
+Extend master to:
+
+1. Quality
+2. Database Tests
+3. Docker Build
+
+All sequential.
+
+If Quality fails:
+heavy steps must not run.
+
+If Database Tests fail:
+Docker Build should not run.
+
+This fail-fast order is intentional.
+
+20. PR Pipeline
+--------------
+Keep PR pipeline:
+
+1. Quality
+
+No MSSQL.
+No Docker build.
+
+Do not change unless a concrete blocker requires it.
+
+21. Custom full-ci
+------------------
+Add real custom pipeline:
+
+full-ci
+
+It should run:
+
+1. Quality
+2. Database Tests
+3. Docker Build
+
+This is now legitimate because all three gates exist.
+
+Do not add placeholder TODO steps.
+
+22. Default Pipeline
+--------------------
+Do NOT add a broad:
+
+default:
+
+pipeline for every feature branch unless there is a strong reason.
+
+Current intended policy:
+- PRs get Quality
+- master gets full gate
+- manual full-ci available
+
+Keep scope simple.
+
+23. YAML Reuse
+--------------
+Use anchors cleanly for reusable steps:
+
+&quality-step
+&database-tests-step
+&docker-build-step
+
+Avoid command duplication.
+
+Ensure service attachments remain step-specific.
+
+24. Docker and MSSQL Definitions
+--------------------------------
+Keep definitions organized:
+
+definitions:
+  caches:
+  services:
+  steps:
+
+Be careful because:
+- MSSQL is a custom service
+- Docker is a built-in service reference
+
+Validate actual Bitbucket YAML syntax.
+
+Do not invent unsupported service syntax.
+
+25. Local Validation — DataSource CI Mode
+-----------------------------------------
+Run DB-free tests for CI-mode DataSource logic.
+
+Use controlled environment variables.
+
+Do not depend on Bitbucket hosted environment for unit tests.
+
+26. Local Validation — MSSQL Wait Script
+----------------------------------------
+If local Docker MSSQL is available:
+run wait script against live MSSQL.
+
+If Docker daemon is unavailable:
+- unit test retry/config logic where practical
+- do not claim live PASS
+- report limitation
+
+However, CI #003 should make best effort to validate against the known local WSL Docker stack if available.
+
+27. Local Validation — DB Step Commands
+---------------------------------------
+If local MSSQL is running:
+simulate Database Tests step using environment variables without `.env` dependency.
+
+Goal:
+prove CI=true + env-only DB mode works.
+
+Run conceptually:
+
+CI=true
+NODE_ENV=test
+DB_HOST=localhost
+DB_PORT=14330 (local host publish only)
+DB_NAME=catechism_api_test
+...
+
+Then:
+- ci:wait-for-mssql
+- test:db:migrations
+- test:integration
+- test:e2e:db
+
+Do NOT expose password in command transcript/report.
+
+On local Windows/PowerShell, set env safely.
+
+Important:
+local host port may be 14330.
+Bitbucket CI remains 1433.
+
+28. Local Validation — Docker Build
+-----------------------------------
+If Docker Engine is available:
+
+wsl docker build --target production -t catechism-api:ci .
+
+or equivalent actual Docker command.
+
+PASS required if environment available.
+
+Do not run broad cleanup.
+
+29. YAML Validation
+-------------------
+Validate:
+- YAML parses
+- anchors resolve
+- pipeline structure is coherent
+- no duplicate unsupported keys
+- service references valid to the best available static validation
+
+If Bitbucket remote is unavailable:
+do not claim hosted validation.
+
+30. No Secret Leakage
+---------------------
+Search changed files for:
+- actual password
+- `.env` content
+- token
+- registry credentials
+
+Inspect readiness script logs.
+
+No secret should appear in report.
+
+31. README Update
+-----------------
+Update README CI section if useful.
+
+Document:
+- PR = Quality
+- master = Quality + DB + Docker build
+- custom `full-ci`
+- required Bitbucket secured variable `DB_PASSWORD`
+- no deploy yet
+- remote currently must be Bitbucket for execution
+
+Keep concise.
+
+32. No Deployment
+-----------------
+STRICTLY do not add:
+
+deployment:
+trigger: manual for deploy
+registry login
+image push
+SSH
+Kubernetes
+Helm
+Terraform
+staging URL
+production URL
+
+Custom full-ci is validation only.
+
+33. Existing quality / test behavior
+------------------------------------
+Do not break:
+npm run quality
+npm run quality:full
+
+Do not repurpose them into CI-only commands.
+
+CI-specific wait helper may be added separately.
+
+34. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run quality
+npm run test:cov
+npm audit --audit-level=moderate
+
+Run tests for new CI DataSource behavior.
+
+If MSSQL available:
+- run CI-mode wait script
+- test:db:migrations
+- test:integration
+- test:e2e:db
+
+If Docker available:
+- production Docker build
+
+Also:
+- YAML syntax validation
+
+Every introduced npm script must be executed.
+
+35. Git Policy
+--------------
+Read-only only:
+
+git status --short
+git diff
+git diff --stat
+
+Never:
+git add
+git commit
+git push
+
+36. Required Report
+-------------------
+Create:
+
+docs/CI_003_MSSQL_INTEGRATION_AND_DOCKER_BUILD_GATES_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From CI #002
+
+3. Files Created
+
+4. Files Modified
+
+5. Pipeline Architecture After CI #003
+Show PR/master/custom flow.
+
+6. MSSQL Service Definition
+Document image and variable names.
+No secret values.
+
+7. CI Database Environment
+Document host/port/name/user/TLS semantics.
+
+8. DataSource CI Mode Fix
+Explain local `.env` safety vs CI env-only behavior.
+
+9. DataSource Tests
+Document scenarios.
+
+10. MSSQL Readiness Strategy
+Explain script, retries, timeout, secret handling.
+
+11. Database Tests Step
+Exact command order.
+
+12. Docker Build Step
+Exact command and Docker service behavior.
+
+13. Master Pipeline
+Exact sequence.
+
+14. PR Pipeline
+Confirm still fast only.
+
+15. Custom full-ci
+Exact sequence.
+
+16. Cache / Install Strategy
+
+17. Secret Strategy
+Document required secured variable:
+DB_PASSWORD
+
+18. README Changes
+
+19. YAML Validation
+
+20. Local CI-Mode Simulation
+Document DB env-only validation.
+
+21. Docker Build Validation
+
+22. Existing Quality Regression
+
+23. Commands Executed
+
+24. Validation Results
+Explicit PASS/FAIL:
+- npm ci
+- quality
+- audit
+- new DataSource tests
+- CI env-only DataSource
+- readiness helper
+- migration test DB
+- integration
+- DB-aware e2e
+- Docker production build
+- YAML syntax
+- no secrets
+- no deployment
+
+25. Git Diff / Scope Summary
+
+26. Known Issues / Assumptions
+Include Bitbucket remote limitation.
+
+27. Out-of-Scope Confirmation
+
+28. Recommended CI #004 Plan
+
+Recommend:
+CI #004 — Final CI Audit + Hardening
+
+That prompt should:
+- independently audit entire bitbucket-pipelines.yml
+- validate trigger semantics
+- review duplicate work
+- review service resource needs
+- review MSSQL readiness reliability
+- review secrets
+- review Docker build gate
+- verify Linux portability
+- review artifacts/caching
+- inspect first real Bitbucket run results if repo is available
+- remove CI technical debt
+- keep deployment out of scope
+- prepare future staging/deploy extension points
+
+Do NOT implement CI #004 now.
+
+29. Commit Message Recommendation
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "ci: add database and Docker build gates"
+
+Cursor MUST NOT execute it.
+
+37. Final Response
+------------------
+When finished, respond concisely with:
+- CI #003 status
+- DB gate PASS/FAIL
+- Docker build gate PASS/FAIL
+- report path:
+  docs/CI_003_MSSQL_INTEGRATION_AND_DOCKER_BUILD_GATES_REPORT.md
+
+Then print exactly ONE recommended commit command if tracked changes exist:
+
+git commit -m "ci: add database and Docker build gates"
+
+Do NOT run git add.
+Do NOT run git commit.
+Do NOT run git push.
+
+Do NOT proceed to CI #004 automatically.

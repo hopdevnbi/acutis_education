@@ -1,0 +1,1009 @@
+CURSOR PROMPT #005 — DOCKER + DOCKER COMPOSE + LOCAL MSSQL RUNTIME
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm
+- MSSQL
+- TypeORM 0.3.x
+- @nestjs/typeorm 11.x
+- Docker / Docker Compose for local development
+- Bitbucket Pipelines later
+- Frontend is a separate ReactJS repository
+
+Completed foundation prompts:
+
+Prompt #001
+- mandatory project rules
+- repository hygiene
+- Cursor always-apply rules
+- docs/ ignored
+
+Prompt #002
+- NestJS bootstrap
+- Node/npm pinning
+- TypeScript strict
+- ESLint
+- Prettier
+- Jest/e2e
+- GET /api/v1/health
+
+Prompt #003
+- centralized config
+- Joi env validation
+- structured logging
+- request ID
+- global validation
+- global exception handling
+- Swagger/OpenAPI
+- environment-driven HTTP port
+- shared production/e2e bootstrap
+
+Prompt #004
+- MSSQL data-access foundation
+- TypeORM + @nestjs/typeorm
+- mssql driver
+- typed DB config
+- migration DataSource
+- migration scripts
+- snake_case naming strategy
+- synchronize=false
+- migrationsRun=false
+- no business entities/tables
+- live MSSQL connectivity intentionally deferred
+
+Before making ANY change:
+
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all .cursor/rules/*.mdc.
+4. Read:
+   docs/PROMPT_001_PROJECT_RULES_REPORT.md
+5. Read:
+   docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+6. Read:
+   docs/PROMPT_003_APPLICATION_BOOTSTRAP_INFRASTRUCTURE_REPORT.md
+7. Read:
+   docs/PROMPT_004_MSSQL_TYPEORM_MIGRATION_ARCHITECTURE_REPORT.md
+8. Inspect package.json, .env.example, TypeORM config, migration scripts, and current repository structure.
+
+Do not weaken existing quality/security rules.
+
+2. Current Phase
+----------------
+Backend Foundation
+Prompt #005 / approximately 7 prompts
+
+Completed:
+- #001 Rules & repository hygiene
+- #002 NestJS bootstrap & code quality
+- #003 Application bootstrap infrastructure
+- #004 MSSQL + TypeORM + migration architecture
+
+Current:
+- #005 Docker + Docker Compose + Local MSSQL Runtime
+
+Remaining after this prompt:
+- #006 DB integration/e2e + testing conventions + quality gates
+- #007 Final foundation audit + hardening
+
+3. Primary Objective
+--------------------
+Create a reliable local Docker development stack for the backend and validate the first real NestJS ↔ MSSQL connection.
+
+This prompt should:
+
+- add Docker support for the NestJS API
+- add Docker Compose for local development
+- run MSSQL in Docker
+- use a persistent MSSQL volume
+- add health checks
+- create deterministic startup behavior
+- configure API-to-MSSQL networking correctly
+- support local migrations against the real MSSQL container
+- validate real API ↔ MSSQL connectivity
+- avoid machine-specific IP addresses
+- keep database schema empty except TypeORM migration metadata if migration commands create it
+- preserve lightweight public liveness endpoint behavior
+- prepare for Prompt #006 integration/e2e tests
+
+Do NOT implement any catechism business entities or tables.
+
+4. Environment / Host Assumptions
+---------------------------------
+The project must NOT depend on:
+- Docker Desktop-specific host integration
+- host.docker.internal as a mandatory path
+- a developer-specific LAN/Wi-Fi IP
+- a WSL-specific hard-coded IP
+- localhost for container-to-container database access
+
+Within Docker Compose:
+- API must connect to MSSQL using the Compose service name.
+
+Expected concept:
+DB_HOST=mssql
+
+Host-side tools such as DBeaver may later connect via the published MSSQL port on localhost if the local environment supports it.
+
+Do not bake host networking assumptions into application code.
+
+5. Dockerfile Strategy
+----------------------
+Create a Dockerfile suitable for both:
+
+A. local development
+B. production-oriented build validation
+
+Preferred approach:
+- multi-stage Dockerfile
+- explicit Node 22.23.1-compatible image
+- dependency install using package-lock.json
+- non-root runtime user where practical
+- efficient layer caching
+- minimal production runtime image
+
+Do not use `latest` Node tags.
+
+Use a pinned image compatible with exactly Node 22.23.1.
+
+If the official Node image tag cannot express the exact patch version cleanly, choose the closest safe pinned form and document the difference clearly.
+Do not silently change the project runtime requirement.
+
+6. Local Development Container
+------------------------------
+The Compose API service should support developer workflow.
+
+Preferred local behavior:
+- source mounted into API container
+- node_modules handled safely so host/Windows modules do not overwrite Linux container modules
+- run NestJS in watch mode
+- expose application port to host
+- use env file / Compose environment
+- connect to MSSQL using service DNS name
+
+Be careful with Windows/WSL bind-mount behavior.
+
+Do not design a setup that requires reinstalling dependencies every file change.
+
+Document any anonymous/named volume used for container node_modules.
+
+7. .dockerignore
+----------------
+Create .dockerignore.
+
+Exclude at minimum where appropriate:
+- node_modules
+- dist
+- coverage
+- .git
+- docs
+- .env
+- logs
+- local temp artifacts
+- IDE/system junk
+
+Do NOT exclude files required for build, lint, migration compilation, or package-lock reproducibility.
+
+8. Docker Compose File
+----------------------
+Create a clear local Compose file.
+
+Preferred filename:
+docker-compose.yml
+
+or:
+compose.yml
+
+Choose one and use it consistently.
+
+Services should initially include:
+
+- api
+- mssql
+
+A separate migration/init service may be added ONLY if it genuinely improves deterministic startup and remains understandable.
+
+Do not introduce Redis, message brokers, storage services, or unrelated infrastructure.
+
+9. MSSQL Container
+------------------
+Use an official Microsoft SQL Server Linux container image appropriate for local development.
+
+Pin a specific supported image tag rather than using a floating latest tag.
+
+Document the image/tag selected and why.
+
+Environment variables should follow the image's current supported convention.
+
+Use a strong local development password supplied through environment configuration.
+
+Do NOT hard-code a real password in:
+- Dockerfile
+- Compose file
+- source
+- Git-tracked .env
+
+The existing .env.example may contain only an obvious local placeholder.
+
+10. MSSQL Edition
+-----------------
+Use an appropriate local/development edition configuration.
+
+Prefer:
+ACCEPT_EULA=Y
+
+and a developer-friendly edition such as:
+MSSQL_PID=Developer
+
+if supported by the chosen image.
+
+Do not configure production licensing assumptions.
+
+11. Local Credentials
+---------------------
+Decide a clean local mechanism for MSSQL SA credentials.
+
+Preferred flow:
+- .env remains local and ignored
+- .env.example documents required values
+- Compose consumes the local .env
+- same password is used by:
+  - MSSQL container
+  - NestJS DB_PASSWORD
+  - migration CLI
+
+Avoid defining two independent passwords that can drift.
+
+If the MSSQL container requires a variable name different from application DB_PASSWORD, use Compose variable interpolation to map one local secret to both.
+
+Example concept only:
+MSSQL_SA_PASSWORD=${DB_PASSWORD}
+
+Do not duplicate secrets in source.
+
+12. Database Name Creation
+--------------------------
+The configured application database may not exist on first MSSQL container startup.
+
+Design a deterministic, idempotent local database-creation mechanism.
+
+Preferred requirements:
+
+- create DB_NAME if it does not exist
+- reruns safely
+- waits until MSSQL accepts connections
+- does not recreate/drop existing DB on normal startup
+- no destructive reset by default
+- works with persistent volume
+
+Possible approaches:
+- a small init shell script
+- a dedicated one-shot mssql-init Compose service
+- another clear idempotent approach
+
+Choose the simplest reliable method.
+
+If using an init service:
+- it must depend on MSSQL health
+- it must exit successfully after ensuring DB exists
+- API should not attempt connection until required DB creation has completed, if Compose dependency semantics can guarantee it
+
+Document the decision.
+
+13. SQL Tooling in Init Container
+---------------------------------
+Be careful about current Microsoft SQL tooling locations.
+
+Do not assume obsolete paths such as:
+- /opt/mssql-tools/bin/sqlcmd
+
+without verifying the selected image.
+
+Use the sqlcmd path/tooling actually available for the chosen MSSQL image or explicitly use a separate tools container if required.
+
+Document the exact command/path.
+
+14. CRLF / Shell Compatibility
+------------------------------
+This project may be developed on Windows/WSL.
+
+Any shell scripts added for Docker must be safe from CRLF issues.
+
+Requirements:
+- store shell scripts with LF endings
+- use a valid shebang
+- use `set -e` / `set -eu` / `set -euo pipefail` only when supported by the chosen shell
+- do not accidentally execute bash-specific syntax under /bin/sh
+
+Add repository/editor normalization only if necessary and within scope.
+
+If introducing .gitattributes for LF enforcement on shell scripts, document it.
+
+15. Persistent MSSQL Volume
+---------------------------
+Use a named Docker volume for MSSQL persistence.
+
+Example concept:
+mssql-data
+
+Mount the correct Microsoft SQL Server data path.
+
+Do not use a host-specific absolute Windows/WSL path.
+
+Normal:
+docker compose down
+
+should preserve DB data.
+
+Only:
+docker compose down -v
+
+should remove the development DB volume.
+
+Document this clearly.
+
+16. MSSQL Port Publishing
+-------------------------
+Publish MSSQL to the host for local tools such as:
+- DBeaver
+- sqlcmd from host
+- debugging
+
+Avoid collisions with a native Windows MSSQL instance.
+
+Do NOT blindly force:
+1433:1433
+
+if the developer may already have native MSSQL running.
+
+Introduce a configurable host publish port, e.g.:
+
+MSSQL_PUBLISH_PORT=14330
+
+with a sensible non-conflicting default.
+
+Inside Docker:
+DB_PORT remains 1433.
+
+Outside Docker:
+host tools use localhost:${MSSQL_PUBLISH_PORT}.
+
+Add this variable to .env.example if used.
+
+17. API Port Publishing
+-----------------------
+Publish the API using current PORT semantics.
+
+Avoid ambiguous dual use if PORT is both container listen port and host publish port.
+
+A simple same-port mapping is acceptable for local development.
+
+If introducing:
+APP_PUBLISH_PORT
+or equivalent,
+only do so if it improves clarity.
+
+Avoid unnecessary config growth.
+
+18. MSSQL Health Check
+----------------------
+Add a real container health check for MSSQL.
+
+It should verify that SQL Server is actually accepting SQL connections, not merely that the process exists.
+
+Requirements:
+- reasonable interval
+- reasonable timeout
+- enough retries/start period for MSSQL cold boot
+- credential handling must not leak unnecessarily into logs
+
+Do not use a fake TCP-only check if sqlcmd connectivity can be used reliably.
+
+19. API Health Check
+--------------------
+Add an API container health check using the existing:
+
+GET /api/v1/health
+
+Keep this endpoint as application liveness only.
+
+It should NOT be changed to fail because MSSQL is unavailable.
+
+If a container health command requires curl/wget and the base image lacks it:
+- prefer a Node-based healthcheck
+or
+- install only the minimal required package intentionally
+
+Avoid unnecessary OS packages.
+
+20. Startup Ordering
+--------------------
+Compose startup should be deterministic.
+
+Expected logical order:
+
+1. MSSQL starts.
+2. MSSQL becomes healthy.
+3. Local application DB is ensured/created.
+4. API starts and connects to the configured database.
+
+If using mssql-init:
+- depend on MSSQL health
+- API may depend on init service successful completion
+
+Use current Docker Compose dependency conditions supported by the environment.
+
+Do not rely only on arbitrary sleep timers.
+
+A small retry loop inside init may still be acceptable as a defensive measure, but health/dependency semantics should be primary.
+
+21. TypeORM Runtime Configuration
+---------------------------------
+Inside Docker API service, configure:
+
+DB_HOST=mssql
+DB_PORT=1433
+
+Use:
+- DB_NAME
+- DB_USER
+- DB_PASSWORD
+- DB_ENCRYPT
+- DB_TRUST_SERVER_CERTIFICATE
+
+appropriately for local container TLS.
+
+For local Docker:
+DB_TRUST_SERVER_CERTIFICATE=true
+
+may be appropriate.
+
+Do NOT weaken production defaults in application code.
+
+22. Database User
+-----------------
+For this local foundation prompt, using the SQL Server administrative login for local development is acceptable if that is the simplest reliable bootstrap.
+
+However:
+- do not normalize using SA for production
+- document that a restricted application login/user should be introduced before production readiness
+
+If you choose to create a dedicated local application login/user now, do it only if the setup remains simple, idempotent, and clearly justified.
+
+Do not over-engineer SQL permissions yet.
+
+23. Migration Execution Strategy
+--------------------------------
+Migration execution must remain explicit.
+
+Do NOT set:
+migrationsRun=true
+
+Do NOT make the application automatically run migrations at normal startup.
+
+Provide a clear local command for migrations against Docker MSSQL.
+
+Examples conceptually:
+
+docker compose exec api npm run migration:show
+docker compose exec api npm run migration:run
+
+or a dedicated one-shot Compose migration command.
+
+Choose one predictable approach.
+
+Remember:
+there are currently no business migrations, so `migration:run` may legitimately report no pending migrations.
+
+Validate the CLI can actually connect to the Docker MSSQL database.
+
+24. Development Commands
+------------------------
+Make local developer operations easy and document them in the report.
+
+Expected command concepts:
+
+Start:
+docker compose up -d
+or
+docker compose up
+
+View:
+docker compose ps
+
+Logs:
+docker compose logs -f api
+docker compose logs -f mssql
+
+Stop preserving DB:
+docker compose down
+
+Stop and reset DB:
+docker compose down -v
+
+Migration status:
+docker compose exec api npm run migration:show
+
+Migration run:
+docker compose exec api npm run migration:run
+
+Exact commands depend on chosen Compose/API development strategy.
+
+Ensure commands actually work.
+
+25. Build Validation
+--------------------
+Validate the Dockerfile build.
+
+At minimum:
+- development/container build succeeds
+- production target/image build succeeds if a separate target exists
+- image uses Node 22.23.1-compatible runtime
+- production image does not contain unnecessary development artifacts where practical
+
+Do not publish images to a registry.
+
+26. Real API ↔ MSSQL Connectivity
+---------------------------------
+This is the first prompt where live MSSQL connectivity MUST be validated.
+
+After the stack is healthy:
+
+- confirm MSSQL is healthy
+- confirm application database exists
+- confirm API starts successfully with DatabaseModule
+- confirm TypeORM connects successfully
+- confirm no synchronize/schema auto-creation occurs
+- confirm migration metadata behavior is as expected
+- confirm migration CLI can connect
+- confirm GET /api/v1/health returns 200
+
+Do not claim connectivity passed unless actually tested.
+
+27. Direct Database Verification
+--------------------------------
+Use sqlcmd or another existing CLI in the Docker environment to verify:
+
+- SQL Server version is reachable
+- DB_NAME exists
+- current DB can be selected
+- no unexpected business tables exist
+
+If TypeORM creates its migration metadata table only after migration execution, document whether it exists.
+
+Do not create dummy product tables.
+
+28. Host Connection Verification
+--------------------------------
+If practical, verify that the published MSSQL host port is listening and reachable from the host environment.
+
+Document:
+
+Host:
+localhost
+
+Port:
+${MSSQL_PUBLISH_PORT}
+
+Database:
+DB_NAME
+
+User:
+DB_USER / local SA user
+
+Do NOT expose the actual password in the report.
+
+If host-side tooling cannot be tested in the Cursor environment, document the intended connection settings rather than inventing a PASS.
+
+29. Native MSSQL Port Conflict
+------------------------------
+Explicitly inspect whether host port 1433 is already in use before choosing defaults.
+
+The project should be safe for a developer who may have native SQL Server on Windows.
+
+Prefer a configurable non-default host port to avoid conflict.
+
+Do not stop or reconfigure an existing native SQL Server as part of this prompt.
+
+30. No Business Schema
+----------------------
+STRICTLY DO NOT create:
+
+- users
+- roles
+- permissions
+- parishes
+- academic_years
+- classes
+- students
+- parents
+- lessons
+- questions
+- exams
+- or any other catechism business table
+
+No business entity files.
+
+No seed data.
+
+This is local runtime infrastructure only.
+
+31. Public Health Endpoint
+--------------------------
+Preserve:
+
+GET /api/v1/health
+
+Response:
+{
+  "status": "ok"
+}
+
+Do not add DB state to this endpoint.
+
+A future readiness endpoint may be introduced only after explicit design.
+
+32. Logging / Secrets
+---------------------
+Review Docker and application logs.
+
+Ensure:
+- DB_PASSWORD is not printed
+- MSSQL SA password is not printed by custom scripts
+- environment dumps are not logged
+- no Authorization/token logging regressions
+- init scripts do not use shell tracing (`set -x`) around secrets
+
+Do not paste passwords into the Cursor report.
+
+33. Docker Security Baseline
+----------------------------
+For the API image:
+- prefer non-root runtime where practical
+- do not include .env in image
+- do not copy docs/ into image
+- do not copy git metadata
+- do not install unnecessary packages
+- use deterministic npm install
+- do not expose secret values as Docker build args
+
+For MSSQL:
+- use official Microsoft image
+- do not customize it unnecessarily
+
+34. Test Regression
+-------------------
+All existing non-DB tests must continue to work outside Docker.
+
+Run:
+- format
+- lint
+- typecheck
+- unit tests
+- existing e2e tests
+- coverage
+- build
+
+These tests should remain deterministic without requiring Docker unless specifically part of new Docker/live DB validation.
+
+Do not rewrite existing infrastructure e2e tests to require DB yet.
+Prompt #006 will add DB integration/e2e coverage.
+
+35. Docker-Specific Validation
+------------------------------
+Run actual Docker commands.
+
+At minimum:
+
+- docker --version
+- docker compose version
+- docker compose config
+- docker compose build
+- docker compose up -d
+- docker compose ps
+- inspect health status
+- migration CLI against live DB
+- API health smoke
+- direct SQL verification
+- docker compose logs as needed
+
+After validation:
+- it is acceptable to leave the development stack running if useful
+or
+- stop it cleanly while preserving volume
+
+Document final container state.
+
+Do NOT remove the DB volume unless validation of reset behavior explicitly requires it.
+
+36. Database Reset Behavior
+---------------------------
+Validate or carefully document:
+
+docker compose down
+
+preserves the named MSSQL volume.
+
+If you validate:
+docker compose down -v
+
+understand it destroys local DB data.
+
+Do not destroy valuable pre-existing developer data.
+
+Because this project has no business data yet, a controlled initial reset test may be acceptable, but only for this project's named volume.
+
+Never prune unrelated Docker volumes.
+
+37. Docker Cleanup Safety
+-------------------------
+Do NOT run broad destructive commands such as:
+
+docker system prune -a
+docker volume prune
+docker rm -f $(docker ps -aq)
+
+Do not stop/delete unrelated containers.
+
+Operate only on this Compose project.
+
+38. Git Behavior
+----------------
+DO NOT commit.
+
+Do not run:
+- git add
+- git commit
+- git push
+
+Read-only Git inspection is allowed.
+
+Repository still has no initial commit.
+
+Use:
+git status --short --untracked-files=all
+
+Do not rely only on git diff.
+
+39. Required Validation Summary
+-------------------------------
+Before finishing, validate:
+
+Application quality:
+- Node v22.23.1
+- npm version
+- npm install/ci
+- format
+- lint
+- typecheck
+- unit tests
+- existing e2e tests
+- coverage
+- build
+- npm audit
+
+Docker:
+- docker version
+- compose version
+- compose config
+- image build
+- service startup
+- health checks
+
+MSSQL:
+- SQL Server accepts connections
+- DB_NAME exists
+- API TypeORM connection succeeds
+- migration CLI connects
+- no unexpected business schema exists
+
+API:
+- GET /api/v1/health -> 200
+- Swagger behavior remains correct when enabled
+
+Security:
+- no secret leakage
+- .env ignored
+- safe logging
+- synchronize=false
+- migrationsRun=false
+
+40. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_005_DOCKER_LOCAL_MSSQL_RUNTIME_REPORT.md
+
+The report must contain:
+
+1. Objective
+
+2. State Inherited From Prompt #004
+
+3. Docker Strategy
+Explain:
+- Dockerfile stages
+- local dev behavior
+- production build behavior
+- Node image/tag
+
+4. Files Created
+
+5. Files Modified
+
+6. Docker Compose Architecture
+Document services and dependencies.
+
+7. MSSQL Image
+Document exact image/tag and edition.
+
+8. Local Environment Variables
+Document variable names only.
+Do NOT include actual secret values.
+
+9. MSSQL Host Port Strategy
+Document:
+- internal container port
+- configurable host published port
+- native Windows MSSQL conflict avoidance
+
+10. Persistent Volume
+Document:
+- volume name
+- mount target
+- preservation/reset commands
+
+11. Database Initialization
+Explain:
+- how DB_NAME is created
+- idempotency
+- startup ordering
+- exact tool/sqlcmd approach
+
+12. CRLF / Shell Safety
+Document any scripts and line-ending protections.
+
+13. API Container Development Workflow
+Explain:
+- bind mount
+- node_modules handling
+- watch mode
+- exposed port
+
+14. Production Docker Build
+Explain final runtime image and non-root strategy.
+
+15. Health Checks
+Document:
+- MSSQL health check
+- API health check
+- timing/retry behavior
+
+16. Container Networking
+Confirm API uses service DNS and no host-specific IP.
+
+17. TypeORM Connectivity
+Document successful real NestJS -> MSSQL connection.
+
+18. Database Verification
+Document:
+- DB exists
+- direct SQL connection
+- tables present
+- explicit confirmation that no business tables were introduced
+
+19. Migration Validation
+Document:
+- migration:show result
+- migration:run result if executed
+- DataSource live connection
+- migration table behavior
+
+20. Host Connection Settings
+Document non-secret DBeaver/sqlcmd settings:
+- host
+- port
+- database
+- username
+Do not include password.
+
+21. Developer Commands
+List working commands for:
+- start
+- status
+- logs
+- migrations
+- stop
+- reset
+
+22. Files / Dependencies Review
+Confirm no unnecessary packages/services introduced.
+
+23. Commands Executed
+
+24. Validation Results
+Explicit PASS/FAIL for:
+- Node
+- npm
+- format
+- lint
+- typecheck
+- unit
+- e2e
+- coverage
+- build
+- npm audit
+- docker build
+- compose config
+- mssql health
+- db creation
+- API startup
+- TypeORM connection
+- migration CLI connection
+- API health
+- Swagger regression
+- direct DB verification
+
+25. Security Review
+Confirm:
+- no passwords in report/logs
+- .env ignored
+- no secret build args
+- safe API logger behavior
+- synchronize=false
+- migrationsRun=false
+
+26. Git Status / Scope Summary
+
+27. Rules Compliance Review
+
+28. Known Issues / Assumptions
+Include any Windows/WSL/Docker Engine notes.
+
+29. Final Container State
+State whether Compose stack is left running or stopped, and whether the DB volume remains.
+
+30. Out-of-Scope Confirmation
+Explicitly confirm no:
+- business entities
+- business tables
+- auth/RBAC
+- catechism modules
+- Bitbucket CI/CD
+- production deployment
+
+31. Recommended Next Step
+
+Recommend:
+
+Prompt #006 — Database Integration/E2E Testing + Quality Gates
+
+That prompt should:
+- add real DB integration tests
+- define isolated test database strategy
+- validate migrations against a disposable DB
+- add repository/data-access testing conventions
+- strengthen e2e test composition
+- add foundation-level quality scripts/gates
+- prepare future Bitbucket CI usage
+- avoid business modules
+
+Do NOT implement Prompt #006 now.
+
+41. Final Response
+------------------
+When finished, respond concisely with:
+
+- Prompt #005 completion status
+- whether Docker + live MSSQL connectivity passed
+- generated report path:
+  docs/PROMPT_005_DOCKER_LOCAL_MSSQL_RUNTIME_REPORT.md
+- any blocker if present
+
+Do not proceed to Prompt #006 automatically.

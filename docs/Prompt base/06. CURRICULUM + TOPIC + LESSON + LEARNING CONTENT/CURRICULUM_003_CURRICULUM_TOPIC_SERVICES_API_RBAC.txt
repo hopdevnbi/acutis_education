@@ -1,0 +1,1159 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #003/6
+CURRICULUM + TOPIC SERVICES / API / RBAC
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/RBAC
+- Parish/Academic Structure
+- Class/Student/Catechist/Parent/Enrollment
+- CURRICULUM #001 Domain Audit + Content Model Design
+- CURRICULUM #002 Schema + Entities + Migrations (multilingual-ready)
+
+Current:
+CURRICULUM/CONTENT #003 / 6
+
+Remaining:
+#004 Lesson + Learning Content + versioning/publishing
+#005 Cross-domain integration + scoped authorization + delivery contract
+#006 Final audit + seed/Postman + FE/Mobile contract readiness
+
+Do NOT modify React Web or React Native Mobile.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/parish/
+src/modules/academic-structure/
+src/modules/access-control/
+src/modules/auth/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status using read-only commands.
+
+3. Scope of This Prompt
+-----------------------
+Implement ONLY:
+
+- CurriculumService
+- curriculum root create/get/list/update/status
+- curriculum version create/list/get
+- initial draft creation
+- TopicService
+- topic create/list/get/update/reorder/remove from DRAFT
+- sourceLocale validation
+- parish/catechism-level validation via public services
+- `curricula.read`
+- `curricula.manage`
+- `curricula.publish` permission catalog/wiring
+- FE-safe snapshots/DTOs
+- Swagger
+- unit/integration/DB e2e tests
+
+Do NOT implement yet:
+
+- LessonService
+- Lesson HTTP APIs
+- LearningContentService
+- lesson content write/read API
+- publishVersion behavior
+- clone published version to draft
+- curriculum assignment write API
+- cross-domain learner delivery routes
+- scoped parent/catechist/student published-read authorization
+- LocalizationModule / Google Translation
+- seeds/Postman
+
+4. Architecture
+---------------
+CurriculumModule owns:
+- curriculums
+- curriculum_versions
+- topics
+- lessons
+- curriculum_assignments
+
+At #003 implement business services only for:
+- curriculum root
+- curriculum versions
+- topics
+
+Lesson persistence remains unused except where topic delete safety may need existence check later.
+Prefer NOT to inject Lesson repository in #003 unless absolutely necessary.
+
+CurriculumModule may depend on:
+- ParishModule public services
+- AcademicStructureModule public services
+- AuthModule / AccessControlModule for controller/guard wiring
+
+No cross-module repositories/entities.
+
+5. Public Export Target
+-----------------------
+CurriculumModule should export:
+
+- CurriculumService
+- TopicService only if truly needed later
+
+Preferred cleaner design:
+CurriculumService encapsulates curriculum/version/topic orchestration,
+but avoid god-service.
+
+If TopicService is cohesive and useful:
+export TopicService only if LearningContent/Lesson phase actually needs it.
+
+Do NOT export:
+- TypeOrmModule
+- entities
+- repositories
+
+6. Snapshot Contracts
+---------------------
+Create FE-safe contracts:
+
+CurriculumSnapshot:
+- id
+- parishId
+- catechismLevelId
+- code
+- name
+- description
+- status
+- sourceLocale
+- currentPublishedVersionId
+- createdAt
+- updatedAt
+
+CurriculumVersionSnapshot:
+- id
+- curriculumId
+- versionNumber
+- status
+- label
+- publishedAt
+- publishedByUserId
+- createdByUserId
+- createdAt
+- updatedAt
+
+TopicSnapshot:
+- id
+- curriculumVersionId
+- code
+- title
+- description
+- sortOrder
+- createdAt
+- updatedAt
+
+No entity leakage.
+
+7. Source Locale Validation — REQUIRED
+--------------------------------------
+Validate `sourceLocale` at application layer.
+
+Use BCP 47-like validation.
+
+Examples valid:
+vi-VN
+en-US
+fr-FR
+en
+fr
+
+Do NOT require country subtag.
+
+Do NOT infer locale from country.
+
+Normalize conservatively:
+- trim
+- preserve canonical-ish casing if practical:
+  language lowercase
+  region uppercase
+
+If implementing full standards library is unnecessary:
+use a carefully scoped validator.
+
+Avoid adding a heavy dependency unless justified.
+
+8. Curriculum Code Validation
+-----------------------------
+Normalize:
+trim
+lowercase
+
+Allowed:
+a-z
+0-9
+hyphen
+
+Length:
+1..32
+
+No spaces
+No accents
+
+Example:
+khai-tam
+xung-toi-1
+
+9. Curriculum Name / Description
+--------------------------------
+name:
+required
+trim
+max 128
+Unicode
+
+description:
+optional
+trim
+max 512
+Unicode
+
+10. Create Curriculum
+---------------------
+Route:
+POST /api/v1/parishes/:parishId/curricula
+
+Permission:
+curricula.manage
+
+Input:
+- catechismLevelId
+- code
+- name
+- description?
+- sourceLocale
+
+Flow:
+1. validate parishId
+2. ParishService.assertParishActive(parishId)
+3. validate level exists, belongs to parish, ACTIVE
+4. normalize code
+5. validate locale
+6. create ACTIVE root
+7. currentPublishedVersionId = null
+8. save
+9. map duplicate code conflict to 409
+10. return snapshot
+
+11. Curriculum Status
+---------------------
+ACTIVE
+INACTIVE
+
+PATCH:
+`/api/v1/curricula/:id/status`
+
+Allowed:
+ACTIVE <-> INACTIVE
+
+Historical versions remain readable.
+
+When INACTIVE:
+- cannot create new draft/version
+- cannot create/update topics
+- cannot later assign new version in #004/#005
+- reads allowed
+
+Do not hard delete curriculum root.
+
+12. Get Curriculum
+------------------
+GET /api/v1/curricula/:id
+
+Permission:
+curricula.read
+
+Return safe snapshot.
+
+No scope hardening beyond global capability in #003.
+Full parish scope wiring in #005.
+
+Clearly document this interim state.
+
+13. List Curricula by Parish
+----------------------------
+GET /api/v1/parishes/:parishId/curricula
+
+Permission:
+curricula.read
+
+Pagination per PROJECT_RULES.
+
+Filters:
+- catechismLevelId
+- status
+- search
+- sourceLocale optional
+
+Sort whitelist:
+- name
+- code
+- status
+- createdAt
+
+All queries:
+WHERE parish_id = :parishId
+
+Historical reads allowed for inactive parish if existing Parish API pattern permits.
+Validate parish exists, not necessarily active.
+
+14. Update Curriculum Root
+--------------------------
+PATCH /api/v1/curricula/:id
+
+Permission:
+curricula.manage
+
+Allow:
+- code
+- name
+- description
+- sourceLocale?
+
+Important:
+sourceLocale mutation can affect translation lineage.
+
+Preferred policy:
+allow sourceLocale update ONLY if:
+- no PUBLISHED versions exist
+- no currentPublishedVersionId
+- ideally only initial/draft-only curriculum
+
+Audit.
+
+If published history exists:
+reject sourceLocale change with conflict.
+
+Do not allow parishId/catechismLevelId mutation after create.
+
+Structural IDs immutable.
+
+15. Curriculum Version Create
+-----------------------------
+POST /api/v1/curricula/:id/versions
+
+Permission:
+curricula.manage
+
+At #003 support:
+
+A. initial DRAFT creation for curriculum with no versions
+B. optional blank new DRAFT creation only if no existing DRAFT
+
+Do NOT clone PUBLISHED tree/content yet.
+Clone belongs #004.
+
+Input:
+- label optional
+
+Rules:
+- curriculum ACTIVE
+- no existing DRAFT
+- versionNumber = max(existing)+1
+- first versionNumber = 1
+- status = DRAFT
+- createdByUserId from authenticated user
+- published fields null
+
+Need concurrency-safe version number allocation.
+
+16. Version Number Concurrency
+------------------------------
+Critical.
+
+Two concurrent draft-create attempts must not:
+- create duplicate version numbers
+- create two drafts
+
+DB constraints:
+- unique curriculum/versionNumber
+- filtered unique DRAFT
+
+Use transaction/lock if needed.
+
+Map race conflict to safe 409.
+
+17. List Versions
+-----------------
+GET /api/v1/curricula/:id/versions
+
+Permission:
+curricula.read
+
+Filters:
+- status optional
+
+Order:
+versionNumber DESC
+
+No tree/content.
+
+18. Get Version
+----------------
+GET /api/v1/curriculum-versions/:id
+
+Permission:
+curricula.read
+
+Return snapshot.
+
+19. Version Mutation
+--------------------
+Do NOT expose generic PATCH version status.
+
+Publishing is explicit command in #004.
+
+At #003 version label may be mutable while DRAFT if useful.
+
+Possible:
+PATCH /api/v1/curriculum-versions/:id
+
+Allow:
+label only
+DRAFT only
+
+If unnecessary, omit.
+
+20. Topic Create
+----------------
+POST /api/v1/curriculum-versions/:versionId/topics
+
+Permission:
+curricula.manage
+
+Input:
+- code optional
+- title
+- description optional
+- sortOrder optional
+
+Rules:
+- version exists
+- parent curriculum ACTIVE
+- version DRAFT
+- if no sortOrder, append after max current sort
+- validate optional code
+- title required Unicode max 256
+- description max 1024
+
+21. Topic Code
+--------------
+Optional.
+
+If supplied:
+trim
+lowercase
+kebab-case
+max 32
+
+Duplicate code within same version:
+409
+
+22. Topic List
+--------------
+GET /api/v1/curriculum-versions/:versionId/topics
+
+Permission:
+curricula.read
+
+Order:
+sortOrder ASC, createdAt ASC
+
+No lessons embedded yet.
+
+23. Topic Get
+-------------
+GET /api/v1/topics/:id
+
+Permission:
+curricula.read
+
+Safe snapshot.
+
+24. Topic Update
+---------------
+PATCH /api/v1/topics/:id
+
+Permission:
+curricula.manage
+
+Allow:
+- code
+- title
+- description
+- sortOrder
+
+Only if parent version DRAFT
+and curriculum ACTIVE.
+
+25. Topic Reorder
+----------------
+Need intentional API.
+
+Preferred:
+PATCH /api/v1/curriculum-versions/:versionId/topics/reorder
+
+Input:
+{
+  topicIds: string[]
+}
+
+Rules:
+- exact set of current topic IDs
+- no duplicates
+- all belong version
+- version DRAFT
+- update sortOrder = 0..n-1 in transaction
+
+This is safer than arbitrary individual sortOrder editing.
+
+If implemented:
+consider removing direct sortOrder PATCH from topic update.
+
+Choose one consistent approach.
+
+26. Topic Delete / Remove
+-------------------------
+DELETE /api/v1/topics/:id
+
+Question:
+At #003 lessons are not yet business-managed.
+
+Preferred:
+allow delete only if:
+- version DRAFT
+- topic has zero lesson rows
+
+Need own LessonEntity repository if checking count.
+
+This is allowed because lessons are owned by CurriculumModule.
+
+No cascade delete of lessons through service.
+
+If lessons exist:
+409 TopicNotEmptyError
+
+After delete:
+optionally compact sortOrder.
+
+27. Published/Archived Immutability
+----------------------------------
+All topic mutation commands reject if version != DRAFT.
+
+Even though #004 performs publish, #003 must already enforce status check.
+
+28. Curriculum Root Structural Immutability
+-------------------------------------------
+Do NOT allow:
+- parishId update
+- catechismLevelId update
+
+Reason:
+versions/assignments depend on stable ownership.
+
+29. Parish/Level Validation
+---------------------------
+Use public APIs only.
+
+No repository access to:
+parishes
+catechism_levels
+
+Create:
+Parish ACTIVE
+Level belongs parish + ACTIVE
+
+Reads:
+historical allowed if upstream policy permits
+
+30. Current Published Version
+-----------------------------
+Do NOT set currentPublishedVersionId in #003.
+
+#004 publish command owns it.
+
+31. Curriculum Assignment
+-------------------------
+Do NOT implement assignment create/update API yet.
+
+#004 or #005 depending final orchestration.
+
+32. RBAC Permission Catalog
+---------------------------
+Add/wire:
+
+curricula.read
+curricula.manage
+curricula.publish
+
+Even though publish endpoint arrives #004,
+seed permission code now so contract is stable.
+
+Do NOT add lesson-content permissions yet unless already planned for #004.
+
+33. Dev Role Matrix
+-------------------
+Recommended:
+
+SUPER_ADMIN:
+read/manage/publish
+
+PARISH_ADMIN:
+read/manage/publish
+
+CATECHIST:
+read only
+
+PARENT:
+read only or defer until scope #005
+
+STUDENT:
+read only or defer until scope #005
+
+Important:
+global permission alone is NOT sufficient authorization.
+
+#005 will enforce resource scope.
+
+If broad read permission to PARENT/STUDENT creates risk before #005,
+prefer withholding it now.
+
+Be conservative.
+
+34. Interim Authorization Warning
+---------------------------------
+At #003 APIs have global capability checks only unless existing scope service can safely cover admin parish membership without cycles.
+
+Do NOT falsely claim full scoped access.
+
+Preferred:
+- admin mutation endpoints can already enforce parish membership if easy via ParishScopeService public contract
+- learner/catechist delivery scope waits #005
+
+Document exact state.
+
+35. Parish Admin Scope — Optional Early Hardening
+-------------------------------------------------
+If CurriculumModule can depend on ParishModule public ParishScopeService acyclically:
+
+For manage/create/update:
+require parish membership scope now.
+
+This is strongly preferred because these are admin authoring APIs.
+
+Do not wait until #005 if clean and easy.
+
+But do NOT import Class/Enrollment.
+
+36. Publish Permission
+----------------------
+No publish route yet.
+
+Still seed:
+curricula.publish
+
+Tests can assert permission exists.
+
+37. DTOs
+--------
+Create:
+
+CreateCurriculumRequestDto
+UpdateCurriculumRequestDto
+UpdateCurriculumStatusRequestDto
+CurriculumListQueryDto
+CurriculumResponseDto
+CurriculumListResponseDto
+
+CreateCurriculumVersionRequestDto
+CurriculumVersionListQueryDto
+CurriculumVersionResponseDto
+CurriculumVersionListResponseDto
+
+CreateTopicRequestDto
+UpdateTopicRequestDto
+ReorderTopicsRequestDto
+TopicResponseDto
+TopicListResponseDto
+
+Use class-validator.
+
+38. FE-safe Contract
+--------------------
+Timestamps ISO strings.
+UUID strings.
+Enum codes uppercase.
+sourceLocale string.
+No nested entities.
+
+List envelopes match PROJECT_RULES exactly.
+
+39. Swagger
+-----------
+Document:
+- routes
+- bearer auth
+- sourceLocale examples
+- enums
+- pagination
+- 409 conflicts
+- DRAFT-only topic edits
+- permission requirements
+
+Suitable for OpenAPI client generation.
+
+40. Error Types
+---------------
+Examples:
+
+InvalidCurriculumIdError
+CurriculumNotFoundError
+InvalidCurriculumCodeError
+InvalidCurriculumSourceLocaleError
+CurriculumCodeAlreadyExistsError
+CurriculumInactiveError
+CurriculumStructuralFieldImmutableError
+CurriculumSourceLocaleImmutableError
+
+CurriculumVersionNotFoundError
+CurriculumDraftAlreadyExistsError
+CurriculumVersionNotDraftError
+CurriculumVersionNumberConflictError
+
+TopicNotFoundError
+InvalidTopicCodeError
+InvalidTopicTitleError
+TopicCodeAlreadyExistsError
+TopicNotEmptyError
+InvalidTopicReorderError
+
+Reuse upstream parish/academic errors where clean.
+
+41. HTTP Mapping
+---------------
+400:
+validation
+
+401:
+unauthenticated
+
+403:
+permission/scope
+
+404:
+not found
+
+409:
+duplicate/lifecycle/conflict
+
+No SQL leakage.
+
+42. Repository Boundaries
+-------------------------
+CurriculumService may inject:
+- CurriculumEntity repository
+- CurriculumVersionEntity repository
+
+TopicService may inject:
+- TopicEntity repository
+- LessonEntity repository only for zero-lesson delete safety
+
+No external repos.
+
+43. Transactions
+----------------
+Use transaction for:
+- draft version creation if max version + insert race exists
+- topic reorder
+- delete + compact reorder if implemented
+
+44. Unit Tests — Curriculum
+--------------------------
+Test:
+- locale validation
+- code validation
+- create
+- parish/level validation
+- duplicate mapping
+- get/not found
+- list/filter/search
+- update metadata
+- structural immutability
+- sourceLocale mutation policy
+- status active/inactive
+
+45. Unit Tests — Versions
+------------------------
+Test:
+- first draft versionNumber 1
+- no second DRAFT
+- next version number
+- inactive curriculum blocks draft create
+- list/get
+- concurrency conflict mapping if practical
+
+46. Unit Tests — Topics
+----------------------
+Test:
+- create append order
+- code/title validation
+- duplicate code
+- update
+- DRAFT-only
+- reorder exact set
+- delete empty
+- reject delete non-empty
+- stable ordering
+
+47. Integration Tests
+---------------------
+Against MSSQL:
+
+Curriculum:
+- Vietnamese name/description
+- sourceLocale vi-VN
+- sourceLocale fr-FR
+- duplicate same parish/level/code
+- same code other level/parish
+- status
+
+Versions:
+- one DRAFT invariant
+- monotonic version
+- multiple PUBLISHED rows from fixture if needed
+- concurrency-safe create if practical
+
+Topics:
+- create/list
+- reorder transaction
+- duplicate optional code
+- nonnegative sort
+- delete empty
+- reject delete with lesson fixture
+
+48. DB-Aware E2E
+----------------
+Test:
+
+- unauthenticated 401
+- no permission 403
+- curricula.read list/get/version/topic reads
+- read-only cannot mutate
+- curricula.manage create/update/status/version/topic/reorder/delete
+- curricula.publish permission exists in seed
+- duplicate 409
+- invalid locale 400
+- invalid code 400
+- inactive curriculum mutation reject
+- DRAFT-only topic mutation
+
+If ParishScopeService applied:
+cross-parish admin mutation denied.
+
+49. Multilingual Readiness
+--------------------------
+Explicitly confirm:
+
+- sourceLocale returned on API
+- locale wire contract is BCP47-like string
+- country not required
+- enum/status wire values remain language-neutral
+- no translation tables/services added
+- future Localization can reference stable IDs
+- sourceLocale change prevented after published history if selected
+
+50. Existing LearningContent Boundary
+-------------------------------------
+Do NOT modify LessonContentEntity business behavior.
+
+LearningContentModule still no service/controller/export unless a narrow placeholder contract is absolutely needed.
+Prefer no change.
+
+51. Existing Regression
+-----------------------
+Run Auth/Parish/Class/Curriculum schema regression.
+
+52. quality:full Flake Tracking
+-------------------------------
+#002 reported:
+parallel integration flake due shared MSSQL state.
+
+Attempt full quality:full.
+
+If failure:
+- distinguish old shared-state race from #003 regression
+- fix only if small safe test isolation change
+- do not weaken tests
+- carry unresolved infra race to #006
+
+53. No Lesson Business API
+--------------------------
+STRICTLY no:
+LessonService
+lesson create/update routes
+lesson content routes
+
+#004.
+
+54. No Publish Command
+----------------------
+Do NOT implement:
+POST /curriculum-versions/:id/publish
+
+#004.
+
+55. No Clone Command
+--------------------
+Do NOT implement deep clone published → draft.
+
+#004.
+
+56. No Assignment API
+---------------------
+Do NOT implement curriculum assignment mutation.
+
+#004/#005.
+
+57. No Localization System
+--------------------------
+Do NOT implement:
+Google Translate
+TranslationService
+LocalizationModule
+glossary
+translation tables
+
+58. No FE/Mobile Changes
+------------------------
+Do not touch Web or Mobile.
+
+59. Security / Privacy
+----------------------
+Verify:
+- no child PII
+- no raw HTML
+- no contentJson logging
+- sourceLocale not inferred from child country/location
+- admin scope safe if implemented
+- no draft delivery routes to learner roles
+
+60. Microservice Extraction Review
+----------------------------------
+CurriculumModule owns:
+curriculums
+curriculum_versions
+topics
+lessons
+curriculum_assignments
+
+Public APIs/snapshots only.
+
+No Class/Enrollment dependency.
+
+61. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:curriculum-api .
+
+62. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(curriculum): add curriculum topic APIs"
+
+Cursor must NOT execute it.
+
+63. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_003_CURRICULUM_TOPIC_SERVICES_API_RBAC_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #002
+3. Rules applied
+4. Files created
+5. Files modified
+6. CurriculumModule architecture
+7. Public exports
+8. CurriculumSnapshot
+9. CurriculumVersionSnapshot
+10. TopicSnapshot
+11. sourceLocale validation
+12. Curriculum code/name validation
+13. Curriculum create flow
+14. Parish/level validation
+15. Curriculum list/get/update
+16. Structural immutability
+17. sourceLocale mutation policy
+18. Curriculum status lifecycle
+19. Version create flow
+20. Version number concurrency
+21. One DRAFT invariant
+22. Version list/get
+23. Topic create/list/get/update
+24. Topic reorder
+25. Topic delete/non-empty safety
+26. DRAFT immutability enforcement
+27. HTTP routes
+28. DTOs
+29. Error mapping
+30. RBAC permissions
+31. Role matrix
+32. Parish admin scope state
+33. Scoped authorization deferral
+34. Swagger/OpenAPI
+35. Repository boundary
+36. Transaction boundaries
+37. Unit tests
+38. Integration tests
+39. DB-aware e2e
+40. Multilingual readiness audit
+41. Existing regression
+42. quality:full result
+43. Docker result
+44. Microservice extraction review
+45. Commands executed
+46. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- create/list/get/update curriculum
+- curriculum status
+- sourceLocale validation
+- sourceLocale mutation policy
+- version create/list/get
+- one DRAFT
+- version concurrency
+- topic create/list/get/update
+- reorder
+- delete empty
+- reject delete non-empty
+- DRAFT-only mutation
+- auth 401
+- permission 403
+- duplicate 409
+- no cross-module repository/entity
+- no lesson/content implementation
+- no translation subsystem
+- prior regression
+
+47. Known issues/deferred
+48. Out-of-scope confirmation
+49. CURRICULUM #004 readiness
+50. Prompt count status
+51. Commit recommendation
+
+64. CURRICULUM #004 Readiness
+-----------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+CURRICULUM/CONTENT #004 — Lesson + Learning Content + Publish/Clone/Assignment
+
+#004 should implement:
+- LessonService/API
+- LearningContentService/API
+- JSON block validation v1
+- contentHash SHA-256
+- publish command
+- deep clone published → DRAFT preserving canonicalLessonKey
+- curriculum assignment command
+- published immutability
+- tests
+
+Do NOT implement learner scoped delivery until #005.
+
+65. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #003/6 complete
+approximately 3 prompts remain (#004–#006)
+
+66. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM/CONTENT #003 status
+- Curriculum API PASS/FAIL
+- Topic API PASS/FAIL
+- RBAC PASS/FAIL
+- multilingual contract PASS/FAIL
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/CURRICULUM_003_CURRICULUM_TOPIC_SERVICES_API_RBAC_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(curriculum): add curriculum topic APIs"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

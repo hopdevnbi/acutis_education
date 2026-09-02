@@ -1,0 +1,1079 @@
+CURSOR PROMPT — CLASS/PEOPLE/ENROLLMENT #002/7
+SCHEMA + ENTITIES + MIGRATIONS FOUNDATION
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- Parish/Academic Year/Catechism Level
+- CLASS #001 Domain Audit + Bounded Context Design
+
+Current:
+- CLASS/PEOPLE/ENROLLMENT #002 / 7 — Schema + Entities + Migrations
+
+Remaining:
+- #003 Class service + API + RBAC foundations
+- #004 Student + Guardian relationship services/APIs
+- #005 Catechist assignment + Enrollment history services/APIs
+- #006 Scoped authorization hardening + cross-domain integration
+- #007 Final audit + seed/Postman + FE contract readiness
+
+This prompt implements PERSISTENCE FOUNDATION ONLY.
+
+Do NOT implement business services, controllers, DTOs, permissions, scoped guards, seeds, or APIs yet.
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/users/
+   src/modules/parish/
+   src/modules/academic-structure/
+   src/database/
+   src/modules/module-boundaries.spec.ts
+   test/
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Locked Architecture From #001
+--------------------------------
+Selected module split:
+
+StudentModule
+- owns students
+- owns student_guardians
+
+ClassModule
+- owns classes
+- owns class_catechist_assignments
+
+EnrollmentModule
+- owns enrollments
+
+ParishModule extension:
+- owns parish_memberships
+
+No ParentModule.
+No CatechistProfile table.
+
+Identity model:
+- User = authentication identity only
+- Student = domain profile, optional userId
+- Parent/Guardian = User + student_guardians relationship
+- Catechist = User + class_catechist_assignments relationship
+- Enrollment = first-class historical record
+
+4. Primary Objective
+--------------------
+Implement:
+
+- StudentModule skeleton
+- ClassModule skeleton
+- EnrollmentModule skeleton
+- ParishModule persistence extension for ParishMembershipEntity
+
+Entities:
+- StudentEntity
+- StudentGuardianEntity
+- ClassEntity
+- ClassCatechistAssignmentEntity
+- EnrollmentEntity
+- ParishMembershipEntity
+
+Enums:
+- StudentStatus
+- GuardianRelationshipType
+- GuardianLinkStatus
+- ClassStatus
+- CatechistAssignmentRole
+- CatechistAssignmentStatus
+- EnrollmentStatus
+- ParishMembershipStatus
+
+Migration(s):
+- all new tables
+- FKs
+- indexes
+- filtered unique indexes
+- checks if justified
+
+Tests:
+- entity metadata
+- module boundary
+- migration integration
+- constraint behavior
+- UUID/no DB defaults
+- no cross-module ORM relations
+
+5. UUID Strategy
+----------------
+Use established project pattern:
+
+- uniqueidentifier PK
+- application-generated UUID v4
+- existing UUID helper
+- no DB UUID default
+- no NEWID()
+- no NEWSEQUENTIALID()
+- no PrimaryGeneratedColumn
+
+6. StudentModule Skeleton
+-------------------------
+Create:
+src/modules/student/student.module.ts
+
+Register:
+- StudentEntity
+- StudentGuardianEntity
+
+At #002:
+- no providers
+- no controllers
+- no exports
+
+Persistence private.
+
+7. ClassModule Skeleton
+-----------------------
+Create:
+src/modules/class/class.module.ts
+
+Register:
+- ClassEntity
+- ClassCatechistAssignmentEntity
+
+At #002:
+- no providers
+- no controllers
+- no exports
+
+Persistence private.
+
+8. EnrollmentModule Skeleton
+----------------------------
+Create:
+src/modules/enrollment/enrollment.module.ts
+
+Register:
+- EnrollmentEntity
+
+At #002:
+- no providers
+- no controllers
+- no exports
+
+Persistence private.
+
+9. ParishModule Extension
+-------------------------
+Add ParishMembershipEntity to ParishModule persistence registration.
+
+Do NOT create service methods yet.
+
+ParishModule public exports must remain exactly as before:
+- ParishService only
+
+Do NOT export ParishMembershipEntity or TypeOrmModule.
+
+10. Student Entity
+------------------
+Table:
+students
+
+Fields:
+
+id
+- uniqueidentifier PK
+- app UUID v4
+
+user_id
+- uniqueidentifier
+- nullable
+- scalar only
+- FK -> users.id
+- no ORM User relation
+
+full_name
+- nvarchar(128)
+- NOT NULL
+
+status
+- varchar(32)
+- NOT NULL
+- ACTIVE | INACTIVE
+
+created_at
+updated_at
+- datetime2 UTC
+
+Do NOT add:
+- parish_id
+- date_of_birth
+- gender
+- notes
+- sacramental fields
+- contact fields
+- student code
+
+11. Student Optional User Link
+-----------------------------
+Filtered unique index:
+
+one student profile per linked user:
+
+UQ_students_user_id
+WHERE user_id IS NOT NULL
+
+Do not enforce every student has userId.
+
+12. Student Guardian Entity
+---------------------------
+Table:
+student_guardians
+
+Fields:
+
+id
+student_id
+guardian_user_id
+relationship_type
+is_primary
+status
+starts_at
+ends_at
+created_at
+updated_at
+
+Types:
+
+id uniqueidentifier PK
+student_id uniqueidentifier NOT NULL
+guardian_user_id uniqueidentifier NOT NULL
+
+relationship_type varchar(32):
+PARENT
+GUARDIAN
+OTHER
+
+is_primary bit NOT NULL default 0
+
+status varchar(32):
+ACTIVE
+ENDED
+
+starts_at datetime2 NOT NULL
+ends_at datetime2 NULL
+
+created_at / updated_at datetime2
+
+No ORM relation to StudentEntity or UserEntity if relation crosses module/user boundary.
+Within StudentModule an ORM relation to StudentEntity is also unnecessary; prefer scalar IDs consistently.
+
+13. Student Guardian History Constraint
+---------------------------------------
+Important audit correction from #001:
+
+The report suggested unique `(student_id, guardian_user_id)` while also preferring a new row after ENDED for audit history.
+
+Those two goals conflict.
+
+Resolve now.
+
+Preferred persistence model:
+allow historical re-link rows.
+
+Therefore use FILTERED UNIQUE INDEX:
+one ACTIVE guardian link per `(student_id, guardian_user_id)`
+
+Example name:
+UQ_student_guardians_student_id_guardian_user_id_active
+WHERE status = 'ACTIVE'
+
+Do NOT use permanent unique pair across all history.
+
+This is important.
+
+14. Primary Guardian Constraint
+-------------------------------
+#001 planned "at most one primary per student" at application layer.
+
+Do NOT enforce in DB in #002 unless a clean filtered unique index is straightforward.
+
+Possible:
+unique student_id WHERE is_primary=1 AND status='ACTIVE'
+
+Evaluate.
+
+Preferred:
+add filtered unique index if MSSQL supports it cleanly and semantics are stable.
+
+Example:
+UQ_student_guardians_student_id_primary_active
+ON student_guardians(student_id)
+WHERE is_primary = 1 AND status = 'ACTIVE'
+
+This gives strong invariant.
+
+Document decision.
+
+15. Class Entity
+---------------
+Table:
+classes
+
+Fields:
+
+id
+parish_id
+academic_year_id
+catechism_level_id
+code
+name
+status
+created_at
+updated_at
+
+Types:
+
+id uniqueidentifier PK
+
+parish_id uniqueidentifier NOT NULL
+academic_year_id uniqueidentifier NOT NULL
+catechism_level_id uniqueidentifier NOT NULL
+
+code varchar(32) NOT NULL
+name nvarchar(128) NOT NULL
+
+status varchar(32):
+PLANNED
+ACTIVE
+COMPLETED
+CANCELLED
+
+timestamps datetime2
+
+No:
+capacity
+description
+start/end dates
+
+16. Class Constraints
+---------------------
+FK:
+parish_id -> parishes.id
+academic_year_id -> academic_years.id
+catechism_level_id -> catechism_levels.id
+
+ON DELETE:
+NO ACTION / RESTRICT
+
+Unique:
+(parish_id, academic_year_id, code)
+
+Name:
+UQ_classes_parish_id_academic_year_id_code
+
+Indexes:
+IX_classes_parish_id_academic_year_id
+IX_classes_parish_id_status
+IX_classes_academic_year_id
+IX_classes_catechism_level_id
+
+Do not over-index.
+
+17. Cross-Domain Consistency
+----------------------------
+DB FKs alone cannot verify that:
+academic_year_id belongs to parish_id
+catechism_level_id belongs to parish_id
+
+That belongs to service validation in #003.
+
+Do NOT add triggers.
+
+18. Class Catechist Assignment Entity
+-------------------------------------
+Table:
+class_catechist_assignments
+
+Fields:
+
+id
+class_id
+catechist_user_id
+assignment_role
+status
+assigned_at
+ended_at
+created_at
+updated_at
+
+assignment_role:
+LEAD
+
+Important:
+#001 reserved future ASSISTANT but said only LEAD currently.
+
+Enum may include only LEAD now.
+
+Do not add unused ASSISTANT unless needed for forward schema compatibility.
+
+Prefer minimal enum now:
+LEAD
+
+status:
+ACTIVE
+ENDED
+
+19. Catechist Assignment History Constraint
+-------------------------------------------
+Filtered unique:
+one ACTIVE assignment per `(class_id, catechist_user_id)`
+
+Name:
+UQ_class_catechist_assignments_class_id_user_id_active
+
+Do not unique all history.
+
+FK:
+class_id -> classes.id
+catechist_user_id -> users.id
+
+No ORM User relation.
+
+Indexes:
+IX_class_catechist_assignments_class_id_status
+IX_class_catechist_assignments_catechist_user_id_status
+
+20. Enrollment Entity
+---------------------
+Table:
+enrollments
+
+Fields:
+
+id
+student_id
+class_id
+parish_id
+academic_year_id
+status
+enrolled_at
+left_at
+created_at
+updated_at
+
+Types:
+
+uniqueidentifier for IDs
+varchar(32) status
+datetime2 timestamps
+
+Status:
+ACTIVE
+COMPLETED
+WITHDRAWN
+TRANSFERRED
+
+No PENDING/CANCELLED.
+
+21. Enrollment Denormalized Keys
+--------------------------------
+Store:
+- parish_id
+- academic_year_id
+
+These are copied from class at creation in future service.
+
+Treat immutable after creation.
+
+Persistence #002 should define columns/FKs only.
+
+22. Enrollment FKs
+------------------
+student_id -> students.id
+class_id -> classes.id
+parish_id -> parishes.id
+academic_year_id -> academic_years.id
+
+All NO ACTION / RESTRICT.
+
+No cross-module ORM relations.
+
+23. Active Enrollment Invariant
+-------------------------------
+Filtered unique:
+
+one ACTIVE enrollment per:
+(student_id, academic_year_id, parish_id)
+
+Name:
+UQ_enrollments_student_id_academic_year_id_parish_id_active
+
+WHERE status='ACTIVE'
+
+This supports transfer/history.
+
+24. Enrollment Indexes
+----------------------
+Add:
+
+IX_enrollments_class_id_status
+IX_enrollments_student_id
+IX_enrollments_parish_id_academic_year_id
+
+Do not add redundant index if covered by unique filtered index unless justified.
+
+25. Enrollment Timestamp Checks
+-------------------------------
+Consider DB CHECK:
+
+left_at IS NULL when status='ACTIVE'
+
+and:
+left_at IS NOT NULL for terminal statuses
+
+But service transitions will manage this.
+
+Evaluate whether DB CHECK is stable enough.
+
+Preferred:
+add CHECK enforcing consistency if expression is simple.
+
+Example concept:
+(status='ACTIVE' AND left_at IS NULL)
+OR
+(status IN ('COMPLETED','WITHDRAWN','TRANSFERRED') AND left_at IS NOT NULL)
+
+This protects history.
+
+If added:
+explicit stable constraint name.
+
+26. Parish Membership Entity
+----------------------------
+Table:
+parish_memberships
+
+Owner:
+ParishModule
+
+Fields:
+
+id
+parish_id
+user_id
+status
+joined_at
+ended_at
+created_at
+updated_at
+
+Status:
+ACTIVE
+ENDED
+
+27. Parish Membership Constraint
+--------------------------------
+Filtered unique:
+one ACTIVE membership per `(parish_id, user_id)`
+
+Name:
+UQ_parish_memberships_parish_id_user_id_active
+
+FK:
+parish_id -> parishes.id
+user_id -> users.id
+
+Indexes:
+IX_parish_memberships_user_id_status
+IX_parish_memberships_parish_id_status
+
+28. Parish Membership Timestamp Check
+-------------------------------------
+Evaluate same pattern:
+
+ACTIVE -> ended_at NULL
+ENDED -> ended_at NOT NULL
+
+Add CHECK if stable.
+
+29. Guardian Timestamp Check
+----------------------------
+Likewise:
+
+ACTIVE -> ends_at NULL
+ENDED -> ends_at NOT NULL
+
+Add CHECK if stable.
+
+30. Catechist Assignment Timestamp Check
+----------------------------------------
+ACTIVE -> ended_at NULL
+ENDED -> ended_at NOT NULL
+
+Add CHECK if stable.
+
+31. Enum Location
+-----------------
+Keep enums inside owning modules.
+
+StudentModule:
+StudentStatus
+GuardianRelationshipType
+GuardianLinkStatus
+
+ClassModule:
+ClassStatus
+CatechistAssignmentRole
+CatechistAssignmentStatus
+
+EnrollmentModule:
+EnrollmentStatus
+
+ParishModule:
+ParishMembershipStatus
+
+Do NOT put in common/shared.
+
+32. AppModule Registration
+--------------------------
+Register:
+- StudentModule
+- ClassModule
+- EnrollmentModule
+
+Do not disturb:
+- AppModule.forRoot()
+- auth demo gating
+- existing modules
+
+33. Migration Strategy
+----------------------
+Create one cohesive new migration or a small ordered pair if necessary.
+
+Preferred one migration:
+create-class-people-enrollment-schema
+
+Create order:
+
+1. parish_memberships
+2. students
+3. student_guardians
+4. classes
+5. class_catechist_assignments
+6. enrollments
+
+But ensure FK dependencies are respected.
+
+Down reverse order.
+
+Do not edit committed migrations.
+
+34. Migration Naming
+--------------------
+Use project timestamp convention.
+
+Class/file timestamp consistent.
+
+35. Cross-Module ORM Rule
+-------------------------
+CRITICAL:
+
+No:
+@ManyToOne
+@OneToMany
+@JoinColumn
+between bounded contexts.
+
+Prefer scalar IDs even within module if relationships are not needed for ORM navigation.
+
+No UserEntity imports into:
+StudentModule
+ClassModule
+ParishMembership persistence
+
+No ParishEntity imports into ClassModule persistence.
+
+No ClassEntity import into Enrollment entity if it creates ORM relation.
+Scalar classId only.
+
+36. Metadata Tests
+-----------------
+Add entity metadata tests verifying:
+
+- table names
+- column types
+- enum varchar lengths
+- UUID PK not DB-generated
+- zero cross-module relations
+- nullable optional userId
+- date/time types
+
+37. UUID Generation Tests
+------------------------
+Verify all new entities get app UUID v4.
+
+Explicit ID preservation.
+
+38. Migration Integration Tests
+-------------------------------
+Against catechism_api_test verify:
+
+tables exist:
+parish_memberships
+students
+student_guardians
+classes
+class_catechist_assignments
+enrollments
+
+Verify:
+- FKs
+- unique indexes
+- filtered predicates
+- check constraints
+- UUID no defaults
+- nvarchar full_name/name
+- scalar IDs
+
+39. Constraint Behavior Tests — Students
+---------------------------------------
+Test:
+
+- multiple students with null user_id allowed
+- same non-null user_id second student rejected
+- invalid user FK rejected
+- Vietnamese full_name round-trip
+
+40. Constraint Behavior Tests — Guardians
+-----------------------------------------
+Test:
+
+- ACTIVE guardian link duplicate pair rejected
+- ENDED historical row + new ACTIVE row allowed
+- two guardians per student allowed
+- one guardian across multiple students allowed
+- primary active uniqueness if index added
+- invalid student/user FK rejected
+- timestamp CHECK if added
+
+41. Constraint Behavior Tests — Classes
+---------------------------------------
+Test:
+
+- duplicate class code same parish/year rejected
+- same code different year allowed
+- same code different parish allowed
+- invalid parish/year/level FK rejected
+
+Cross-parish semantic mismatch may still pass DB because all FKs individually valid.
+Document that #003 service validation handles it.
+
+42. Constraint Behavior Tests — Catechists
+------------------------------------------
+Test:
+
+- duplicate ACTIVE assignment same class/user rejected
+- ENDED history + new ACTIVE allowed
+- same user assigned to multiple classes allowed
+- invalid FKs rejected
+- timestamp CHECK if added
+
+43. Constraint Behavior Tests — Enrollment
+------------------------------------------
+Test:
+
+- one ACTIVE enrollment per student/parish/year
+- terminal old + new ACTIVE allowed
+- different academic year active allowed
+- different parish same year active allowed
+- invalid FKs rejected
+- left_at/status consistency if CHECK added
+
+44. Constraint Behavior Tests — Parish Membership
+-------------------------------------------------
+Test:
+
+- one ACTIVE membership per parish/user
+- ENDED historical + new ACTIVE allowed
+- user can have ACTIVE memberships in multiple parishes
+- invalid FKs rejected
+- timestamp consistency
+
+45. Module Boundary Tests
+-------------------------
+Extend `src/modules/module-boundaries.spec.ts`.
+
+At #002 expected:
+
+StudentModule exports:
+nothing
+
+ClassModule exports:
+nothing
+
+EnrollmentModule exports:
+nothing
+
+ParishModule remains:
+ParishService only
+
+Assert:
+- no TypeOrmModule export
+- no entity exports
+- no repository exports
+
+46. Existing Regression
+-----------------------
+All prior:
+- Auth
+- RBAC
+- Parish
+- Academic structure
+tests must continue passing.
+
+47. No Services
+---------------
+STRICTLY do NOT implement:
+
+StudentService
+GuardianService
+ClassService
+EnrollmentService
+ParishMembershipService
+Scope services
+
+48. No Controllers / APIs
+-------------------------
+Do NOT add HTTP controllers or DTOs.
+
+49. No Permissions
+------------------
+Do NOT seed:
+students.*
+class-catechists.*
+enrollments.*
+student-guardians.*
+
+Existing classes placeholders may remain unchanged.
+
+50. No Scoped Authorization Yet
+-------------------------------
+Do NOT implement:
+ParishScopeService
+ClassScopeService
+StudentAccessService
+
+That belongs #006.
+
+51. No Domain Seed
+------------------
+Do NOT add class/student/enrollment demo seed in #002.
+
+52. No FE Changes
+-----------------
+Do NOT touch React repo.
+
+53. Security / Privacy
+----------------------
+Verify new foundational schema stores only minimal child PII:
+
+students:
+- full_name
+- optional user_id
+- status
+
+No:
+date_of_birth
+gender
+address
+phone
+medical/pastoral/sacramental notes
+
+54. Docker / CI
+---------------
+No new dependencies expected.
+
+Run production Docker build because AppModule/modules/entities change.
+
+CI should remain compatible.
+
+55. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Migration:
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:class-schema .
+
+56. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(class): add student class enrollment schema"
+
+Cursor must NOT execute it.
+
+57. Required Report
+-------------------
+Create:
+
+docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #001
+3. Rules applied
+4. Files created
+5. Files modified
+6. Module skeletons
+7. ParishMembershipEntity
+8. StudentEntity
+9. StudentGuardianEntity
+10. ClassEntity
+11. ClassCatechistAssignmentEntity
+12. EnrollmentEntity
+13. Enum definitions
+14. UUID strategy
+15. Migration
+16. FK strategy
+17. Cross-module ORM audit
+18. Filtered unique indexes
+19. Historical re-link/re-assignment design
+20. Timestamp CHECK constraints
+21. Index strategy
+22. Module export audit
+23. Metadata tests
+24. UUID tests
+25. Migration integration tests
+26. Student constraint tests
+27. Guardian constraint tests
+28. Class constraint tests
+29. Catechist assignment constraint tests
+30. Enrollment constraint tests
+31. Parish membership constraint tests
+32. Unicode validation
+33. Privacy/minor data audit
+34. Existing Auth/Parish regression
+35. Fresh DB migration result
+36. Migration re-run result
+37. Docker validation
+38. Module boundary matrix
+39. Future microservice extraction review
+40. Commands executed
+41. Validation results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- required tables
+- UUID no DB defaults
+- FKs
+- filtered unique indexes
+- history rows allowed after ENDED/terminal
+- one active enrollment invariant
+- guardian primary invariant if implemented
+- timestamp checks
+- Vietnamese full_name
+- no cross-module ORM relation
+- no persistence exports
+- prior phase regression
+42. Known issues/deferred
+43. Out-of-scope confirmation
+44. CLASS #003 readiness
+45. Prompt count status
+46. Commit recommendation
+
+58. CLASS #003 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+CLASS/PEOPLE/ENROLLMENT #003 — Class Service + API + RBAC Foundations
+
+#003 should implement:
+- ClassService
+- class create/list/get/update/status
+- Parish/Academic/Level public validation
+- class lifecycle
+- classes.read/manage RBAC
+- safe snapshots
+- HTTP API
+- tests
+
+No Student/Guardian/Enrollment behavior yet.
+
+59. Prompt Count
+----------------
+State:
+#002/7 complete
+approximately 5 prompts remain
+
+60. Final Response
+------------------
+Respond concisely:
+
+- CLASS/PEOPLE/ENROLLMENT #002 status
+- schema/migrations PASS/FAIL
+- historical constraint design PASS/FAIL
+- module boundary PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(class): add student class enrollment schema"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

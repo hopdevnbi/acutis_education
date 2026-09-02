@@ -1,0 +1,946 @@
+CURSOR PROMPT — CI/CD BE #004/4
+FINAL BITBUCKET CI AUDIT + HARDENING
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend Foundation: COMPLETE.
+
+CI/CD Bitbucket phase:
+- CI #001 — Audit + Pipeline Conventions: COMPLETE
+- CI #002 — Bitbucket Pipeline Baseline: COMPLETE
+- CI #003 — MSSQL Integration + Docker Build Gates: COMPLETE
+- CI #004 — Final CI Audit + Hardening: CURRENT
+
+This is the FINAL prompt of the backend CI/CD foundation phase.
+
+Current CI architecture:
+
+Pull Requests:
+- Quality
+
+master:
+- Quality
+- Database Tests
+- Docker Build
+
+custom:
+- full-ci
+  - Quality
+  - Database Tests
+  - Docker Build
+
+Current pipeline capabilities:
+- Node 22.23.1
+- npm ci
+- npm cache
+- npm run quality
+- npm audit
+- MSSQL service
+- DB readiness wait helper
+- DB migration validation
+- DB integration tests
+- DB-aware e2e
+- production Docker target build
+- no deployment
+- no registry push
+
+Important repository fact:
+- current Git remote is still GitHub
+- Bitbucket hosted execution has NOT yet been validated
+- pipeline YAML is prepared for Bitbucket activation later
+
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/CI_001_BITBUCKET_PIPELINE_AUDIT_AND_CONVENTIONS_REPORT.md
+5. Read:
+   docs/CI_002_BITBUCKET_PIPELINE_BASELINE_REPORT.md
+6. Read:
+   docs/CI_003_MSSQL_INTEGRATION_AND_DOCKER_BUILD_GATES_REPORT.md
+7. Read:
+   docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+8. Inspect:
+   bitbucket-pipelines.yml
+   package.json
+   package-lock.json
+   .npmrc
+   Dockerfile
+   docker-compose.yml
+   README.md
+   scripts/
+   src/database/
+   test/database/
+   .env.example
+   .env.test.example
+   .gitignore
+9. Inspect Git status using read-only commands.
+
+Do not assume CI #003 is perfect because local validation passed.
+
+2. Primary Objective
+--------------------
+Perform an independent final audit of the entire backend Bitbucket CI design and fix only genuine CI-level issues.
+
+Goals:
+
+- verify YAML structure
+- verify trigger semantics
+- verify step reuse
+- verify fast PR feedback
+- verify master full validation
+- verify custom full-ci
+- verify Node/npm reproducibility
+- verify cache strategy
+- verify MSSQL service design
+- verify DB readiness reliability
+- verify CI env-only DataSource behavior
+- verify DB safety
+- verify secret handling
+- verify Docker build gate
+- verify Linux portability
+- verify pipeline failure ordering
+- review duplicate work
+- review resource/time assumptions
+- review artifacts/caching
+- remove small CI technical debt
+- prepare future staging/deployment extension points
+- keep deployment OUT OF SCOPE
+
+3. Audit First, Then Change
+---------------------------
+Perform a structured audit before editing.
+
+Classify findings:
+
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+- NO ACTION
+
+For every finding:
+- identify actual risk
+- determine whether it affects CI correctness
+- determine whether fix is within current scope
+- avoid speculative optimization
+
+Only implement justified fixes.
+
+4. Git Policy — CRITICAL
+------------------------
+Cursor must NEVER run:
+
+git add
+git commit
+git push
+
+Permanent user rule.
+
+If tracked code/config/permanent docs change:
+Cursor must print exactly ONE recommended command:
+
+git commit -m "<concise conventional commit message>"
+
+Cursor must NOT execute it.
+
+If no tracked changes:
+state:
+No code/config changes; no commit message required.
+
+5. Pipeline Trigger Audit
+-------------------------
+Review `bitbucket-pipelines.yml`.
+
+Verify intended behavior:
+
+PR:
+- Quality only
+
+master:
+- Quality
+- Database Tests
+- Docker Build
+
+custom full-ci:
+- Quality
+- Database Tests
+- Docker Build
+
+Check:
+- correct Bitbucket syntax
+- no accidental `default:` pipeline
+- no duplicate trigger behavior that causes unnecessary double builds
+- branch key correctly targets current default branch assumption
+- PR wildcard syntax is correct
+
+If Bitbucket trigger semantics may cause both branch and PR pipelines to run for same commit, document this clearly.
+
+Do not invent repository settings not visible in code.
+
+6. Default Branch Assumption
+----------------------------
+Current Git branch is `master`.
+
+Audit whether:
+- pipeline explicitly targets `master`
+- README documents this
+- future Bitbucket default branch should match
+
+Do not automatically rename branches.
+
+If repository later uses `main`, this will require pipeline update.
+Document the assumption.
+
+7. Step Reuse / YAML Anchor Audit
+---------------------------------
+Review anchors:
+
+- quality step
+- database tests step
+- docker build step
+
+Verify:
+- no YAML alias misuse
+- services remain attached only where needed
+- caches remain attached only where needed
+- variables do not accidentally leak into unrelated steps
+- max-time values are placed correctly
+
+Keep YAML readable.
+
+Do not remove anchors if they improve maintainability.
+
+8. Fast PR Gate Audit
+---------------------
+Verify PR step remains:
+
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+No:
+- MSSQL
+- Docker
+- secret requirement
+- .env generation
+
+Confirm this can run from a clean checkout.
+
+Run it again locally.
+
+9. Master Gate Audit
+--------------------
+Verify master order:
+
+1. Quality
+2. Database Tests
+3. Docker Build
+
+Sequential/fail-fast.
+
+Important:
+- Database Tests must not run when Quality fails
+- Docker Build must not run when DB Tests fail
+
+Confirm YAML naturally provides this behavior.
+
+10. Custom full-ci Audit
+------------------------
+Verify custom `full-ci` is real and complete.
+
+No placeholder steps.
+
+Same gates as master.
+
+Do not add deployment to custom full-ci.
+
+11. Node Runtime Audit
+----------------------
+Verify pipeline image remains exactly:
+
+node:22.23.1-bookworm-slim
+
+Check Dockerfile uses compatible same Node baseline.
+
+Verify:
+- package.json engines
+- .nvmrc
+- .npmrc engine-strict
+
+No floating Node tags.
+
+Do not upgrade Node.
+
+12. npm Reproducibility Audit
+-----------------------------
+Verify every Node step uses:
+
+npm ci
+
+not:
+npm install
+
+Review:
+- package-lock committed
+- no step mutates lockfile
+- no global npm install
+- no cache of node_modules
+
+Run `npm ci` from current clean dependency state.
+
+13. Cache Audit
+---------------
+Current cache:
+~/.npm
+
+Review:
+- useful
+- safe
+- not caching secrets
+- not caching node_modules
+- not caching dist
+- no stale test DB data
+
+Do not introduce complicated custom cache keys unless clearly beneficial.
+
+14. Duplicate Work Audit
+------------------------
+Current master/custom flow:
+
+Quality step:
+- npm ci
+- quality
+
+Database Tests:
+- npm ci
+- DB-specific test commands
+
+This repeats npm ci.
+
+Audit whether this is acceptable.
+
+Preferred default:
+KEEP separate installs for step isolation and reproducibility unless CI runtime data proves it is too expensive.
+
+Do not prematurely merge Quality and DB tests into one giant step.
+
+Document decision.
+
+15. MSSQL Service Audit
+-----------------------
+Review custom service:
+
+mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04
+
+Verify variables:
+- ACCEPT_EULA
+- MSSQL_PID
+- MSSQL_SA_PASSWORD=$DB_PASSWORD
+
+Check:
+- no hard-coded password
+- only DB step attaches service
+- test DB only
+- no production DB
+
+Do not change SQL image without concrete reason.
+
+16. MSSQL Networking Audit
+--------------------------
+Current CI assumption:
+DB_HOST=localhost
+DB_PORT=1433
+
+Verify against Bitbucket service-container semantics as far as possible.
+
+If there is uncertainty that could cause first hosted run failure:
+document clearly.
+
+Do not replace with Compose service DNS without evidence.
+
+17. MSSQL Readiness Script Audit
+--------------------------------
+Review:
+
+scripts/wait-for-mssql.ts
+npm run ci:wait-for-mssql
+
+Audit:
+- config validation
+- retry count
+- retry delay
+- total wait
+- connection timeout
+- cleanup
+- SELECT 1
+- password redaction
+- exit code
+- useful error output
+
+Verify it does NOT:
+- log password
+- run forever
+- swallow final failure
+- rely on WSL
+- require .env
+
+If tuning is justified, keep values reasonable.
+
+18. First Hosted Run Robustness
+-------------------------------
+MSSQL cold start in hosted CI may be slower than local.
+
+Evaluate current:
+- 30 attempts
+- 2s delay
+- 5s connection timeout
+
+Determine whether worst-case total behavior is acceptable.
+
+Avoid extremely long CI waits.
+
+If adjusting:
+- document reason
+- test helper behavior
+
+19. CI DataSource Audit
+-----------------------
+Review:
+
+load-cli-data-source-environment.ts
+data-source.ts
+load-test-environment.ts
+
+Verify:
+
+Local:
+- `.env` required
+- `.env.example` not used as runtime fallback
+
+CI:
+- `CI=true`
+- env-only mode
+- no `.env` required
+- required DB vars validated
+- test env examples do not override CI variables
+
+No unsafe bypass.
+
+20. CI Environment Variable Audit
+---------------------------------
+Review all DB variables in pipeline.
+
+Expected:
+CI=true
+NODE_ENV=test
+DB_HOST=localhost
+DB_PORT=1433
+DB_NAME=catechism_api_test
+DB_USER=sa
+DB_PASSWORD=$DB_PASSWORD
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=true
+SWAGGER_ENABLED=false
+
+Check:
+- safe constants can live in YAML
+- secret only as secured variable
+- no empty/default DB password
+- no production values
+
+21. Test DB Safety Audit
+------------------------
+Verify CI still benefits from:
+- `_test` guard
+- explicit catechism_api block
+- runtime DB_NAME assertion
+- fresh/disposable MSSQL service
+
+Run guard negative test again.
+
+Do not weaken safety because CI DB is ephemeral.
+
+22. DB Test Step Audit
+----------------------
+Current intended commands:
+
+npm ci
+npm run ci:wait-for-mssql
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Review order.
+
+Check:
+- migrations validated before tests
+- integration/e2e use test DB
+- no production migration command
+- no duplicate meaningless DB reset
+- no auto schema sync
+
+Do not replace with `migration:run`.
+
+23. `quality:full` Relationship
+-------------------------------
+Current pipeline uses DB-specific scripts rather than:
+
+npm run quality:full
+
+because Quality already passed.
+
+Audit that semantics are equivalent enough for CI.
+
+Confirm:
+quality:full remains useful locally.
+
+Do not remove it.
+
+24. Docker Build Step Audit
+---------------------------
+Current:
+
+docker build --target production -t catechism-api:ci .
+
+Review:
+- production target
+- no registry push
+- no login
+- no secrets
+- no build args with credentials
+- Dockerfile production stage actually builds
+- Docker service attached only here
+
+Run production Docker build again if Docker available.
+
+25. Docker Service Audit
+------------------------
+Verify Bitbucket built-in docker service reference syntax.
+
+Do not add:
+- docker-in-docker custom image
+- Compose
+- registry credentials
+- remote layer cache
+
+Keep first version simple.
+
+26. Docker Context Audit
+------------------------
+Review `.dockerignore`.
+
+Confirm excludes:
+- .env
+- .env.test
+- docs
+- git
+- node_modules
+- dist
+- coverage
+- local temp
+
+No secret files in Docker context.
+
+27. YAML Static Validation
+--------------------------
+Parse `bitbucket-pipelines.yml`.
+
+Use available YAML parser.
+
+Inspect anchor expansion if practical.
+
+Confirm no unsupported duplicate keys.
+
+If a Bitbucket-specific validator is available without requiring account access, use it.
+
+Do not claim hosted Bitbucket validation unless actual pipeline runs.
+
+28. Hosted Bitbucket Run Status
+-------------------------------
+Check Git remote.
+
+If still GitHub:
+- explicitly state hosted Bitbucket pipeline still not executed
+- this remains a validation limitation, not a source-code blocker
+
+Do NOT modify remote.
+
+Do NOT create Bitbucket account/repository automatically.
+
+29. Security Audit
+------------------
+Search pipeline/scripts/README for:
+- passwords
+- tokens
+- credentials
+- accidental .env content
+- registry auth
+- deployment keys
+
+Verify:
+- DB_PASSWORD only referenced symbolically
+- no `env` / `printenv` dump
+- no secret written to file
+- no secret artifact
+
+30. README CI Audit
+-------------------
+Review CI documentation.
+
+It should accurately describe:
+- PR behavior
+- master behavior
+- custom full-ci
+- required secured variable DB_PASSWORD
+- no deploy
+- Bitbucket activation requirement
+
+Keep concise.
+
+Fix stale docs if needed.
+
+31. Artifacts Audit
+-------------------
+Current CI has no artifacts.
+
+Evaluate:
+- coverage artifacts
+- test reports
+- dist
+
+Preferred:
+Do NOT add artifacts unless they provide concrete debugging value now.
+
+No arbitrary artifacts.
+
+Document decision.
+
+32. Coverage Audit
+------------------
+Current pipeline quality does not run test:cov separately.
+
+Review whether this is acceptable.
+
+Preferred:
+keep current behavior unless coverage reporting is now explicitly required.
+
+Do not add arbitrary thresholds.
+
+33. Resource / Time Audit
+-------------------------
+Review:
+- max-time Quality
+- DB step timeout
+- Docker build timeout
+- MSSQL memory needs
+
+Do not invent unsupported Bitbucket resource syntax.
+
+If step `size` configuration is not necessary, leave default.
+
+Document potential first-hosted-run tuning point.
+
+34. Linux Portability Audit
+---------------------------
+Verify all CI-used scripts are Linux compatible.
+
+No:
+- PowerShell
+- WSL
+- Windows drive paths
+- backslash path assumptions
+
+Local WSL helper remains outside pipeline.
+
+35. Failure Diagnostics Audit
+-----------------------------
+Ensure failures produce useful logs without exposing secrets.
+
+Examples:
+- MSSQL timeout clearly says connection failed
+- migration/test failure preserves stack where safe inside CI logs
+- no generic swallowed errors
+
+Do not over-log connection config.
+
+36. No Deployment
+-----------------
+STRICTLY confirm no:
+
+deployment:
+docker login
+docker push
+kubectl
+helm
+terraform
+ssh
+scp
+production migration
+staging deploy
+production deploy
+
+CI/CD phase here is validation only.
+
+37. Future Extension Points
+---------------------------
+Document future structure for:
+- image registry push
+- staging
+- deployment environments
+- manual production promotion
+- production migrations
+
+Do NOT implement any.
+
+38. Potential Fixes
+-------------------
+Allowed fixes:
+- YAML correctness
+- CI portability
+- readiness reliability
+- secret handling
+- README accuracy
+- test script safety
+- Docker context safety
+- timeout/error handling
+
+Not allowed:
+- business code
+- auth
+- DB schema
+- deployment
+- cloud infra
+- CI optimization framework
+
+39. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+Run:
+- unit tests for CI DataSource loader
+- wait-for-MSSQL tests
+- test DB guard tests
+
+If MSSQL available:
+- simulate CI=true env-only DB step
+- ci:wait-for-mssql
+- test:db:migrations
+- test:integration
+- test:e2e:db
+
+If Docker available:
+- production Docker build
+
+Also:
+- YAML parse/validation
+- secret search
+- read-only Git inspection
+
+40. CI Completion Criteria
+--------------------------
+CI/CD BE foundation may be declared COMPLETE only if:
+
+- PR Quality gate correct
+- master full gate correct
+- custom full-ci correct
+- Node exact pin
+- npm ci reproducible
+- npm cache safe
+- MSSQL service correct
+- DB password remains secret
+- CI env-only DataSource works
+- readiness helper bounded/reliable
+- test DB guard active
+- migration validation works
+- DB integration works
+- DB-aware e2e works
+- production Docker build works
+- no deployment
+- Linux portability passes
+- no unresolved BLOCKER/HIGH issue
+
+If unresolved BLOCKER/HIGH:
+do NOT declare complete.
+
+41. Required Report
+-------------------
+Create:
+
+docs/CI_004_FINAL_BITBUCKET_CI_AUDIT_AND_HARDENING_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. CI State Before Audit
+
+3. Audit Method
+
+4. Findings Summary
+Table:
+- ID
+- severity
+- area
+- finding
+- action
+
+5. Pipeline Trigger Audit
+
+6. Default Branch Assumption
+
+7. Step / YAML Anchor Audit
+
+8. PR Quality Gate Audit
+
+9. Master Gate Audit
+
+10. Custom full-ci Audit
+
+11. Node/npm Reproducibility Audit
+
+12. Cache Audit
+
+13. Duplicate Work Decision
+
+14. MSSQL Service Audit
+
+15. MSSQL Networking Audit
+
+16. MSSQL Readiness Audit
+
+17. CI DataSource Audit
+
+18. Environment / Secret Audit
+
+19. Test DB Safety Audit
+
+20. Database Test Step Audit
+
+21. quality:full Relationship
+
+22. Docker Build Gate Audit
+
+23. Docker Context Audit
+
+24. YAML Validation
+
+25. Hosted Bitbucket Execution Status
+
+26. Linux Portability Audit
+
+27. README CI Audit
+
+28. Artifact / Coverage Decision
+
+29. Resource / Timeout Review
+
+30. Security Review
+
+31. Files Created
+
+32. Files Modified
+
+33. Changes Implemented
+For each:
+- problem
+- fix
+- reason
+
+If none:
+state no tracked changes were required.
+
+34. Commands Executed
+
+35. Validation Results
+Explicit PASS/FAIL:
+- npm ci
+- quality
+- audit
+- DataSource CI tests
+- readiness tests
+- guard tests
+- CI-mode DB simulation
+- migrations
+- integration
+- DB e2e
+- Docker build
+- YAML syntax
+- secret review
+- Linux portability
+- no deployment
+
+36. Remaining Issues
+List severity.
+
+37. Future Deployment Extension Points
+
+38. Git Status / Scope Summary
+
+39. Out-of-Scope Confirmation
+
+40. CI/CD Completion Decision
+
+State exactly one:
+
+A.
+BACKEND BITBUCKET CI FOUNDATION COMPLETE
+
+or
+
+B.
+BACKEND BITBUCKET CI FOUNDATION NOT COMPLETE
+
+If B:
+list blockers.
+
+41. Next Phase Recommendation
+
+ONLY if COMPLETE:
+recommend the next roadmap phase.
+
+Do NOT implement it.
+
+42. Commit Message Recommendation
+
+If tracked code/config/permanent docs changed:
+print exactly ONE:
+
+git commit -m "ci: finalize Bitbucket validation pipeline"
+
+If no tracked changes:
+state:
+No code/config changes; no commit message required.
+
+Cursor MUST NOT execute commit.
+
+42. Final Response
+------------------
+When finished, respond concisely with:
+
+- CI #004 status
+- CI foundation COMPLETE / NOT COMPLETE
+- validation PASS/FAIL
+- report path:
+  docs/CI_004_FINAL_BITBUCKET_CI_AUDIT_AND_HARDENING_REPORT.md
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "ci: finalize Bitbucket validation pipeline"
+
+Cursor MUST NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to the next phase automatically.

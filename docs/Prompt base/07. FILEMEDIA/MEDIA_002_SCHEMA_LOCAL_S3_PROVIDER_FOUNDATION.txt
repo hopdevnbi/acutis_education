@@ -1,0 +1,894 @@
+CURSOR PROMPT — FILE/MEDIA #002/4
+SCHEMA + MEDIA MODULE + LOCAL/S3 PROVIDER FOUNDATION
+
+1. Context
+----------
+Completed:
+- FILE/MEDIA #001/4 — Domain Audit + Storage Provider Design
+
+Current:
+FILE/MEDIA #002 / 4
+
+Remaining after this:
+#003 Upload/Read/Delete APIs + RBAC/Security + Curriculum asset validation
+#004 Final hardening + Docker volume + S3 verification + Postman + FE/Mobile readiness
+
+Do NOT implement HTTP upload/download APIs yet unless a minimal internal test harness absolutely requires it.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/MEDIA_001_DOMAIN_AUDIT_AND_STORAGE_PROVIDER_DESIGN_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/config/
+src/modules/
+src/database/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+.env.example
+Dockerfile
+docker-compose files
+
+Inspect git status read-only.
+
+3. Primary Objective
+--------------------
+Implement persistence + provider foundation:
+
+- `media_assets` migration
+- `MediaModule`
+- `MediaAssetEntity`
+- enums
+- safe public snapshot interfaces
+- `StorageProvider` internal interface
+- `LocalStorageProvider`
+- `S3StorageProvider`
+- provider registry/factory/selection
+- media configuration + env validation
+- provider-per-asset resolver
+- local filesystem security
+- S3 SDK dependency
+- unit/integration tests
+- module boundary tests
+- .env.example documentation
+
+NO public HTTP upload/read/delete API yet.
+NO Curriculum integration yet.
+NO RBAC permission seed yet.
+
+4. Selected Architecture
+------------------------
+Module:
+MediaModule
+
+Owns:
+media_assets
+
+Public export target after #002:
+prefer a minimal `MediaAssetService` only if persistence/provider orchestration is implemented now.
+
+If #002 only needs internal foundation:
+it may export a narrow MediaAssetService placeholder with real non-HTTP methods.
+
+Do NOT export:
+- TypeOrmModule
+- MediaAssetEntity
+- repositories
+- StorageProvider
+- LocalStorageProvider
+- S3StorageProvider
+- AWS SDK types
+
+5. media_assets Table
+---------------------
+Implement columns:
+
+id uniqueidentifier PK
+storage_provider varchar(16) NOT NULL
+storage_key nvarchar(512) NOT NULL
+original_file_name nvarchar(260) NOT NULL
+mime_type varchar(127) NOT NULL
+media_category varchar(32) NOT NULL
+size_bytes bigint NOT NULL
+checksum_sha256 char(64) NOT NULL
+status varchar(32) NOT NULL
+visibility varchar(32) NOT NULL
+created_by_user_id uniqueidentifier NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+deleted_at datetime2 NULL
+
+No BLOB/VARBINARY data.
+
+6. Enums
+--------
+MediaStorageProvider:
+- local
+- s3
+
+MediaCategory:
+- IMAGE
+- DOCUMENT
+- AUDIO
+- VIDEO
+
+MediaAssetStatus:
+- PENDING
+- READY
+- FAILED
+- DELETED
+
+MediaVisibility:
+- PRIVATE
+- AUTHENTICATED
+- PUBLIC
+
+Wire values must match DB exactly.
+
+7. DB Constraints
+-----------------
+Add safe constraints:
+
+- size_bytes > 0
+- checksum_sha256 exactly 64 lowercase hex if practical
+- storage_provider allowed values
+- category allowed values
+- status allowed values
+- visibility allowed values
+
+Unique:
+(storage_provider, storage_key)
+
+Indexes:
+(status, created_at)
+created_by_user_id
+
+FK:
+created_by_user_id -> users.id
+ON DELETE NO ACTION
+
+8. UUID Strategy
+----------------
+Application UUID v4.
+No DB NEWID defaults.
+
+Use existing project UUID utilities.
+
+9. Storage Key
+--------------
+Create utility for opaque keys.
+
+Format:
+assets/{yyyy}/{mm}/{assetId}
+
+For S3 prefix:
+prefix applied provider-side/config-side, not duplicated unpredictably in DB unless design explicitly chooses full provider key.
+
+Choose one canonical interpretation and document it.
+
+Strong recommendation:
+DB `storage_key` stores provider-relative key:
+assets/YYYY/MM/{assetId}
+
+S3 provider prepends configured `MEDIA_S3_PREFIX`.
+
+Local provider resolves same storage_key under MEDIA_LOCAL_ROOT.
+
+This makes migration easier.
+
+10. Original Filename Sanitization
+----------------------------------
+Implement utility now if foundation benefits.
+
+Rules:
+- strip path separators
+- strip control characters
+- strip leading dots
+- trim
+- max 260
+- preserve safe Unicode
+- if result empty -> fallback generic name
+
+Do NOT use sanitized filename in storage_key.
+
+11. Checksum Utility
+--------------------
+Implement SHA-256 utility for Buffer/stream if appropriate.
+
+At minimum foundation should expose deterministic checksum helper for #003.
+
+Prefer streaming-capable hash utility.
+
+12. MediaAssetSnapshot
+----------------------
+Create safe public snapshot:
+
+id
+originalFileName
+mimeType
+mediaCategory
+sizeBytes
+checksumSha256
+status
+visibility
+createdAt
+updatedAt
+
+Do NOT expose:
+storageKey
+provider credentials
+bucket
+local path
+
+Provider may be omitted from public snapshot or admin-only.
+Prefer omitted.
+
+13. StorageProvider Internal Interface
+--------------------------------------
+Implement internal contract similar to report:
+
+providerId
+putObject
+getObject
+deleteObject
+exists optional
+createReadUrl optional
+
+No AWS SDK types.
+No Express/Nest response types.
+
+Use Buffer|Readable and safe result contracts.
+
+14. Provider Registry
+---------------------
+CRITICAL:
+Because each asset records provider, Media layer needs access to BOTH providers at runtime if configured/available.
+
+Do NOT only instantiate the globally selected provider if that would prevent reading old LOCAL assets after switching default to S3.
+
+Design:
+- LocalStorageProvider can be available when local root configured
+- S3StorageProvider available when S3 config valid
+- SelectedWriteProvider determines NEW uploads
+- ProviderRegistry resolves provider by stored `storage_provider`
+
+This preserves local/S3 coexistence.
+
+15. Write Provider Selection
+----------------------------
+Config:
+MEDIA_STORAGE_PROVIDER=local|s3|auto
+
+Default unset:
+local
+
+Production:
+auto invalid.
+
+local:
+selected write provider LOCAL
+
+s3:
+selected write provider S3; S3 config required
+
+auto:
+non-prod only:
+if S3 complete + readiness success -> S3
+otherwise LOCAL
+
+16. Dev Fallback
+----------------
+Support:
+MEDIA_STORAGE_ALLOW_LOCAL_FALLBACK=true
+
+Only environment != production.
+
+If requested `s3` cannot initialize/probe:
+- if fallback true -> select LOCAL for NEW writes, warning
+- if false -> fail bootstrap
+
+No per-request fallback.
+
+17. Production Fallback
+-----------------------
+NODE_ENV=production:
+- `auto` rejected
+- local explicit allowed but log/document single-node warning
+- s3 failures must not fallback local
+- `MEDIA_STORAGE_ALLOW_LOCAL_FALLBACK=true` should be rejected or ignored with hard warning; prefer configuration validation failure
+
+18. S3 Configuration
+--------------------
+Add env handling:
+
+MEDIA_S3_BUCKET
+MEDIA_S3_REGION
+MEDIA_S3_ENDPOINT
+MEDIA_S3_ACCESS_KEY_ID
+MEDIA_S3_SECRET_ACCESS_KEY
+MEDIA_S3_FORCE_PATH_STYLE
+MEDIA_S3_PREFIX
+MEDIA_S3_PUBLIC_BASE_URL
+MEDIA_S3_READINESS_PROBE_ENABLED if useful
+
+Credentials:
+If both access key/secret empty:
+allow default AWS credential chain.
+
+If one provided without other:
+configuration error.
+
+19. AWS SDK
+-----------
+Add:
+@aws-sdk/client-s3
+
+If createReadUrl implemented now:
+@aws-sdk/s3-request-presigner
+
+But #003 may add presigner later.
+Do not add unused dependency unless required.
+
+20. S3 Provider
+---------------
+Implement:
+
+putObject:
+PutObjectCommand
+
+getObject:
+GetObjectCommand
+normalize Body to Node Readable or throw typed provider error
+
+deleteObject:
+DeleteObjectCommand
+
+exists:
+HeadObjectCommand optional
+
+createReadUrl:
+defer to #003 unless presigner added now
+
+Handle custom endpoint and forcePathStyle.
+
+No business exceptions leaked from AWS.
+
+21. S3 Prefix Safety
+--------------------
+Normalize prefix:
+- no leading slash
+- optional trailing slash internally
+- no `..`
+- reject invalid/control chars
+
+Construct:
+{prefix}{storageKey}
+
+22. S3 Readiness Probe
+----------------------
+Do NOT force HeadBucket if permissions may deny it.
+
+Preferred:
+config flag to enable readiness probe.
+
+Potential implementation:
+HeadBucket optional only when enabled.
+
+If disabled:
+config validity = readiness.
+
+Document tradeoff.
+
+If auto mode needs probe to decide:
+use minimal configured probe or object operation-safe equivalent.
+If no safe probe available, auto can use config completeness only.
+
+Be conservative.
+
+23. LocalStorageProvider
+------------------------
+Implement:
+- root resolved absolute
+- ensure root exists
+- put atomic temp + rename
+- get Readable
+- delete
+- exists
+- path guard
+
+24. Local Path Guard
+--------------------
+Must reject:
+absolute key
+`..`
+null byte
+escaped root
+symlink target outside root
+
+Generated keys should already be safe, but provider must still defend itself.
+
+25. Symlink Safety
+-----------------
+For reads/deletes:
+resolve real path of existing object and ensure inside root.
+
+For writes:
+ensure parent directories created under root and not symlink escaped.
+
+Add tests.
+
+26. Atomic Local Write
+----------------------
+Write to temporary path under safe root.
+Then rename to final path.
+
+On failure:
+cleanup temp.
+
+27. Provider Error Model
+------------------------
+Internal typed errors:
+
+StorageProviderConfigurationError
+StorageObjectNotFoundError
+StorageWriteError
+StorageReadError
+StorageDeleteError
+StorageUnavailableError
+UnsafeStorageKeyError
+
+MediaAssetService later maps to domain errors.
+
+28. MediaAssetService Foundation
+--------------------------------
+Implement non-HTTP methods needed for #003:
+
+createPendingAssetMetadata(...)
+markAssetReady(...)
+markAssetFailed(...)
+getAssetSnapshot(assetId)
+getAssetRecordForStorage(assetId) internal/private
+assertAssetReady(assetId)
+assertAssetCategory(assetId, category)
+
+If direct repository methods become leaky:
+keep them private/internal.
+
+Could also implement:
+getProviderForAsset(assetId)
+
+But return provider-neutral behavior rather than provider itself across module boundary.
+
+29. Provider-per-Asset Readiness
+--------------------------------
+Test:
+- create LOCAL asset record
+- switch selected write provider to S3 in test config
+- resolving LOCAL record still uses LocalStorageProvider
+- S3 record uses S3StorageProvider
+
+Business logic does not branch on global selected provider for reads.
+
+30. No Public Upload Yet
+------------------------
+Do NOT implement multipart controller.
+#003.
+
+31. No Public Content Read Yet
+------------------------------
+Do NOT implement `/media/assets/:id/content`.
+#003.
+
+32. No Delete API Yet
+---------------------
+Do NOT implement public delete.
+#003/#004 decision.
+
+33. No RBAC Yet
+---------------
+Do NOT seed:
+media.read/upload/manage
+until #003.
+
+34. No Curriculum Integration Yet
+---------------------------------
+Do NOT import MediaModule into LearningContentModule yet unless a compile-time interface test absolutely requires it.
+#003.
+
+35. MIME Detection
+------------------
+Do not over-implement upload MIME sniffing without upload flow.
+
+But decide dependency for #003.
+
+If adding `file-type` library now:
+only if compatible with CommonJS/ESM project setup and justified.
+
+Otherwise defer dependency to #003.
+
+Document.
+
+36. Size Limit Config
+---------------------
+Add env parsing:
+
+MEDIA_MAX_IMAGE_BYTES
+MEDIA_MAX_DOCUMENT_BYTES
+MEDIA_MAX_AUDIO_BYTES
+MEDIA_MAX_VIDEO_BYTES
+
+Defaults per #001:
+10MB
+25MB
+25MB
+100MB
+
+Validate positive and global sanity cap.
+
+37. Presigned TTL Config
+------------------------
+Add:
+MEDIA_PRESIGNED_URL_TTL_SECONDS default 900
+
+Even if presigner not implemented yet.
+
+38. Local Root Config
+---------------------
+MEDIA_LOCAL_ROOT default:
+./storage/uploads
+
+For tests override temp root.
+
+39. .env.example
+----------------
+Add documented variables, no real secrets.
+
+40. Docker
+----------
+Do NOT necessarily add Docker volume yet if phase split says #004.
+
+But ensure `MEDIA_LOCAL_ROOT` supports container path.
+
+If creating local root at runtime:
+do not require folder baked into image.
+
+Document.
+
+41. Unit Tests — Config
+-----------------------
+Test:
+- unset provider -> local
+- explicit local
+- explicit s3 valid
+- s3 missing bucket/region invalid
+- partial credentials invalid
+- production auto invalid
+- production fallback invalid
+- non-prod fallback accepted
+- size limits parsed
+- prefix normalized
+
+42. Unit Tests — Local Provider
+-------------------------------
+Using temp directory:
+- put/get/delete
+- atomic write
+- exists
+- nested safe key
+- traversal reject
+- absolute path reject
+- null byte reject
+- symlink escape reject
+- cleanup
+
+43. Unit Tests — S3 Provider
+----------------------------
+Mock S3Client send.
+
+Verify:
+- PutObjectCommand
+- GetObjectCommand
+- DeleteObjectCommand
+- endpoint/config construction
+- prefix applied once
+- no secret exposure in thrown messages
+- errors wrapped
+
+No live AWS.
+
+44. Unit Tests — Key/Filename
+-----------------------------
+Test:
+- opaque key deterministic format with UUID/date
+- no filename PII
+- filename separators stripped
+- Unicode preserved
+- control chars stripped
+- empty fallback
+
+45. Unit Tests — MediaAssetService
+---------------------------------
+Test:
+- PENDING create
+- READY
+- FAILED
+- get snapshot
+- not found
+- deleted/failed readiness reject
+- category assert
+- provider-per-asset resolver
+
+46. DB Integration Tests
+------------------------
+Fresh MSSQL:
+- table exists
+- no blob columns
+- UUID no default
+- FK
+- provider/key uniqueness
+- enum/check constraints
+- positive size
+- checksum constraint
+- Unicode filename
+- provider coexistence rows
+- status transitions persisted
+
+47. Module Boundary Tests
+-------------------------
+MediaModule exports only selected public MediaAssetService.
+
+No:
+TypeOrmModule
+entity
+repository
+provider implementation
+
+48. Security Tests
+-----------------
+Path traversal and symlink escape are BLOCKER-class if failing.
+
+No compromise.
+
+49. Existing Regression
+-----------------------
+Run prior Auth/Parish/Class/Curriculum tests.
+
+No regressions.
+
+50. quality:full
+----------------
+The Curriculum final phase serialized DB suites to eliminate shared DB races.
+
+Run full quality:full.
+Expect PASS.
+
+If fail:
+investigate whether new Media changes caused it.
+Do not mask.
+
+51. Docker Build
+----------------
+AppModule/config/dependencies changed.
+
+Run:
+wsl docker build --target production -t catechism-api:media-foundation .
+
+PASS required.
+
+52. No Real S3 Requirement
+--------------------------
+Normal development/CI must work with:
+MEDIA_STORAGE_PROVIDER=local
+
+No AWS credentials required.
+
+This is a core requirement.
+
+53. S3 Optional Behavior
+------------------------
+S3 provider code must compile/test with mocks.
+
+If user later supplies valid S3 config:
+same application architecture should switch new writes to S3.
+
+54. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(media): add storage provider foundation"
+
+Cursor must NOT execute it.
+
+55. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Migration:
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:media-foundation .
+
+56. Required Report
+-------------------
+Create:
+
+docs/MEDIA_002_SCHEMA_LOCAL_S3_PROVIDER_FOUNDATION_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #001
+3. Rules applied
+4. Files created
+5. Files modified
+6. MediaModule architecture
+7. Public exports
+8. MediaAssetEntity
+9. Enums
+10. Migration
+11. DB constraints
+12. UUID strategy
+13. Object key strategy
+14. Filename sanitization
+15. Checksum utility
+16. MediaAssetSnapshot
+17. MediaAssetService foundation
+18. StorageProvider interface
+19. ProviderRegistry
+20. SelectedWriteProvider
+21. Provider-per-asset behavior
+22. Local provider
+23. Local path safety
+24. Symlink safety
+25. Atomic local write
+26. S3 provider
+27. S3 prefix
+28. S3 credential strategy
+29. S3 readiness/probe decision
+30. Provider selection config
+31. production auto/fallback policy
+32. dev fallback
+33. media size config
+34. presigned TTL config
+35. `.env.example`
+36. No-real-S3 local behavior
+37. Unit config tests
+38. Local provider tests
+39. S3 provider mocked tests
+40. MediaAssetService tests
+41. DB integration tests
+42. Module boundary tests
+43. Security tests
+44. Existing regression
+45. quality:full
+46. Docker
+47. Microservice extraction
+48. Files/commands
+49. Validation matrix
+50. Known issues/deferred
+51. Out-of-scope
+52. MEDIA #003 readiness
+53. Prompt count
+54. Commit recommendation
+
+57. Explicit PASS/FAIL
+----------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migration
+- integration
+- DB e2e
+- quality:full
+- Docker
+- media_assets table
+- no blob columns
+- UUID no DB default
+- provider/key unique
+- checksum constraint
+- filename Unicode
+- local provider put/get/delete
+- traversal denied
+- symlink escape denied
+- S3 mock put/get/delete
+- S3 errors wrapped
+- provider selection local
+- provider selection s3
+- production auto denied
+- production fallback denied
+- provider-per-asset resolution
+- no public HTTP API
+- no RBAC yet
+- no Curriculum integration yet
+- no entity/repo/provider export
+- prior regression
+
+58. MEDIA #003 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+FILE/MEDIA #003/4 — Upload/Read/Delete API + RBAC/Security + Curriculum Asset Validation
+
+#003 should add:
+- multipart upload
+- MIME sniffing
+- size/category validation
+- media.upload/read/manage permissions
+- backend proxy content read
+- optional Range support
+- delete policy
+- Curriculum image/video asset validation
+- tests
+
+59. Prompt Count
+----------------
+State:
+FILE/MEDIA #002/4 complete
+approximately 2 prompts remain (#003–#004)
+
+60. Final Response
+------------------
+Respond concisely:
+
+- FILE/MEDIA #002 status
+- schema PASS/FAIL
+- local provider PASS/FAIL
+- S3 provider PASS/FAIL
+- safe switching PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/MEDIA_002_SCHEMA_LOCAL_S3_PROVIDER_FOUNDATION_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(media): add storage provider foundation"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

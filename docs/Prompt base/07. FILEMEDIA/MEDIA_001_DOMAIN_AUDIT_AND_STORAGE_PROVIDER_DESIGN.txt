@@ -1,0 +1,600 @@
+CURSOR PROMPT — FILE/MEDIA #001/4
+DOMAIN AUDIT + STORAGE PROVIDER ABSTRACTION DESIGN
+LOCAL-FIRST, S3-READY
+
+Context
+-------
+Completed major backend phases:
+- Foundation
+- Auth/User/RBAC
+- Parish/Academic Structure
+- Class/Student/Catechist/Parent/Enrollment
+- Curriculum/Topic/Lesson/Learning Content
+
+Latest Curriculum final gate:
+- PHASE COMPLETE
+- FE contract ready
+- Mobile contract ready
+- Future localization foundation ready
+- Docker PASS
+- shared-DB test flake mitigated
+- no BLOCKER/HIGH
+
+New phase:
+FILE / MEDIA STORAGE ABSTRACTION
+
+Planned prompts:
+#001 Domain audit + provider abstraction design
+#002 Schema + MediaModule + LocalStorageProvider + S3StorageProvider
+#003 Upload/read/delete APIs + RBAC/security + Curriculum asset validation
+#004 Final hardening + Docker volume + S3 verification path + Postman + FE/Mobile readiness
+
+This is #001/4. AUDIT/DESIGN ONLY.
+
+User requirement
+----------------
+- If S3 is NOT configured: use LOCAL storage.
+- If S3 is configured and valid: use S3.
+- Business modules must not care which provider stores bytes.
+- Existing Curriculum content references `assetId`.
+- Future Question Bank, Chat, CMS, Class Materials, avatars may reuse Media.
+
+CRITICAL reliability rule:
+Do NOT silently fail over per request from S3 to LOCAL in production.
+That creates split-brain storage and broken reads after restart/scaling.
+
+Preferred:
+- provider selected by config/startup
+- local if S3 not configured
+- S3 if configured and selected
+- optional dev-only startup fallback to local
+- production S3 failure should surface clearly, not silently write to one server's local disk
+- every asset stores its ACTUAL storageProvider so local and S3 assets can coexist during migration
+
+Mandatory reading
+-----------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all .cursor/rules/*.mdc
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/users/
+src/modules/parish/
+src/modules/class/
+src/modules/enrollment/
+src/config/
+src/database/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+Dockerfile
+docker-compose files
+.env examples
+
+Inspect git status read-only.
+
+Primary objective
+-----------------
+Design a reusable Media/File storage bounded context supporting:
+- local filesystem
+- AWS S3
+- future S3-compatible endpoint
+- metadata persistence
+- authenticated access
+- upload/download/delete
+- safe MIME/size validation
+- checksums
+- private-by-default assets
+- Docker local volume
+- future presigned S3 reads/direct uploads
+- future CDN
+- Web/Mobile use
+- microservice extraction
+
+No implementation.
+
+Domain/module design
+--------------------
+Audit naming:
+StorageModule vs FileModule vs MediaModule vs FileMediaModule.
+
+Strong candidate:
+MediaModule
+  owns media_assets + MediaAssetService
+  uses internal StorageProvider abstraction
+    LocalStorageProvider
+    S3StorageProvider
+
+Do not expose AWS SDK/fs types to business modules.
+
+StorageProvider contract
+------------------------
+Design narrow provider interface, conceptually:
+- putObject
+- getObject/streamObject
+- deleteObject
+- exists optional
+- createReadUrl optional
+
+No AWS SDK types, fs handles, Express objects in public domain contract.
+
+Provider selection
+------------------
+Audit config:
+MEDIA_STORAGE_PROVIDER=local|s3|auto
+
+Preferred:
+local -> LocalStorageProvider
+s3 -> require valid S3 config
+auto -> dev convenience only; choose S3 only if complete config/readiness passes, else local
+
+Production should prefer explicit provider.
+
+S3 config plan
+--------------
+MEDIA_S3_BUCKET
+MEDIA_S3_REGION
+MEDIA_S3_ENDPOINT optional
+MEDIA_S3_ACCESS_KEY_ID optional
+MEDIA_S3_SECRET_ACCESS_KEY optional
+MEDIA_S3_FORCE_PATH_STYLE optional
+MEDIA_S3_PREFIX optional
+MEDIA_S3_PUBLIC_BASE_URL optional
+
+Prefer runtime/IAM credentials in production.
+Never commit keys.
+
+Endpoint override should make MinIO/R2/Spaces possible where compatible, but do not promise compatibility without tests.
+
+Local config
+------------
+MEDIA_LOCAL_ROOT=./storage/uploads
+
+Rules:
+- resolve to absolute root
+- create safely
+- generated keys only
+- never use raw user filename as path
+- prevent ..
+- ensure resolved file stays inside root
+- consider symlink escape
+- Docker volume for persistence
+
+Production note:
+local is fine for dev/single-node.
+Multi-replica production should use S3/shared object storage.
+
+Metadata vs binary
+------------------
+DB stores metadata.
+Provider stores bytes.
+Do NOT store blobs in MSSQL.
+
+Design `media_assets` roughly:
+id UUID
+storage_provider
+storage_key
+original_file_name
+mime_type
+media_category
+size_bytes
+checksum_sha256
+status
+visibility
+created_by_user_id nullable
+created_at
+updated_at
+deleted_at nullable
+metadata_json optional only if justified
+
+Stable `assetId`
+----------------
+Business domains store assetId only.
+
+Never store bucket/key/local path/signed URL in Curriculum/QuestionBank/Chat.
+
+Object key
+----------
+Opaque generated key.
+No user PII.
+Example:
+assets/YYYY/MM/{uuid}
+or env/assets/{assetId}/object
+
+Store storage_provider on every asset.
+Existing asset read/delete uses recorded provider, not current global provider.
+
+This enables safe local/S3 coexistence and gradual migration.
+
+Original filename
+-----------------
+Store sanitized Unicode display metadata.
+Never use as storage path.
+Content-Disposition must be safe.
+
+MIME/type policy
+----------------
+Do not trust client filename extension or Content-Type alone.
+Plan magic-byte/signature validation.
+
+Initial whitelist recommendation:
+IMAGE: jpeg/png/webp
+DOCUMENT: pdf
+AUDIO: mp3/m4a only if required
+VIDEO: mp4 only if required
+
+Do not allow SVG initially.
+Do not allow HTML/scripts/executables.
+
+Media categories:
+IMAGE
+DOCUMENT
+AUDIO
+VIDEO
+
+Avoid generic OTHER initially unless justified.
+
+Size limits
+-----------
+Recommend category limits and global max.
+Audit practical values with Nest/proxy/mobile implications.
+
+Example planning ceiling:
+image 10MB
+document 25MB
+audio 25MB
+video 100MB
+but choose final MVP values deliberately.
+
+Checksum
+--------
+SHA-256 binary checksum.
+Use for integrity/migration/cache.
+Do not auto-deduplicate across users by default.
+
+Status lifecycle
+----------------
+Audit:
+READY/DELETED for simple MVP
+vs PENDING/READY/FAILED/DELETED for future direct upload/scanning.
+
+Choose future-safe without overbuilding.
+
+Visibility
+----------
+PRIVATE / AUTHENTICATED / PUBLIC conceptual.
+Default should NOT be PUBLIC.
+Current minors platform content is authenticated.
+
+Authorization ownership
+-----------------------
+Media module must not become a god ACL.
+
+Owning domain authorizes business resource.
+Media provides asset metadata/access.
+
+Examples:
+Curriculum authorizes lesson access, then Media serves asset.
+Chat authorizes conversation membership, then Media serves attachment.
+QuestionBank owns question access.
+
+Do not let Media query all business repositories.
+
+Upload policy
+-------------
+Audit whether generic media.upload permission exists.
+Initial upload likely SUPER_ADMIN/PARISH_ADMIN.
+Catechist domain-specific later.
+
+Upload flow MVP
+---------------
+Preferred initial:
+Client -> Backend multipart -> MediaService -> selected provider.
+
+Reason:
+same behavior Local/S3
+simple auth
+easy validation
+
+Future:
+presigned/direct S3 or multipart for large video.
+Do not implement direct S3 in first MVP unless justified.
+
+Download/access
+---------------
+Local:
+authenticated backend streaming.
+
+Private S3:
+presigned short-lived read URL or backend proxy.
+
+Do not store signed URLs in DB.
+Do not expose permanent public bucket URLs for private content.
+
+Consider HTTP Range for audio/video.
+At minimum document readiness.
+
+Immutable object strategy
+-------------------------
+Prefer immutable media:
+replace file = new assetId.
+Do not overwrite bytes under same assetId.
+Improves cache/versioning.
+
+Delete
+------
+Audit conservative delete policy.
+If referenced, do not blindly delete.
+Media must not scan repositories across modules.
+Consider soft delete + owning-domain unlink policy.
+Public delete endpoint may be omitted initially.
+
+Orphan assets
+-------------
+Plan cleanup for uploaded-but-unused assets.
+Do not build cross-domain reference counting now.
+Potential pending/uncommitted TTL later.
+
+Multilingual
+------------
+Media metadata language-neutral.
+Original filename can be Unicode.
+Alt/title/caption belongs to owning content domain/translation, not Media.
+Good for Curriculum localization.
+
+Security
+--------
+Must cover:
+- path traversal
+- symlink escape
+- MIME spoofing
+- SVG active content
+- HTML/script/executable block
+- upload size
+- filename sanitization
+- no PII in object keys/URLs/logs
+- private default
+- no credentials in logs/source
+- no signed URL token logging
+
+S3 failure/fallback
+-------------------
+Explicitly design:
+
+If LOCAL selected:
+write local.
+
+If S3 selected:
+write S3.
+
+If S3 operation fails:
+return typed retryable/storage error.
+DO NOT silently write local in production.
+
+Optional dev-only startup fallback:
+MEDIA_STORAGE_ALLOW_LOCAL_FALLBACK=true
+AND environment != production.
+
+Prefer startup/provider-selection fallback, not per-request fallback.
+
+S3 readiness
+-------------
+Audit config validation.
+Optional non-destructive capability probe.
+Do not require HeadBucket if IAM policy intentionally lacks it.
+Avoid overly broad S3 permissions.
+
+Storage migration
+-----------------
+Future local -> S3 flow:
+copy bytes
+verify checksum
+update provider+key safely
+delete old after success
+
+Do not implement now.
+
+Docker
+------
+Local uploads outside image layer.
+Plan named volume:
+e.g. /app/storage/uploads
+media_data:/app/storage/uploads
+
+Tests
+-----
+Local provider later:
+real temp dir, isolated, cleanup, traversal tests.
+
+S3 provider later:
+SDK mock/unit tests.
+Normal CI must NOT require real AWS credentials.
+Optional MinIO/dedicated S3 integration later.
+
+Curriculum integration
+----------------------
+Current Curriculum image_ref/video_ref validates UUID only.
+After Media foundation:
+LearningContent may validate:
+image_ref -> READY IMAGE asset
+video_ref -> READY VIDEO asset
+through public MediaService.
+No repository coupling.
+
+Future Question Bank:
+references assetId.
+
+Future Chat:
+references assetId; Chat owns conversation auth.
+
+Future Class Materials:
+references assetId.
+
+Public snapshot
+---------------
+Design safe MediaAssetSnapshot:
+id
+originalFileName
+mimeType
+mediaCategory
+sizeBytes
+checksumSha256
+status
+visibility
+createdAt
+
+Do not expose:
+storageKey
+local path
+bucket
+credentials
+
+Public service contracts
+------------------------
+Potential:
+getAssetSnapshot
+assertAssetReady
+assertAssetCategory
+createAsset/upload
+openAsset/createAccess
+deleteAsset
+
+No repositories/entities exported.
+
+Microservice extraction
+-----------------------
+Media Service owns:
+media_assets
+storage provider integration
+
+Other services use asset IDs/public API.
+
+Phase plan
+----------
+#001/4 — audit/design (this prompt)
+#002/4 — schema + MediaModule + Local/S3 providers + config + provider tests
+#003/4 — upload/read/delete API + RBAC/security + Curriculum asset validation integration
+#004/4 — final hardening + Docker volume + optional S3 verification + Postman + FE/Mobile readiness
+
+Validation
+----------
+Audit-only:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+Git policy
+----------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+If only report is created, no commit recommendation needed.
+
+Required report
+---------------
+Create:
+docs/MEDIA_001_DOMAIN_AUDIT_AND_STORAGE_PROVIDER_DESIGN_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from Curriculum
+3 Existing asset/media reference audit
+4 Rules applied
+5 Module naming decision
+6 Module boundary
+7 StorageProvider interface
+8 Local provider
+9 S3 provider
+10 Provider selection
+11 Production fallback
+12 Development fallback
+13 Per-request fallback decision
+14 Provider-per-asset
+15 Local/S3 coexistence
+16 Future local→S3 migration
+17 media_assets schema
+18 enums
+19 object key
+20 original filename
+21 MIME whitelist
+22 media categories
+23 size limits
+24 checksum
+25 metadata
+26 public snapshot
+27 upload flow
+28 download/access flow
+29 delete flow
+30 orphan strategy
+31 visibility
+32 presigned URL
+33 backend proxy
+34 range/media playback
+35 Docker volume
+36 test storage
+37 S3 testing
+38 path traversal
+39 MIME spoofing
+40 SVG/HTML/executable policy
+41 child privacy
+42 logging
+43 credentials
+44 S3 readiness validation
+45 S3 failure behavior
+46 retry policy
+47 Curriculum integration
+48 Question Bank integration
+49 Chat integration
+50 Class Materials integration
+51 multilingual implications
+52 future CDN
+53 malware scanning
+54 quotas
+55 dependency graph
+56 public contracts
+57 microservice extraction
+58 risks/open questions
+59 files created
+60 files modified
+61 commands
+62 validation
+63 out-of-scope
+64 MEDIA #002 readiness
+65 prompt count
+66 commit recommendation
+
+Required verdicts:
+MEDIA STORAGE ABSTRACTION DESIGN READY: YES/NO
+LOCAL PROVIDER DESIGN READY: YES/NO
+S3 PROVIDER DESIGN READY: YES/NO
+SAFE LOCAL/S3 SWITCHING STRATEGY: YES/NO
+CURRICULUM ASSET INTEGRATION PATH READY: YES/NO
+Unresolved BLOCKER/HIGH count.
+
+If no BLOCKER/HIGH:
+recommend FILE/MEDIA #002/4 — Schema + Local/S3 Provider Foundation.
+
+Final response:
+- FILE/MEDIA #001 status
+- selected module name
+- local strategy
+- S3 strategy
+- fallback strategy
+- blockers/high
+- report path
+
+Do NOT implement #002 automatically.
+Do NOT run git add/commit/push.

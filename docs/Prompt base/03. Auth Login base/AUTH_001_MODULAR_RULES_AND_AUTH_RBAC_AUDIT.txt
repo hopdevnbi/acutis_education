@@ -1,0 +1,1056 @@
+CURSOR PROMPT — AUTH/RBAC #001/8
+ADD MODULAR/MICROSERVICE-READY RULES + AUDIT AUTH/USER/ROLE/PERMISSION DESIGN
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed phases:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+
+Current phase:
+Auth + User + Role + Permission
+
+Estimated:
+8 prompts
+
+Planned sequence:
+
+#001 Modular/microservice-ready rules + targeted Auth/RBAC audit
+#002 Database schema + entities + migrations
+#003 User module + password/account lifecycle foundation
+#004 Authentication + access token
+#005 Refresh token / session architecture
+#006 Role + Permission + RBAC guards
+#007 Auth/RBAC integration tests + security hardening
+#008 Final Auth/RBAC audit + module-boundary review
+
+This prompt is #001/8.
+
+DO NOT implement auth/business code yet.
+
+2. Required Reading
+-------------------
+Before making any change:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+5. Read:
+   docs/CI_004_FINAL_BITBUCKET_CI_AUDIT_AND_HARDENING_REPORT.md
+6. Inspect current repository structure:
+   src/
+   test/
+   package.json
+   database/migrations
+   config
+   HTTP/bootstrap infrastructure
+7. Inspect current Git status using read-only commands.
+
+Do not re-audit Docker/CI/Foundation in depth unless something directly impacts Auth/RBAC.
+
+3. Primary Objective
+--------------------
+This prompt has TWO objectives:
+
+A. Permanently add modularity / bounded-context / future-microservice extraction rules to the project rules.
+
+B. Perform a targeted design audit for:
+- Authentication
+- User
+- Role
+- Permission
+- Session / Refresh Token
+
+No implementation yet.
+
+The output must define clean module boundaries before schema/code begins.
+
+4. CRITICAL ARCHITECTURE PRINCIPLE
+----------------------------------
+The system must be designed as a modular monolith today, but with boundaries that make future microservice extraction practical.
+
+This is a permanent architecture rule.
+
+Every future feature/module must:
+
+- own a clear responsibility
+- expose a small public interface
+- avoid reaching into another module's internal files
+- avoid direct cross-module repository/database access
+- avoid cyclic dependencies
+- avoid shared "god services"
+- avoid global utility dumping grounds
+- keep domain concepts inside the owning module
+- keep persistence logic close to the owning module
+- communicate across modules through explicit exported services/contracts
+- minimize infrastructure coupling
+- keep controllers thin
+- keep business/application logic out of controllers
+- keep module-specific DTOs/contracts inside their module unless genuinely shared
+- avoid premature shared abstractions
+
+The modular monolith should be extractable later into smaller services with minimal domain rewriting.
+
+5. Add Permanent Rules
+----------------------
+Update PROJECT_RULES.md with a dedicated section such as:
+
+"Modular Architecture & Future Microservice Extraction"
+
+Required rules:
+
+1. Each major business capability is a separate NestJS module/bounded context.
+
+2. A module owns:
+   - controllers
+   - application/services
+   - entities
+   - repositories/data access
+   - DTOs
+   - guards/policies specific to that capability
+   - tests
+
+3. One module must NOT directly import another module's:
+   - repository
+   - entity persistence internals
+   - private service
+   - internal DTO
+   - internal utility
+
+4. Cross-module interactions must use explicitly exported interfaces/services.
+
+5. Cross-module database queries are prohibited by default.
+   The owning module must provide an application-level API.
+
+6. Avoid shared database transaction logic spanning unrelated modules unless truly necessary and explicitly documented.
+
+7. Shared/common code is allowed only for genuinely cross-cutting infrastructure:
+   - logging
+   - config
+   - HTTP errors
+   - security primitives
+   - generic framework helpers
+
+8. Business/domain logic must NOT be moved to `common/` merely because multiple modules use it.
+
+9. Do not create generic BaseService/BaseRepository/BaseController abstractions for convenience.
+
+10. New module implementation prompts must include a "Module Boundary Audit" section.
+
+11. Every major module final-audit prompt must document:
+    - owned data
+    - public exports
+    - inbound dependencies
+    - outbound dependencies
+    - possible future service extraction boundary
+
+12. Prefer domain IDs/contracts over passing ORM entities across module boundaries.
+
+13. Avoid exposing TypeORM entities as public API contracts.
+
+14. External integrations should be hidden behind adapters/interfaces when introduced.
+
+15. If an architectural decision creates tight coupling that would make future extraction difficult, it must be documented explicitly.
+
+6. Cursor Rules
+---------------
+If appropriate, also add/update an always-apply Cursor rule under:
+
+.cursor/rules/
+
+to reinforce modular architecture.
+
+Keep it concise.
+
+Possible file:
+03-modular-architecture.mdc
+
+It should reference PROJECT_RULES.md rather than duplicate every rule.
+
+Do not create excessive rule files.
+
+7. AGENTS.md
+------------
+Audit AGENTS.md.
+
+If needed, add a concise permanent instruction:
+
+Before implementing a new business module, verify:
+- module ownership
+- dependency direction
+- public exports
+- no cross-module persistence coupling
+
+Only change AGENTS.md if it adds real value and is not redundant.
+
+8. Target Module Boundaries for This Phase
+------------------------------------------
+Audit and propose boundaries for:
+
+A. UserModule
+Responsibility:
+- user identity/profile/account state
+- user credentials relationship
+- account lifecycle
+
+B. AuthModule
+Responsibility:
+- credential verification
+- token issuing
+- login/logout
+- refresh/session workflow
+- auth guards/strategies
+
+C. RoleModule or AccessControlModule
+Responsibility:
+- roles
+- permissions
+- role-permission relationships
+- authorization policies
+
+Determine whether Role + Permission should be:
+
+Option A:
+AccessControlModule containing both
+
+or
+
+Option B:
+RoleModule + PermissionModule
+
+Choose the cleanest approach for current scale AND future extraction.
+
+Do not split into tiny modules merely for purity.
+
+9. User vs Auth Ownership
+-------------------------
+This decision is important.
+
+Audit and define who owns:
+
+- user account
+- email/username
+- display/profile fields
+- password hash
+- account status
+- login attempts
+- refresh token/session records
+- roles
+- permissions
+
+Recommended principle:
+
+UserModule owns the user/account aggregate.
+
+AuthModule owns authentication workflows and session/token mechanics.
+
+Do NOT allow AuthModule to become the owner of all user persistence.
+
+Document exact ownership.
+
+10. Password Ownership
+----------------------
+Audit where password hash should live.
+
+Possible directions:
+
+A. users table contains password_hash
+
+B. separate credentials table owned by AuthModule
+
+Evaluate:
+- current project complexity
+- future social login/SSO
+- microservice extraction
+- security
+- transactional coupling
+
+Choose the simplest design that remains extensible.
+
+Do not implement yet.
+
+11. Login Identifier
+--------------------
+Decide what initial login identifier should be.
+
+Evaluate:
+- email
+- username
+- both
+
+This platform will eventually serve:
+- parish admins
+- catechists
+- parents
+- possibly older students
+
+Do not over-design student login yet.
+
+Define phase-1 authentication assumptions clearly.
+
+12. User Entity Scope
+---------------------
+Do NOT mix catechism profile/domain data into User.
+
+User should remain authentication/account identity only.
+
+Do NOT add fields such as:
+- parish membership
+- class
+- catechism level
+- student progress
+- parent-child relationship
+- catechist assignment
+
+Those belong to later modules.
+
+Audit minimal User fields only.
+
+13. Expected User Fields Audit
+------------------------------
+Propose minimal baseline fields such as:
+
+- id
+- email / username decision
+- passwordHash or credential relation
+- status
+- createdAt
+- updatedAt
+- optional lastLoginAt
+
+Evaluate:
+- soft delete
+- email verification
+- lockedAt
+- failedLoginCount
+
+Do not add everything by default.
+
+Classify fields:
+- required now
+- future/deferred
+
+14. Account Status Model
+------------------------
+Design minimal account state.
+
+Possible statuses:
+- ACTIVE
+- INACTIVE
+- LOCKED
+- PENDING
+
+Avoid unnecessary states.
+
+Determine whether enum is useful.
+
+No implementation yet.
+
+15. Role Model Audit
+--------------------
+Design role strategy.
+
+Potential roles later may include:
+- system admin
+- parish admin
+- catechist
+- parent
+- student
+
+Do NOT hard-code these domain roles into authorization logic yet unless required.
+
+Audit whether role names should be data-driven.
+
+Preferred:
+roles stored in DB, not TypeScript hard-coded business role enum.
+
+Document decision.
+
+16. Permission Model Audit
+--------------------------
+Design permission strategy.
+
+Preferred model:
+permission is a stable machine-readable code.
+
+Examples only:
+users.read
+users.manage
+classes.read
+classes.manage
+
+Do NOT build a full permission catalog yet.
+
+Define:
+- permission naming convention
+- uniqueness
+- role-permission relationship
+- user-role relationship
+
+17. User-Role Relationship
+--------------------------
+Audit whether:
+- one user = one role
+or
+- many-to-many roles
+
+For long-term parish platform, evaluate future flexibility.
+
+Preferred likely direction:
+many-to-many user_roles
+
+But justify.
+
+No schema yet.
+
+18. Permission Assignment
+-------------------------
+Initial model should normally be:
+
+User -> Roles -> Permissions
+
+Do NOT add direct User -> Permission grants unless justified.
+
+Keep authorization model understandable.
+
+19. Multi-Parish / Tenant Awareness
+-----------------------------------
+IMPORTANT:
+
+The platform will later support parish-level structure.
+
+Do NOT prematurely make RBAC tenant-aware in this phase unless the foundation requires it.
+
+But audit the future implication:
+
+A role such as:
+parish_admin
+
+may later need scope:
+- global
+- parish-specific
+- class-specific
+
+Document this as a future authorization-scope concern.
+
+Do not build tenant scoping now unless clearly required by current architecture.
+
+20. Session / Refresh Token Ownership
+-------------------------------------
+Design a dedicated session model for refresh-token lifecycle.
+
+Avoid simply storing a single refresh token on users table.
+
+Audit a possible AuthSession entity/table owned by AuthModule.
+
+Possible responsibilities:
+- session id
+- user id
+- hashed refresh token / token family identifier
+- createdAt
+- expiresAt
+- revokedAt
+- user agent / IP only if privacy-safe and genuinely useful
+
+Because users may include minors:
+do NOT collect device/IP metadata by default without clear need.
+
+21. Refresh Token Storage
+-------------------------
+Never store raw refresh tokens in DB.
+
+Audit preferred approach:
+- cryptographic hash
+- rotate refresh token
+- revoke session/token family
+
+Document strategy.
+
+No implementation yet.
+
+22. Access Token Strategy
+-------------------------
+Audit JWT access token design.
+
+Determine:
+- short-lived access token
+- claims
+- subject = user id
+- session id if useful
+- authorization claims strategy
+
+Avoid embedding the entire permission list in JWT unless justified.
+
+Analyze tradeoff:
+- roles/permissions inside token
+vs
+- DB lookup/cache during authorization
+
+Choose phase-1 direction.
+
+23. JWT Secret / Key Strategy
+-----------------------------
+No secrets in code.
+
+Audit configuration variables needed later.
+
+Potential:
+JWT_ACCESS_SECRET
+JWT_ACCESS_EXPIRES_IN
+JWT_REFRESH_EXPIRES_IN
+
+Evaluate whether asymmetric signing is necessary now.
+
+Preferred:
+keep initial implementation secure but simple.
+
+Do not implement secrets/config in this audit prompt.
+
+24. Password Hashing Strategy
+-----------------------------
+Audit algorithm options available to Node 22 ecosystem.
+
+Prefer modern secure password hashing.
+
+Evaluate:
+- argon2id
+- bcrypt
+
+Choose one for implementation.
+
+Consider:
+- package maturity
+- native dependency/build impact
+- Docker/CI compatibility
+
+Document chosen algorithm and rationale.
+
+No package installation yet unless audit absolutely requires experimentation.
+
+25. Login Security
+------------------
+Plan future hardening:
+- generic invalid credential response
+- timing-safe behavior where practical
+- password hashing
+- session rotation
+- account disabled handling
+- logging without passwords/tokens
+
+Do not implement rate limiting in this phase unless it becomes part of hardening later.
+
+26. Authorization Guards
+------------------------
+Design future guard layering.
+
+Possible:
+- JwtAuthGuard
+- PermissionGuard
+
+Avoid:
+- controller-specific manual authorization checks
+- role-name conditionals scattered throughout code
+
+Authorization should be reusable and declarative.
+
+27. Decorator Strategy
+----------------------
+Audit possible decorators:
+
+@Public()
+@RequirePermissions(...)
+
+Maybe:
+@CurrentUser()
+
+Keep decorators minimal.
+
+Do not create implementation yet.
+
+28. Module Dependency Direction
+-------------------------------
+Propose exact dependency graph.
+
+Preferred conceptual direction:
+
+UserModule
+  owns account persistence
+
+AccessControlModule
+  owns roles/permissions persistence
+
+AuthModule
+  depends on:
+    UserModule public account lookup API
+    AccessControlModule authorization API if needed
+
+Other future modules
+  depend on Auth/AccessControl public guards/contracts
+  must not directly query auth tables
+
+Avoid:
+UserModule -> AuthModule -> UserModule cycle.
+
+Document exact direction.
+
+29. Database Ownership
+----------------------
+Define table ownership conceptually.
+
+Possible:
+
+UserModule:
+- users
+
+AccessControlModule:
+- roles
+- permissions
+- user_roles
+- role_permissions
+
+AuthModule:
+- auth_sessions / refresh_sessions
+
+Each module owns its tables.
+
+No module should directly mutate another module's tables.
+
+30. Cross-Module Foreign Keys
+-----------------------------
+A modular monolith may still use SQL foreign keys across modules.
+
+Audit policy:
+
+- FK may exist for relational integrity
+- but application code still respects module ownership
+- owning module controls writes
+- no cross-module repository usage
+
+Document tradeoff for future microservice extraction.
+
+31. DTO / API Boundary
+----------------------
+Do not expose TypeORM entities.
+
+Plan:
+- request DTO
+- response DTO
+- internal contracts
+
+Define whether UserModule exports:
+- UserAccountSnapshot
+- FindUserForAuthentication result
+
+Prefer minimal contracts.
+
+32. Future Microservice Extraction Audit
+----------------------------------------
+For each proposed module:
+
+User
+Auth
+AccessControl
+
+Document:
+
+- owned tables
+- public API/services
+- dependencies
+- external contracts
+- what would need replacement if extracted to separate microservice
+
+The goal is NOT to build microservices now.
+
+The goal is to avoid architecture that blocks extraction later.
+
+33. Folder Structure Proposal
+-----------------------------
+Propose a NestJS structure.
+
+Example concept:
+
+src/modules/users/
+  users.module.ts
+  controllers/
+  services/
+  entities/
+  repositories/ or persistence/
+  dto/
+  contracts/
+
+src/modules/auth/
+  auth.module.ts
+  controllers/
+  services/
+  guards/
+  strategies/
+  decorators/
+  entities/
+  dto/
+  contracts/
+
+src/modules/access-control/
+  access-control.module.ts
+  entities/
+  services/
+  guards/
+  decorators/
+  dto/
+  contracts/
+
+Do not copy this blindly.
+
+Choose structure aligned with current project scale.
+
+Avoid deeply nested clean-architecture ceremony.
+
+34. Shared Security Infrastructure
+----------------------------------
+Determine what belongs outside business modules.
+
+Examples:
+- crypto helper primitives
+- common auth typings only if genuinely cross-cutting
+
+Prefer module-local code unless clearly shared.
+
+Do not create `src/common/auth/` dumping ground.
+
+35. Schema Planning
+-------------------
+Create a conceptual schema plan ONLY.
+
+Do NOT create entities or migrations.
+
+Propose:
+- users
+- roles
+- permissions
+- user_roles
+- role_permissions
+- auth_sessions
+
+For each:
+- purpose
+- ownership
+- key fields
+- key indexes/constraints
+- relationships
+
+Keep schema minimal.
+
+36. Unique Constraints
+----------------------
+Audit likely uniqueness requirements:
+
+users:
+- email normalized unique if email login
+or username unique if username login
+
+roles:
+- code/name unique
+
+permissions:
+- code unique
+
+user_roles:
+- unique(user_id, role_id)
+
+role_permissions:
+- unique(role_id, permission_id)
+
+auth_sessions:
+- session id primary
+- user_id index
+- token hash uniqueness if applicable
+
+Do not implement yet.
+
+37. Email Normalization
+-----------------------
+If email login is chosen:
+define normalization strategy.
+
+At minimum:
+- trim
+- lowercase
+
+Audit MSSQL collation implications for uniqueness.
+
+Do not invent complex email canonicalization.
+
+38. Timestamp Convention
+------------------------
+Reuse current project conventions.
+
+Audit whether all new entities should use:
+- created_at
+- updated_at
+
+Sessions may additionally use:
+- expires_at
+- revoked_at
+
+Do not create unnecessary audit columns yet.
+
+39. Deletion Strategy
+---------------------
+Audit:
+User hard delete vs soft delete/deactivation.
+
+For identity/security systems, preferred likely:
+- status/deactivation
+- avoid deleting identity rows casually
+
+Do not implement soft-delete columns automatically.
+
+Document decision.
+
+40. Initial Seed Strategy
+-------------------------
+Audit whether Auth/RBAC phase should eventually seed:
+- default roles
+- default permissions
+- initial admin
+
+Do NOT seed now.
+
+Preferred:
+- permission catalog migrations/seeds later when domain permissions exist
+- initial admin provisioning should not involve hard-coded credentials
+
+Document policy.
+
+41. API Endpoint Planning
+-------------------------
+Conceptually propose phase endpoints.
+
+Potential:
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+GET /api/v1/auth/me
+
+User management endpoints may be deferred until authorization exists.
+
+Do not implement.
+
+42. Security / Minors Privacy
+-----------------------------
+Because platform handles children/families:
+
+- do not log passwords
+- do not log access tokens
+- do not log refresh tokens
+- minimize IP/device tracking
+- do not expose account internals
+- generic auth failure messages
+- least privilege
+- server-side authorization only
+
+Add relevant permanent rules if missing.
+
+43. PROJECT_RULES Update
+------------------------
+This prompt MUST update PROJECT_RULES.md with the modular/microservice-ready rules described above.
+
+If existing rules overlap:
+merge cleanly.
+
+Do not duplicate sections unnecessarily.
+
+44. Cursor Rule Update
+----------------------
+Create/update a concise always-apply modularity rule if useful.
+
+Preferred result:
+future Cursor prompts automatically understand:
+
+"Each business capability must remain an isolated NestJS module/bounded context and cross-module persistence access is prohibited."
+
+45. Validation
+-------------
+Because this prompt is mostly rules + audit:
+
+Run:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+If only Markdown/rules files change:
+code validation should still PASS.
+
+No Docker/DB heavy tests required unless project changes unexpectedly touch code.
+
+46. Git Policy — CRITICAL
+------------------------
+Cursor MUST NOT run:
+
+git add
+git commit
+git push
+
+If tracked files change:
+print exactly ONE recommended command at the end.
+
+Preferred commit message for this prompt:
+
+git commit -m "docs: define modular architecture rules"
+
+Cursor must not execute it.
+
+47. Required Report
+-------------------
+Create:
+
+docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From Foundation + CI
+
+3. Existing Architecture Relevant to Auth
+
+4. PROJECT_RULES Changes
+
+5. Cursor Rule Changes
+
+6. Modular Architecture Principles
+
+7. Proposed Module Boundaries
+- User
+- Auth
+- AccessControl
+
+8. Module Dependency Graph
+
+9. Data Ownership Matrix
+
+10. Cross-Module Interaction Rules
+
+11. Future Microservice Extraction Analysis
+
+12. User vs Auth Ownership Decision
+
+13. Credential / Password Ownership Decision
+
+14. Login Identifier Decision
+
+15. Minimal User Model
+
+16. Account Status Decision
+
+17. Role Model Decision
+
+18. Permission Model Decision
+
+19. User-Role Strategy
+
+20. Role-Permission Strategy
+
+21. Parish/Tenant Scope Future Consideration
+
+22. Session / Refresh Token Model
+
+23. Access Token Strategy
+
+24. JWT Configuration Plan
+
+25. Password Hash Algorithm Decision
+
+26. Auth Guard / Permission Guard Design
+
+27. Decorator Strategy
+
+28. Conceptual Database Schema
+For:
+- users
+- roles
+- permissions
+- user_roles
+- role_permissions
+- auth_sessions
+
+29. Index / Constraint Plan
+
+30. API Endpoint Plan
+
+31. Security / Privacy Review
+
+32. Folder Structure Recommendation
+
+33. Seed / Provisioning Policy
+
+34. Implementation Risks
+
+35. Prompt #002 Plan
+
+Prompt #002 should be:
+AUTH/RBAC #002 — Database Schema + Entities + Migrations
+
+It should implement ONLY:
+- module skeletons if required
+- entities
+- migrations
+- constraints/indexes
+- schema tests
+
+Do NOT implement login/JWT yet.
+
+36. Files Created
+
+37. Files Modified
+
+38. Commands Executed
+
+39. Validation Results
+
+40. Git Status / Scope Summary
+
+41. Out-of-Scope Confirmation
+
+Confirm no:
+- user CRUD API
+- login
+- JWT
+- refresh endpoint
+- RBAC guard
+- permission endpoints
+- business modules
+
+42. Commit Message Recommendation
+
+Because PROJECT_RULES/rule files are expected to change, print exactly ONE:
+
+git commit -m "docs: define modular architecture rules"
+
+Cursor MUST NOT execute it.
+
+48. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #001 status
+- whether architecture is ready for #002
+- report path:
+  docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+
+Then print exactly ONE recommended:
+
+git commit -m "docs: define modular architecture rules"
+
+Cursor MUST NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to #002 automatically.

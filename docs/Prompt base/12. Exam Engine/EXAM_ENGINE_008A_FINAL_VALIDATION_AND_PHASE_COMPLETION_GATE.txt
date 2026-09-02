@@ -1,0 +1,755 @@
+CURSOR PROMPT — EXAM ENGINE #008A
+FINAL CORRECTIVE VALIDATION GATE — PROVE FULL EXAM PHASE COMPLETION
+
+CONTEXT
+-------
+Exam main prompts are implemented through #008:
+- #001 Domain audit/design
+- #002 Student learner self-scope
+- #003 Schema/module shell
+- #004 Authoring/publish/assignment
+- #005 Attempt generation/localized delivery
+- #006 Answer save/submit/grade/time controls
+- #007 Results/review + Learning Progress
+- #008 Demo seed + Postman + claimed phase completion
+
+However:
+corrective gates #003A/#004A/#005A/#006A/#007A were requested but Cursor continued forward without producing their validation reports.
+
+The #008 report claims:
+PHASE COMPLETE — VALIDATION PASS
+
+but only shows:
+- typecheck
+- lint
+- targeted exam/module-boundary tests
+- build
+
+It does NOT prove:
+- pristine `quality:full`
+- full integration suite
+- full DB e2e suite
+- migration/schema behavior
+- concurrency races
+- IDOR/access matrix end-to-end
+- Docker production build
+- npm audit
+- accumulated corrective debt closure
+
+Therefore this #008A is the TRUE FINAL GATE.
+
+Do NOT start a new module.
+Do NOT add new business features unless required to fix a failing gate.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read all Exam reports #001–#008
+- inspect actual code, schema, tests
+- execute all missing gates
+- fix defects found
+- create final authoritative report
+- not start next module
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "fix(exam): finalize validated exam engine"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read all:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+docs/EXAM_002_STUDENT_LEARNER_AUTH_SELF_SCOPE_FOUNDATION_REPORT.md
+docs/EXAM_003_EXAM_SCHEMA_AND_MODULE_SHELL_REPORT.md
+docs/EXAM_004_AUTHORING_PUBLISH_ASSIGNMENT_APIS_REPORT.md
+docs/EXAM_005_ATTEMPT_GENERATION_LOCALIZED_DELIVERY_REPORT.md
+docs/EXAM_006_ANSWER_SAVE_SUBMIT_GRADE_REPORT.md
+docs/EXAM_007_RESULTS_REVIEW_LEARNING_PROGRESS_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Inspect:
+src/modules/exam/
+src/modules/learning-progress/
+src/modules/student/
+src/modules/enrollment/
+src/modules/class/
+src/modules/question-bank/
+src/modules/localization/
+src/database/migrations/1788064000000-create-exam-schema.ts
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+docs/postman/Acutis-Education-Exam.postman_collection.json
+README.md
+package.json
+Dockerfile
+
+PRIMARY OBJECTIVE
+-----------------
+Prove the entire Exam phase is production-ready at foundation/MVP level.
+
+Do not rely on prior report claims.
+Validate actual code and actual DB behavior.
+
+Required final gates:
+A. architecture clean
+B. schema/history safe
+C. authoring/publish/assignment correct
+D. Student attempt access secure
+E. answer idempotency explicit and tested
+F. save/submit concurrency safe
+G. grading/result immutable
+H. expiry/assignment-close correct
+I. review visibility correct
+J. Parent/staff scopes safe
+K. Learning Progress integration correct
+L. localization snapshot stable
+M. demo seed idempotent
+N. Postman valid
+O. README/OpenAPI complete
+P. full integration PASS
+Q. full DB e2e PASS
+R. pristine quality:full PASS
+S. Docker PASS
+T. npm audit clean
+U. BLOCKER/HIGH = 0
+
+1. SCHEMA / HISTORY SAFETY
+--------------------------
+Audit all 7 Exam tables and all FKs/cascades.
+
+Required:
+- exactly 7 Exam-owned tables
+- no `exam_results`
+- no `exam_answer_revisions`
+- no unsafe authoring cascade that can erase graded attempt history
+- no cross-module ORM relations
+- cross-module FK policy documented and justified
+- no QB/Localization ORM/FK coupling
+- application-generated UUIDs
+- no DB UUID defaults
+
+If historical attempt deletion is possible through cascade:
+FIX immediately and mark prior state HIGH.
+
+2. DB INDEX / CONSTRAINT VALIDATION
+-----------------------------------
+Real MSSQL prove:
+- one PUBLISHED version per exam
+- one IN_PROGRESS attempt per enrollment+assignment
+- attemptNumber uniqueness
+- filtered clientRequestId uniqueness
+- review policy JSON check
+- option/answer JSON checks
+- duration >0
+- maxAttempts >=1
+- passing score bounds
+- assignment window
+- deadline >= startedAt
+- score range
+- source hash format
+- semantic hash format where present
+
+3. AUTHORING / PUBLISH / ASSIGNMENT
+-----------------------------------
+Integration real MSSQL:
+- create exam root
+- draft version
+- edit metadata
+- configure ordered questions
+- reorder
+- publish
+- published version immutable
+- previous published archived
+- currentPublishedVersion updated
+- clone-to-draft
+- questionVersionId cleared on clone
+- assignment create/list/update/cancel
+- same-parish class enforcement
+- inactive exam rejection
+- unpublished QB question publish rejection
+- non-published version assignment rejection
+- double/concurrent publish safe
+- version-number concurrency safe
+
+4. RBAC FINAL MATRIX
+--------------------
+Expected:
+STUDENT:
+- exam.attempt
+- exam.result.read own only
+- no authoring
+
+PARENT:
+- no exam.attempt
+- exam.result.read linked child only
+- no class summaries
+
+CATECHIST:
+- exam.read/result.read scoped assigned class
+- no learner attempt mutation
+- no publish/manage unless explicitly configured
+
+PARISH_ADMIN:
+- own parish authoring/assignment/result monitoring
+- no learner impersonation
+
+SUPER_ADMIN:
+- global admin/result monitoring
+- no learner impersonation
+
+5. STUDENT SELF-SCOPE
+---------------------
+Attempt APIs require BOTH:
+- exam.attempt
+- LearnerSelfScopeService
+
+No arbitrary enrollment impersonation.
+No sibling access.
+
+6. AVAILABLE ASSIGNMENTS
+------------------------
+Validate:
+- Student own active enrollment only
+- assignment class match
+- effective OPEN window
+- cancelled/closed/scheduled excluded appropriately
+- no foreign enrollment
+
+7. ATTEMPT START
+----------------
+Validate:
+- atomic creation
+- maxAttempts
+- one active
+- attemptNumber
+- clientRequestId idempotency
+- semantic conflict
+- concurrency double-start
+- deadline calculation
+- realized question order
+- realized option order
+- pinned questionVersionId
+- pinned sourceContentHash
+- pinned translationRevisionId
+- pinned deliveredLocale
+
+8. ANSWER IDEMPOTENCY
+---------------------
+Final report MUST state exact model:
+- stable clientAnswerId per question
+or
+- latest-request idempotency
+
+Test:
+- first save
+- same key/same answer replay
+- same key/different answer conflict
+- newer edit
+- older replay after newer edit
+- normalized UUID casing
+- duplicate selections
+- concurrent saves
+
+No unsupported claims.
+
+9. ANSWER VALIDATION
+--------------------
+Use pinned QB version/public service.
+
+Validate:
+- selected options belong to pinned version
+- cardinality by type
+- clearing behavior explicit
+- no correctness in save response
+
+10. SAVE / SUBMIT RACES
+-----------------------
+Real MSSQL concurrency:
+- save vs submit
+- double submit
+- submit vs expiry
+- double save
+
+No answer can persist after GRADED.
+No inconsistent score.
+
+11. GRADING
+-----------
+Only QuestionBankService.gradeAnswer.
+
+No direct correct-answer SQL.
+
+Unanswered = incorrect.
+No partial credit.
+
+12. RESULT SNAPSHOT
+-------------------
+Persist immutable:
+questionCount
+correctCount
+scorePercent
+passed
+submittedAt
+gradedAt
+finalizationReason
+
+Validate:
+correctCount <= questionCount
+score 0..100
+nullable pass threshold
+stable rounding
+
+13. EXPIRY / ASSIGNMENT CLOSE
+-----------------------------
+Lazy finalize on:
+GET
+save
+submit
+
+At expiry:
+- lock
+- no late answer
+- grade saved answers
+- unanswered incorrect
+- GRADED
+- deterministic finalization reason
+
+Define exact boundary:
+`now >= deadlineAt` recommended.
+
+Test assignment closes before duration.
+
+14. REVIEW POLICY
+-----------------
+Independent visibility:
+score
+correct answers
+explanation
+
+Each supports:
+NEVER
+AFTER_SUBMIT
+AFTER_ASSIGNMENT_CLOSE
+
+No cross-field leakage.
+
+15. ACTIVE / HIDDEN LEAKAGE
+---------------------------
+IN_PROGRESS never exposes:
+correct option IDs
+correctness
+answer definition
+explanation
+score
+passed
+correctCount
+
+GRADED but hidden review must also not leak via alternate endpoint.
+
+16. RESULT ACCESS
+-----------------
+Student:
+own result only
+
+Parent:
+linked child result only
+policy-gated fields
+no class summaries
+
+Catechist:
+assigned class summaries/results only
+
+ParishAdmin:
+own parish
+
+SuperAdmin:
+global
+
+Cross-parish/cross-child denied.
+
+17. ASSIGNMENT SUMMARY
+----------------------
+Validate pagination/bounds and minimal fields.
+
+No raw answers/correct-answer content.
+
+18. LOCALIZATION SNAPSHOT
+------------------------
+Existing attempt uses exact:
+questionVersionId
+sourceContentHash
+translationRevisionId
+deliveredLocale
+
+Newer approved translation must not change old attempt/review.
+
+No provider call on learner GET.
+
+Exam title/instructions source-locale snapshot accepted MVP; document deferred metadata localization.
+
+19. LEARNING PROGRESS
+---------------------
+Validate:
+ExamService.getEnrollmentExamSummary
+
+Learning Progress returns:
+assignmentsAvailable
+attemptsCompleted
+latestScorePercent
+
+Prove:
+- no Exam repo import in LearningProgress
+- no cycle
+- no Exam write to LearningProgress
+- latest score ordering deterministic
+- no exam data -> stable zero/null
+- multiple attempts behavior correct
+
+20. DEMO SEED
+-------------
+Run:
+npm run seed:exam-demo
+
+Run twice.
+
+Must be idempotent:
+- one exam root
+- expected published version
+- expected question config
+- one open assignment
+- no duplicates
+
+Safe dev/test guard.
+No real secrets/PII.
+
+21. POSTMAN
+-----------
+Validate:
+docs/postman/Acutis-Education-Exam.postman_collection.json
+
+Ensure flows:
+- admin/student/parent/catechist login
+- create/list if included
+- learner available assignment
+- start
+- start replay
+- save/edit
+- submit
+- result
+- Parent linked-child result
+- Catechist summary
+- Parent denied attempt
+- cross-scope denial where fixture supports
+
+No real tokens/secrets.
+
+22. README
+----------
+Final Exam section must document:
+- purpose Exam vs Practice
+- Student-only attempt policy
+- Parent result-only policy
+- Exam root/version lifecycle
+- class assignment
+- deadline/maxAttempts
+- idempotency
+- localized snapshot
+- answer save/submit
+- grading
+- review policy
+- result access
+- Learning Progress
+- demo seed
+- Postman
+- known deferred items
+
+23. OPENAPI
+-----------
+Audit all Exam endpoints and DTOs:
+- validation
+- permissions
+- errors
+- review visibility semantics
+- serverTime/deadlineAt
+- idempotency
+- result fields
+
+24. MODULE BOUNDARY
+-------------------
+ExamModule exports ExamService only.
+
+Allowed:
+Exam -> QB
+Exam -> Localization
+Exam -> Enrollment
+Exam -> Student
+Exam -> Class
+Exam -> Parish/Auth/AccessControl
+
+Forbidden:
+Exam -> Practice
+Practice -> Exam
+Localization -> Exam
+LearningProgress -> Exam repositories
+
+LearningProgress -> ExamService only.
+
+No forwardRef/cycles.
+
+25. SECURITY / PRIVACY
+----------------------
+Verify:
+- no answer logs
+- no correct-answer logs
+- no child cross-access
+- no parent class roster
+- no staff impersonation
+- no provider secrets
+- no client-computed score truth
+- server clock authoritative
+
+26. PERFORMANCE
+---------------
+Audit:
+- attempt GET/review no avoidable N+1
+- localized question resolution bounded/batched where available
+- assignment summaries paginated/bounded
+- Learning Progress summary bounded
+- no full-table scans in common learner path
+
+27. FULL TEST COMMANDS — MANDATORY
+----------------------------------
+Run all:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then reset AGAIN:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN `quality:full` exit code 0.
+
+Do not report targeted tests as equivalent.
+
+28. DOCKER — MANDATORY
+----------------------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:exam-final ."
+
+PASS required.
+
+If practical:
+boot runtime smoke.
+
+If skipped:
+state reason.
+
+29. NPM AUDIT
+-------------
+`npm audit --audit-level=moderate`
+
+No unresolved HIGH vulnerability.
+
+30. REQUIRED FINAL REPORT
+-------------------------
+Create:
+
+docs/EXAM_008A_FINAL_VALIDATION_AND_PHASE_COMPLETION_GATE_REPORT.md
+
+Required sections:
+1 Objective
+2 Why #008A was required
+3 Prior report gap
+4 Files created
+5 Files modified
+6 Architecture
+7 Table ownership
+8 FK/cascade audit
+9 Historical retention
+10 DB constraints/indexes
+11 Authoring regression
+12 Publish concurrency
+13 Assignment regression
+14 RBAC matrix
+15 Student self-scope
+16 Available assignments
+17 Attempt start
+18 Start idempotency
+19 Start concurrency
+20 Attempt numbering/maxAttempts
+21 Deadline
+22 Question snapshot
+23 Localization snapshot
+24 Answer idempotency exact model
+25 Answer semantic normalization
+26 Answer validation
+27 Answer clearing
+28 Double save
+29 Save vs submit
+30 Submit idempotency
+31 Grading
+32 Result snapshot
+33 Expiry
+34 Assignment close
+35 Review policy
+36 Active leakage
+37 Hidden graded leakage
+38 Student result access
+39 Parent access
+40 Catechist access
+41 ParishAdmin/SuperAdmin
+42 Assignment summaries
+43 Learning Progress
+44 Demo seed
+45 Demo idempotency
+46 Postman
+47 README
+48 OpenAPI
+49 Module boundary
+50 Security/privacy
+51 Performance
+52 Unit tests
+53 Integration tests
+54 DB e2e
+55 Concurrency tests
+56 pristine quality:full
+57 npm audit
+58 Docker
+59 Runtime smoke
+60 Commands
+61 Validation matrix
+62 Known/deferred
+63 BLOCKER/HIGH/MEDIUM/LOW
+64 Final phase completion decision
+65 Next backend phase recommendation
+66 Commit recommendation
+
+31. REQUIRED VERDICTS
+---------------------
+EXAM ARCHITECTURE READY: YES/NO
+EXAM SCHEMA/HISTORY SAFE: YES/NO
+AUTHORING/PUBLISH/ASSIGNMENT READY: YES/NO
+STUDENT ATTEMPT READY: YES/NO
+ANSWER IDEMPOTENCY READY: YES/NO
+SAVE/SUBMIT CONCURRENCY SAFE: YES/NO
+GRADING/RESULT READY: YES/NO
+EXPIRY READY: YES/NO
+RESULT/REVIEW READY: YES/NO
+PARENT ACCESS SAFE: YES/NO
+STAFF ACCESS SAFE: YES/NO
+LOCALIZATION SNAPSHOT STABLE: YES/NO
+LEARNING PROGRESS INTEGRATION READY: YES/NO
+DEMO SEED READY: YES/NO
+POSTMAN READY: YES/NO
+README/OPENAPI READY: YES/NO
+PRISTINE QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+32. FINAL PHASE COMPLETION
+--------------------------
+Only if:
+- BLOCKER=0
+- HIGH=0
+- full integration PASS
+- DB e2e PASS
+- concurrency tests PASS
+- pristine quality:full PASS
+- Docker PASS
+- demo/Postman/docs PASS
+
+Then state exactly:
+
+EXAM ENGINE / FORMAL ASSESSMENT PHASE COMPLETE
+
+EXAM DOMAIN READY: YES
+
+FE EXAM ADMIN CONTRACT READY: YES
+
+FE EXAM LEARNER CONTRACT READY: YES
+
+MOBILE EXAM CONTRACT READY: YES
+
+LEARNING PROGRESS EXAM INTEGRATION READY: YES
+
+Otherwise state:
+
+EXAM ENGINE / FORMAL ASSESSMENT PHASE NOT COMPLETE
+
+and list blocking items.
+
+33. NEXT BACKEND PHASE
+----------------------
+Only after true COMPLETE:
+re-audit roadmap and recommend next module.
+
+Likely candidates:
+- Notification / Push foundation
+- Realtime Communication / Chat
+- another remaining business module from master roadmap
+
+Do NOT start automatically.
+
+34. PROMPT COUNT
+----------------
+This is corrective #008A.
+
+Main 8-prompt plan is finished, but phase is only truly complete after this gate.
+
+35. FINAL RESPONSE
+------------------
+Respond concisely:
+- #008A status
+- phase COMPLETE/NOT COMPLETE
+- architecture/schema/history
+- answer/concurrency
+- grading/expiry
+- review/access
+- Learning Progress
+- demo/Postman
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- next phase recommendation
+- report path
+
+Then exactly:
+git commit -m "fix(exam): finalize validated exam engine"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next module automatically.

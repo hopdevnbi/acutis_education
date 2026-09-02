@@ -1,0 +1,1084 @@
+CURSOR PROMPT — CLASS/PEOPLE/ENROLLMENT #005/7
+CATECHIST ASSIGNMENT + ENROLLMENT HISTORY SERVICES + API
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- Parish/Academic Year/Catechism Level
+- CLASS #001 Domain Audit + Bounded Context Design
+- CLASS #002 Schema + Entities + Migrations
+- CLASS #003 Class Service + API + RBAC Foundations
+- CLASS #004 Student + Guardian Services + APIs
+
+Current:
+- CLASS/PEOPLE/ENROLLMENT #005 / 7 — Catechist Assignment + Enrollment History Services + APIs
+
+Remaining:
+- #006 Scoped authorization hardening + cross-domain integration
+- #007 Final audit + seed/Postman + FE contract readiness
+
+Frontend remains a separate ReactJS repository/source.
+Mobile remains a separate React Native/Expo repository/source.
+Both clients communicate with BE through HTTP API only.
+Do NOT modify FE or Mobile in this prompt.
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/CLASS_003_CLASS_SERVICE_API_RBAC_REPORT.md
+   docs/CLASS_004_STUDENT_GUARDIAN_SERVICES_API_REPORT.md
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/class/
+   src/modules/student/
+   src/modules/enrollment/
+   src/modules/users/
+   src/modules/parish/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/seeds/
+   test/
+   README.md
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Architecture Rules
+---------------------
+ClassModule owns:
+- classes
+- class_catechist_assignments
+
+EnrollmentModule owns:
+- enrollments
+
+StudentModule owns:
+- students
+- student_guardians
+
+Business dependencies allowed:
+
+ClassModule assignment behavior may depend on:
+- UsersModule public service
+- ClassService own module
+- Auth/AccessControl only at controller wiring layer
+
+EnrollmentModule may depend on:
+- StudentModule public service
+- ClassModule public service
+- Auth/AccessControl only at controller wiring layer
+
+EnrollmentModule MUST NOT:
+- import StudentEntity
+- import ClassEntity
+- inject Student/Class repositories
+- write class/student tables
+
+ClassModule MUST NOT:
+- import Enrollment repository/service in a way that creates a cycle
+
+No cross-module repository/entity access.
+
+4. Primary Objective
+--------------------
+Implement:
+
+A. Catechist assignment domain behavior
+- assign catechist to class
+- list assignments
+- get assignment if useful
+- update/end assignment
+- history-preserving re-assignment
+- safe snapshots
+- RBAC
+- tests
+
+B. Enrollment domain behavior
+- enroll student
+- list class roster
+- list student enrollment history
+- get enrollment
+- complete enrollment
+- withdraw enrollment
+- transfer enrollment command
+- one ACTIVE enrollment invariant
+- denormalized parish/year consistency
+- safe snapshots
+- RBAC
+- tests
+
+Do NOT implement scoped authorization yet.
+That is #006.
+
+5. CatechistAssignmentSnapshot
+------------------------------
+Create:
+
+ClassCatechistAssignmentSnapshot:
+- id
+- classId
+- catechistUserId
+- assignmentRole
+- status
+- assignedAt
+- endedAt
+- createdAt
+- updatedAt
+
+No UserEntity data.
+
+6. Assignment Role
+------------------
+Current enum:
+LEAD only
+
+Do not add ASSISTANT unless actual requirement now requires it.
+
+Keep API future-compatible.
+
+7. Assignment Status
+--------------------
+ACTIVE
+ENDED
+
+ENDED is terminal.
+
+No reactivation of old row.
+
+Reassignment after END:
+create new ACTIVE row.
+
+8. Assign Catechist
+-------------------
+POST /api/v1/classes/:classId/catechists
+
+Input:
+- catechistUserId
+- assignmentRole default/required LEAD
+
+Flow:
+1. validate class exists
+2. validate class is not terminal if assigning operational staff
+3. validate catechist user exists and is active via UsersModule public API
+4. create ACTIVE assignment
+5. assignedAt=now
+6. endedAt=null
+7. map duplicate ACTIVE assignment -> 409
+8. return snapshot
+
+Do not query users repository directly.
+
+9. Catechist User Role
+----------------------
+Do NOT require the user already has CATECHIST role in business logic unless current architecture explicitly does this elsewhere.
+
+Identity relationship and RBAC role are separate.
+
+If useful, document that admins may assign a user then separately grant role/capability through auth admin flows.
+
+Do not couple assignment persistence to role table.
+
+10. Assignment History
+-----------------------
+When ending:
+- status ENDED
+- endedAt=now
+
+Do not hard delete.
+
+Reassign same user later:
+new row.
+
+11. Assignment Update
+---------------------
+Since only LEAD exists, generic metadata update may not be necessary.
+
+Preferred routes:
+POST assign
+GET list
+PATCH status/end
+
+Avoid meaningless PATCH if no mutable business field exists.
+
+12. Assignment List
+-------------------
+GET /api/v1/classes/:classId/catechists
+
+Filters:
+- status optional
+- default ACTIVE
+
+Historical admin view may request ENDED/all.
+
+Use deterministic order:
+assignedAt DESC or ACTIVE-first then assignedAt.
+
+Document.
+
+13. Assignment RBAC
+-------------------
+Introduce/wire:
+
+class-catechists.read
+class-catechists.manage
+
+Admin/global capability endpoints:
+
+GET -> read
+POST/end -> manage
+
+Recommended dev seed:
+
+SUPER_ADMIN:
+read/manage
+
+PARISH_ADMIN:
+read/manage
+
+CATECHIST:
+do NOT grant manage
+May omit broad read because self-class access will be scoped in #006.
+
+PARENT:
+none
+
+Do not grant broad student-related capabilities to parent/catechist.
+
+14. EnrollmentSnapshot
+----------------------
+Create:
+
+EnrollmentSnapshot:
+- id
+- studentId
+- classId
+- parishId
+- academicYearId
+- status
+- enrolledAt
+- leftAt
+- createdAt
+- updatedAt
+
+No nested Student/Class entity.
+
+15. Enrollment Status
+---------------------
+ACTIVE
+COMPLETED
+WITHDRAWN
+TRANSFERRED
+
+Lifecycle:
+
+Create -> ACTIVE
+
+ACTIVE -> COMPLETED
+ACTIVE -> WITHDRAWN
+ACTIVE -> TRANSFERRED (ONLY via transfer command)
+
+Terminal:
+COMPLETED
+WITHDRAWN
+TRANSFERRED
+
+No terminal -> ACTIVE.
+
+16. Enroll Student
+------------------
+POST /api/v1/classes/:classId/enrollments
+
+Input:
+- studentId
+
+Flow:
+1. StudentService.assertStudentActive(studentId)
+2. ClassService.assertClassAcceptsEnrollment(classId)
+3. get ClassSnapshot
+4. copy:
+   parishId
+   academicYearId
+5. create ACTIVE enrollment
+6. enrolledAt=now
+7. leftAt=null
+8. map one-ACTIVE invariant conflict -> 409
+9. return snapshot
+
+No direct Parish/Academic dependency required.
+Scope keys come from ClassSnapshot.
+
+17. One ACTIVE Enrollment Invariant
+-----------------------------------
+DB filtered unique already enforces:
+
+(student_id, academic_year_id, parish_id)
+WHERE status='ACTIVE'
+
+Independently audit race handling.
+
+Service may pre-check for better errors, but DB index is final invariant.
+
+Map MSSQL unique conflict to:
+ActiveEnrollmentAlreadyExistsError
+
+18. Duplicate Same Class
+------------------------
+If same student already ACTIVE in same class:
+same invariant catches it.
+
+Return 409 with clear domain-safe error.
+
+19. Class Roster
+----------------
+GET /api/v1/classes/:classId/enrollments
+
+Filters:
+- status
+- optional search is NOT EnrollmentModule concern unless StudentModule snapshots are orchestrated externally
+
+Preferred:
+return enrollment rows only in #005.
+
+Do not join StudentEntity.
+
+Ordering:
+enrolledAt ASC or createdAt ASC.
+
+Pagination per PROJECT_RULES.
+
+20. Student Enrollment History
+------------------------------
+GET /api/v1/students/:studentId/enrollments
+
+Validate student exists.
+
+Return all/history, optionally filter:
+- status
+- academicYearId
+- parishId
+
+Default order:
+enrolledAt DESC.
+
+21. Get Enrollment
+------------------
+GET /api/v1/enrollments/:id
+
+Safe snapshot.
+
+22. Complete Enrollment
+-----------------------
+PATCH /api/v1/enrollments/:id/status
+
+Request may allow:
+COMPLETED
+WITHDRAWN
+
+Do NOT allow TRANSFERRED through generic endpoint.
+
+On terminal transition:
+leftAt=now.
+
+Only ACTIVE may transition.
+
+23. Withdraw Enrollment
+-----------------------
+ACTIVE -> WITHDRAWN
+
+Set leftAt.
+
+No delete.
+
+24. Transfer Enrollment
+-----------------------
+Implement explicit:
+
+POST /api/v1/enrollments/:id/transfer
+
+Body:
+{
+  targetClassId: UUID
+}
+
+Optional reason is NOT in schema, so do not invent/persist reason.
+
+25. Transfer Preconditions
+--------------------------
+Transactionally:
+
+1. load source enrollment with appropriate lock
+2. require source ACTIVE
+3. load target ClassSnapshot via ClassService
+4. require target class accepts enrollment
+5. require target class parishId == source.parishId
+6. require target class academicYearId == source.academicYearId
+7. require targetClassId != source.classId
+8. transition source -> TRANSFERRED + leftAt=now
+9. create new ACTIVE enrollment with target class scope keys
+10. return both old/new snapshots or a clear transfer result DTO
+
+Do not allow transfer across academic year.
+Do not allow transfer across parish.
+
+New academic year is a new enrollment workflow, not transfer.
+
+26. Transfer Transaction Boundary
+---------------------------------
+EnrollmentModule owns both enrollment rows, so transaction belongs entirely inside EnrollmentModule.
+
+This is correct.
+
+Cross-module ClassService validation happens before/within operation carefully.
+
+Do not attempt distributed/shared repository transaction with ClassModule.
+
+27. Transfer Concurrency
+------------------------
+CRITICAL:
+
+Audit two concurrent transfer/enroll operations.
+
+Final DB invariant ensures only one ACTIVE enrollment per student/parish/year.
+
+Use transaction + row lock on source enrollment.
+
+Map unique/deadlock/serialization conflict to safe enrollment conflict.
+
+Do not leak MSSQL error.
+
+28. Transfer Failure Atomicity
+------------------------------
+If creation of target enrollment fails:
+source must remain ACTIVE.
+
+Therefore:
+source terminal update + target insert MUST be in same transaction.
+
+Add integration test.
+
+29. Enrollment Denormalized Keys
+--------------------------------
+Never accept parishId or academicYearId from request.
+
+Always derive from ClassSnapshot.
+
+Never allow update later.
+
+30. Class Structural Stability
+------------------------------
+CLASS #003 made class structural IDs immutable.
+
+Audit and rely on this.
+
+Enrollment denormalized keys stay historically stable.
+
+31. Enrollment Query Service
+----------------------------
+CLASS #004 introduced EnrollmentQueryService for read-only parish student discovery.
+
+Audit whether new EnrollmentService should subsume or coexist.
+
+Preferred:
+- EnrollmentService owns business mutations + core enrollment reads
+- EnrollmentQueryService may remain as specialized read facade if needed for avoiding module cycles/orchestration
+
+Do not create duplicate query logic unnecessarily.
+
+If safe to fold it into EnrollmentService without breaking StudentModule dependency cycle, analyze carefully.
+
+Remember:
+StudentModule currently imports EnrollmentModule for controller-level parish list orchestration.
+EnrollmentModule #005 will need StudentModule.
+That can create a cycle.
+
+CRITICAL: avoid circular dependency.
+
+32. Circular Dependency Audit — CRITICAL
+----------------------------------------
+Current #004 architecture reports:
+StudentModule -> EnrollmentModule (for EnrollmentQueryService)
+
+#005 planned:
+EnrollmentModule -> StudentModule (StudentService)
+
+This WOULD create:
+StudentModule <-> EnrollmentModule
+
+This violates project rules.
+
+You MUST fix architecture before implementing EnrollmentService.
+
+Do NOT use forwardRef() as default workaround.
+
+33. Required Cycle Resolution
+-----------------------------
+Choose a clean acyclic solution.
+
+Preferred architecture:
+
+A. Move parish student list orchestration endpoint out of StudentModule so StudentModule no longer imports EnrollmentModule.
+
+Possible solution:
+- EnrollmentModule owns/read endpoint for parish student discovery? But response is students.
+- Or create a thin application/orchestration module only if truly justified.
+- Or make StudentModule expose StudentService, and a controller in EnrollmentModule combines EnrollmentQueryService + StudentService, meaning EnrollmentModule -> StudentModule only.
+
+Preferred:
+EnrollmentModule imports StudentModule.
+StudentModule DOES NOT import EnrollmentModule.
+
+Move:
+GET /api/v1/parishes/:parishId/students
+controller/orchestration to EnrollmentModule (route may still be same URL).
+
+EnrollmentModule can:
+- query enrollment-owned IDs
+- call StudentService for safe snapshots
+
+This preserves HTTP contract while fixing dependency direction.
+
+Do NOT move enrollment repository access into StudentModule.
+
+34. Module Dependency Target
+----------------------------
+After #005:
+
+StudentModule -> UsersModule only (+ auth/access wiring)
+
+ClassModule -> ParishModule + AcademicStructureModule + UsersModule for assignment validation
+
+EnrollmentModule -> StudentModule + ClassModule
+
+No:
+StudentModule -> EnrollmentModule
+
+Acyclic.
+
+35. Module Export Target
+------------------------
+StudentModule:
+- StudentService
+- StudentGuardianService if needed by #006
+
+ClassModule:
+- ClassService
+- CatechistAssignmentService or ClassCatechistAssignmentService
+
+EnrollmentModule:
+- EnrollmentService
+- EnrollmentQueryService only if still useful and non-duplicative
+
+No persistence exports.
+
+36. Parish Student List Contract
+--------------------------------
+Preserve existing route if already exposed:
+
+GET /api/v1/parishes/:parishId/students
+
+But refactor ownership/orchestration to avoid module cycle.
+
+Response contract must remain backward-compatible.
+
+Do not break FE contract unnecessarily.
+
+37. Enrollment RBAC
+-------------------
+Introduce/wire:
+
+enrollments.read
+enrollments.manage
+
+Recommended dev seed:
+
+SUPER_ADMIN:
+read/manage
+
+PARISH_ADMIN:
+read/manage
+
+CATECHIST:
+do NOT grant broad enrollment read/manage yet
+Scoped roster access in #006.
+
+PARENT:
+do NOT grant broad enrollment read
+Scoped child history in #006.
+
+38. API Routes — Catechist Assignment
+-------------------------------------
+Implement:
+
+POST  /api/v1/classes/:classId/catechists
+GET   /api/v1/classes/:classId/catechists
+PATCH /api/v1/class-catechist-assignments/:id/status
+
+No DELETE.
+
+39. API Routes — Enrollment
+---------------------------
+Implement:
+
+POST  /api/v1/classes/:classId/enrollments
+GET   /api/v1/classes/:classId/enrollments
+GET   /api/v1/students/:studentId/enrollments
+GET   /api/v1/enrollments/:id
+PATCH /api/v1/enrollments/:id/status
+POST  /api/v1/enrollments/:id/transfer
+
+Preserve/refactor:
+GET /api/v1/parishes/:parishId/students
+
+40. DTOs
+--------
+Catechist:
+AssignCatechistRequestDto
+CatechistAssignmentListQueryDto
+UpdateCatechistAssignmentStatusRequestDto
+CatechistAssignmentResponseDto
+CatechistAssignmentListResponseDto
+
+Enrollment:
+CreateEnrollmentRequestDto
+EnrollmentListQueryDto
+StudentEnrollmentHistoryQueryDto
+UpdateEnrollmentStatusRequestDto
+TransferEnrollmentRequestDto
+EnrollmentResponseDto
+EnrollmentListResponseDto
+EnrollmentTransferResponseDto
+
+Use class-validator.
+
+41. HTTP Status
+---------------
+POST assign/enroll/transfer -> 201 or 200 according to convention.
+
+Preferred:
+POST assign -> 201
+POST enroll -> 201
+POST transfer -> 201 for newly created enrollment or 200 command result
+
+Choose consistently and document.
+
+GET -> 200
+PATCH -> 200
+
+400 validation/invalid transition
+401 unauthenticated
+403 permission
+404 missing class/student/user/enrollment/assignment
+409 duplicate/conflict
+
+42. Error Types — Assignment
+----------------------------
+Examples:
+InvalidCatechistAssignmentIdError
+CatechistAssignmentNotFoundError
+CatechistAlreadyAssignedError
+InvalidCatechistAssignmentStatusTransitionError
+ClassCannotAcceptCatechistAssignmentError
+
+Use concise domain errors.
+
+43. Error Types — Enrollment
+----------------------------
+Examples:
+InvalidEnrollmentIdError
+EnrollmentNotFoundError
+ActiveEnrollmentAlreadyExistsError
+InvalidEnrollmentStatusTransitionError
+EnrollmentTransferTargetSameClassError
+EnrollmentTransferDifferentParishError
+EnrollmentTransferDifferentAcademicYearError
+EnrollmentTransferConflictError
+
+No SQL leakage.
+
+44. Swagger/OpenAPI
+------------------
+Document:
+- all new routes
+- bearer auth
+- enums
+- pagination/filter params
+- transfer command semantics
+- safe response DTOs
+
+No real child data in examples.
+
+45. Unit Tests — Catechist
+--------------------------
+Test:
+- assign
+- user validation
+- class validation
+- duplicate active assignment
+- end
+- ENDED terminal
+- reassign after ended
+- list
+- safe snapshot
+
+46. Unit Tests — Enrollment
+---------------------------
+Test:
+- enroll active student in active class
+- inactive student rejection
+- class not accepting enrollment
+- derive scope keys from class
+- active duplicate conflict
+- get/list/history
+- complete
+- withdraw
+- invalid transition
+- transfer same class reject
+- transfer other parish reject
+- transfer other year reject
+- transfer success
+- terminal source + new active target
+- safe snapshot
+
+47. Integration Tests — Assignment
+----------------------------------
+Against MSSQL:
+- assign
+- duplicate active conflict
+- end + reassign
+- one user multiple classes
+- history preserved
+
+48. Integration Tests — Enrollment
+----------------------------------
+Against MSSQL:
+- enroll
+- one active invariant
+- complete then new active if policy permits
+- withdraw
+- student history
+- class roster
+- transfer atomicity
+- transfer success
+- transfer failure rollback
+- different year new enrollment allowed
+- different parish active allowed per existing invariant
+
+49. Concurrent Enrollment/Transfer Test
+---------------------------------------
+If practical:
+attempt concurrent create/transfer for same student/year/parish.
+
+Expected:
+exactly one ACTIVE final row.
+
+Do not rely on flaky sleeps.
+
+50. DB-Aware E2E — Assignment
+-----------------------------
+Test:
+- 401
+- 403
+- assign 201
+- list 200
+- duplicate 409
+- end 200
+- reassign 201
+
+51. DB-Aware E2E — Enrollment
+-----------------------------
+Test:
+- 401
+- 403
+- enroll 201
+- roster/history/get 200
+- complete/withdraw
+- duplicate active 409
+- transfer 200/201
+- invalid cross-year/parish transfer
+- terminal transition errors
+
+Verify CATECHIST/PARENT do not have broad admin enrollment access based on seed policy.
+
+52. Existing Student Route Regression
+-------------------------------------
+Preserve:
+GET /api/v1/parishes/:parishId/students
+
+After dependency-cycle refactor:
+same route and response contract must PASS existing e2e.
+
+53. Existing Regression
+-----------------------
+Run:
+- Auth/RBAC
+- Parish
+- AcademicStructure
+- Class
+- Student/Guardian
+- schema tests
+
+54. quality:full Flake — Track
+------------------------------
+Previous #003/#004 report:
+parallel DB e2e may flake due auth-rbac/dev seed cleanup.
+
+Attempt:
+npm run quality:full
+
+If failure:
+- reproduce
+- determine exact shared-state race
+- if small test-isolation fix is safe, fix it
+- do not weaken assertions
+- otherwise carry explicitly to #006
+
+Since #006 is hardening, it must not remain ambiguous.
+
+55. No Scoped Authorization Yet
+-------------------------------
+Do NOT implement:
+ParishScopeService
+ClassScopeService
+StudentAccessService
+self/parent/catechist scoped endpoints
+
+Only global RBAC capability for admin APIs.
+
+#006 will harden resource scope.
+
+56. No Class Completion Orchestration
+-------------------------------------
+Do NOT make ClassService depend on EnrollmentModule.
+
+If class completion should require closed enrollments:
+defer orchestration to #006 design/hardening without creating cycle.
+
+57. No Domain Seed
+------------------
+No class/student/enrollment sample seed yet.
+#007.
+
+58. No FE/Mobile Changes
+------------------------
+Do not touch React Web or React Native repositories.
+
+59. Security / Privacy Review
+-----------------------------
+Verify:
+- no student full names in unnecessary logs
+- no entity leakage
+- parent/catechist broad enrollment permissions denied
+- assignment does not imply auth role automatically
+- enrollment request cannot forge parish/year IDs
+- no cross-module repos
+- no forwardRef cycle workaround
+
+60. Microservice Extraction Review
+----------------------------------
+Class Service owns:
+- classes
+- class_catechist_assignments
+
+Enrollment Service owns:
+- enrollments
+
+Enrollment Service consumes:
+- Student Service
+- Class Service
+
+Future Attendance/Exam consume EnrollmentService snapshots.
+
+No entity crossing.
+
+61. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:enrollment-api .
+
+62. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(enrollment): add catechist and enrollment APIs"
+
+Cursor must NOT execute it.
+
+63. Required Report
+-------------------
+Create:
+
+docs/CLASS_005_CATECHIST_ENROLLMENT_SERVICES_API_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #004
+3. Rules applied
+4. Circular dependency audit
+5. Cycle resolution implemented
+6. Final module dependency graph
+7. Files created
+8. Files modified
+9. ClassModule assignment architecture
+10. CatechistAssignmentSnapshot
+11. Assignment lifecycle/history
+12. Assignment user/class validation
+13. Assignment API
+14. Assignment RBAC
+15. EnrollmentModule architecture
+16. EnrollmentSnapshot
+17. Enrollment lifecycle
+18. Enroll flow
+19. One ACTIVE invariant
+20. Denormalized scope keys
+21. Class roster
+22. Student enrollment history
+23. Complete/withdraw flows
+24. Transfer command
+25. Transfer transaction
+26. Transfer concurrency/race handling
+27. Transfer rollback atomicity
+28. Parish student list ownership refactor
+29. HTTP routes
+30. DTOs
+31. HTTP/error mapping
+32. Enrollment RBAC
+33. Dev permission seed changes
+34. Swagger/OpenAPI readiness
+35. Repository boundary
+36. Cross-module dependency audit
+37. Unit tests
+38. Integration tests
+39. Concurrent tests
+40. DB-aware e2e
+41. Existing Student/Class regression
+42. quality:full flake audit
+43. Security/privacy review
+44. Docker validation
+45. Microservice extraction review
+46. Commands executed
+47. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- no circular dependency
+- no forwardRef
+- assignment create/list/end/reassign
+- enrollment create/list/history/get
+- complete/withdraw
+- transfer
+- transfer atomicity
+- one ACTIVE enrollment invariant
+- concurrent safety
+- parish student route preserved
+- auth 401
+- permission 403
+- parent broad enrollment access denied
+- catechist broad enrollment access denied
+- no cross-module entity/repository
+- safe snapshots
+- prior regression
+
+48. Known issues/deferred
+49. Out-of-scope confirmation
+50. CLASS #006 readiness
+51. Prompt count status
+52. Commit recommendation
+
+64. CLASS #006 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+CLASS/PEOPLE/ENROLLMENT #006 — Scoped Authorization + Cross-Domain Hardening
+
+#006 must implement/audit:
+- ParishMembershipService / ParishScopeService
+- ClassScopeService
+- StudentAccessService
+- PARISH_ADMIN parish scope
+- CATECHIST assigned-class scope
+- PARENT linked-child scope
+- STUDENT own-profile/enrollment scope if ready
+- admin vs self/resource endpoints
+- class/student/enrollment resource authorization
+- class completion/cancellation cross-domain policy
+- quality:full DB test isolation hardening
+- full security matrix
+
+65. Prompt Count
+----------------
+State:
+#005/7 complete
+approximately 2 prompts remain (#006–#007)
+
+66. Final Response
+------------------
+Respond concisely:
+
+- CLASS/PEOPLE/ENROLLMENT #005 status
+- circular dependency resolved YES/NO
+- Catechist API PASS/FAIL
+- Enrollment API PASS/FAIL
+- transfer/history PASS/FAIL
+- quality:full PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CLASS_005_CATECHIST_ENROLLMENT_SERVICES_API_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(enrollment): add catechist and enrollment APIs"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #006 automatically.

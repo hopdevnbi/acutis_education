@@ -22,7 +22,7 @@ describe('ParentPortalService', () => {
   let studentService: jest.Mocked<Pick<StudentService, 'getStudentSnapshotsByIds'>>;
   let classService: jest.Mocked<Pick<ClassService, 'getClassSnapshotsByIds'>>;
   let learningProgressService: jest.Mocked<
-    Pick<LearningProgressService, 'getEnrollmentLearningProgress'>
+    Pick<LearningProgressService, 'getEnrollmentLearningProgress' | 'getClassLearningProgress'>
   >;
 
   const actorUserId = '11111111-1111-4111-8111-111111111111';
@@ -51,6 +51,7 @@ describe('ParentPortalService', () => {
     };
     learningProgressService = {
       getEnrollmentLearningProgress: jest.fn(),
+      getClassLearningProgress: jest.fn(),
     };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -134,6 +135,21 @@ describe('ParentPortalService', () => {
         },
       ],
     });
+  });
+
+  it('uses bounded batch queries for children list composition', async () => {
+    enrollmentQueryService.listStudentIdsForGuardian.mockResolvedValue([studentId]);
+    studentService.getStudentSnapshotsByIds.mockResolvedValue([]);
+    enrollmentQueryService.listActiveEnrollmentsByStudentIds.mockResolvedValue([]);
+    classService.getClassSnapshotsByIds.mockResolvedValue([]);
+
+    await parentPortalService.listChildren(actorUserId);
+
+    expect(enrollmentQueryService.listStudentIdsForGuardian).toHaveBeenCalledTimes(1);
+    expect(enrollmentQueryService.listActiveEnrollmentsByStudentIds).toHaveBeenCalledTimes(1);
+    expect(studentService.getStudentSnapshotsByIds).toHaveBeenCalledTimes(1);
+    expect(classService.getClassSnapshotsByIds).toHaveBeenCalledTimes(1);
+    expect(learningProgressService.getClassLearningProgress).not.toHaveBeenCalled();
   });
 
   it('delegates enrollment progress to learning progress after guardian scope check', async () => {

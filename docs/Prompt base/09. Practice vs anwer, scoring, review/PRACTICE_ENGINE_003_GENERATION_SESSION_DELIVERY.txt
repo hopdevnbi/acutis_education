@@ -1,0 +1,1144 @@
+CURSOR PROMPT — PRACTICE ENGINE #003/6
+GENERATION + SESSION LIFECYCLE + QUESTION SELECTION + CONTEXTUAL MEDIA GROUNDWORK
+
+1. Context
+----------
+Completed:
+- PRACTICE #001/6 — Domain Audit + Flow Design
+- PRACTICE #002/6 — Schema + Entities + Migrations
+
+Current:
+PRACTICE #003 / 6
+
+Remaining:
+#004 Answer submission + grading + retry + review-wrong
+#005 Progress/statistics + scoped Parent/Catechist access + FE/Mobile contract hardening
+#006 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+This prompt implements generation/session lifecycle only.
+
+Do NOT implement answer submission/grading/retry/review-wrong business logic yet.
+Do NOT implement progress aggregation/API yet.
+
+2. Permanent Workflow / Git Rules — CRITICAL
+--------------------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports and current code first
+- stay inside #003 scope
+- create detailed docs report
+- not auto-proceed to #004
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(practice): add session generation and delivery"
+
+Do not execute it.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/practice/
+src/modules/question-bank/
+src/modules/enrollment/
+src/modules/class/
+src/modules/curriculum/
+src/modules/media/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement:
+
+A. PracticeService public facade
+B. Parent/enrollment-scoped session creation
+C. Question Bank batch-selection public contract
+D. exact questionVersion pinning
+E. question randomization
+F. option-order persistence
+G. session GET/resume
+H. explicit abandon
+I. generation idempotency
+J. contextual practice media route groundwork
+K. RBAC permissions
+L. Swagger/OpenAPI
+M. unit/integration/DB e2e tests
+
+Do NOT implement:
+- answer POST
+- grading
+- retry
+- review-wrong creation
+- progress API
+- feedback reveal
+- explanation/correct-answer reveal
+- Exam
+
+5. PracticeModule Architecture
+------------------------------
+PracticeModule now imports:
+- QuestionBankModule
+- EnrollmentModule
+- ClassModule
+- CurriculumModule
+- MediaModule
+- AuthModule
+- AccessControlModule
+- TypeOrmModule practice entities
+
+Export:
+PracticeService only
+
+Internal providers:
+PracticeGenerationService
+PracticeSessionQueryService
+PracticeMediaService or equivalent if useful
+
+Do NOT export repositories/entities/internal services.
+
+No forwardRef.
+No cycles.
+
+6. RBAC Permissions
+-------------------
+Seed:
+
+practice.read
+practice.manage
+
+Role baseline:
+
+SUPER_ADMIN:
+read/manage globally
+
+PARISH_ADMIN:
+read own parish
+manage default DENIED unless existing product/support requirement clearly needs it
+
+CATECHIST:
+practice.read only for assigned class progress/session metadata if scope permits; but learner session delivery read should remain denied unless explicitly needed
+
+PARENT:
+practice.read + practice.manage for linked child enrollment
+
+No STUDENT role yet.
+
+Because #003 is session start/read:
+Parent is primary learner actor.
+
+Document exact route behavior.
+
+7. Enrollment Scope — CRITICAL
+------------------------------
+All session creation must resolve:
+enrollment -> student -> class -> parish
+
+Requirements:
+- enrollment exists
+- enrollment ACTIVE
+- student ACTIVE if current model supports status
+- class ACTIVE/current if required by existing domain rules
+- Parent must be guardian-linked / `EnrollmentAccessService.assertCanReadEnrollment(...)`
+
+Do not authorize by permission alone.
+
+8. Parent Proxy
+---------------
+PARENT may:
+- create STANDARD session for linked enrollment
+- GET/resume own linked child's session
+- abandon own linked child's session
+
+Store:
+enrollmentId = learner
+createdByUserId = actor
+
+No learner impersonation ambiguity.
+
+9. Catechist
+------------
+For #003:
+- no create
+- no abandon
+- no answer
+- generic session learner delivery GET should default DENIED
+
+Progress read comes #005.
+
+Do not broaden early.
+
+10. Parish Admin
+----------------
+Default:
+- can inspect metadata/progress later
+- no learner session generation/submission by default
+
+For #003 by-id session GET:
+prefer DENY unless needed for support.
+
+Super admin may inspect.
+
+Document.
+
+11. Create Session Endpoint
+---------------------------
+Implement:
+
+POST /api/v1/enrollments/:enrollmentId/practice-sessions
+
+Permission:
+practice.manage
+
+Body:
+clientRequestId? UUID
+locale?
+curriculumId?
+canonicalLessonKey?
+tagIds?
+tagCodes?
+questionTypes?
+difficulty?
+questionCount
+randomizeQuestions?
+randomizeOptions?
+
+Defaults:
+questionCount maybe 10
+randomizeQuestions=true
+randomizeOptions=true
+maxAttemptsPerQuestion=3 fixed server-side
+sessionType STANDARD
+
+Do NOT accept sessionType from client.
+
+12. DTO Bounds
+--------------
+questionCount:
+1..50
+
+tagIds/tagCodes:
+reasonable cap aligned with #001/#007 conventions
+
+questionTypes:
+MVP enum only
+
+locale:
+BCP47-like parser using existing project utility pattern
+
+canonicalLessonKey requires curriculum context if needed.
+
+Reject unknown fields.
+
+13. Curriculum Assignment Resolution
+------------------------------------
+Resolve enrollment class triple:
+parishId
+academicYearId
+catechismLevelId
+
+Use CurriculumService public API to resolve assigned published curriculum.
+
+If request curriculumId omitted:
+use assigned curriculum if one exists / if required.
+
+If provided:
+must match assigned curriculum for learner context.
+
+If canonicalLessonKey provided:
+must belong assigned/requested curriculum.
+
+Do not use repositories/entities cross-module.
+
+14. What If No Assigned Curriculum?
+-----------------------------------
+Audit current curriculum delivery semantics.
+
+Preferred:
+If request contains curriculum/lesson filter and no assignment -> 422/404 domain error.
+
+If no curriculum filter is requested:
+allow parish-level/tag-based practice only if product design permits.
+
+Strong recommendation:
+MVP learner practice should default to assigned curriculum to avoid cross-content selection.
+
+Document and enforce predictable behavior.
+
+15. Question Bank Batch Selection Contract
+------------------------------------------
+Implement narrow public service method in QuestionBankService:
+
+selectCurrentPublishedQuestionsForPractice(input)
+
+Input:
+parishId
+questionCount
+curriculumId?
+canonicalLessonKey?
+tagIds?
+tagCodes?
+questionTypes?
+difficulty?
+excludeQuestionVersionIds?
+
+Return:
+PublishedQuestionSelectionSnapshot[]
+
+Rules:
+- root ACTIVE
+- currentPublishedVersionId exists
+- version PUBLISHED
+- same parish
+- supported MVP types
+- filters
+- no duplicate roots/versions
+
+Do NOT expose new HTTP endpoint in Question Bank.
+
+16. Selection Ownership
+-----------------------
+Selection SQL/query logic belongs Question Bank.
+
+Practice must not query Question Bank tables/repositories.
+
+Practice calls public service contract only.
+
+17. Candidate Count
+-------------------
+If candidateCount < requestedQuestionCount:
+
+throw typed Practice error:
+PRACTICE_INSUFFICIENT_QUESTIONS
+
+Include safe metadata:
+requestedCount
+availableCount
+
+HTTP 422.
+
+Do not duplicate questions to fill count.
+
+18. Selection Randomization
+---------------------------
+Question Bank can return candidate pool, but Practice owns session-specific randomization.
+
+Two acceptable approaches:
+A. Question Bank returns N sampled candidates
+B. Question Bank returns bounded candidate list; Practice samples N
+
+Strong preference:
+Question Bank method accepts questionCount and returns randomized N candidates using injected/randomizable selection helper.
+
+However Practice must still persist final order.
+
+Audit testability.
+
+19. RNG Testability
+-------------------
+Do not use scattered Math.random directly.
+
+Create injectable/internal shuffle helper or utility so tests can deterministically verify order.
+
+No cryptographic requirement.
+
+20. Session Generation Transaction
+----------------------------------
+Use single DB transaction for Practice-owned rows.
+
+Flow:
+1. authorize enrollment context
+2. resolve assigned curriculum and validate filters
+3. check idempotent clientRequestId
+4. request exact current-published candidates from QuestionBankService
+5. fetch learner projections for selected versions
+6. precompute question order
+7. precompute delivered option order
+8. BEGIN Practice DB transaction
+9. insert practice_session
+10. insert practice_session_questions
+11. commit
+12. return session snapshot
+
+Important:
+Question Bank calls happen before Practice transaction if they are read-only and transaction cannot span module/service repositories cleanly.
+
+If failure before transaction -> no rows.
+If DB insertion fails -> rollback.
+
+21. Generation Idempotency
+--------------------------
+If clientRequestId supplied and same enrollment:
+- return existing session rather than create new one
+- exact same snapshot/order from DB
+- do not re-run selection/randomization
+
+Need race-safe behavior:
+DB filtered unique final guard.
+If race conflict, load existing session and return it.
+
+22. Idempotency Payload Mismatch
+-------------------------------
+Same clientRequestId reused with different generation payload.
+
+Need policy.
+
+Strong recommendation:
+store enough generation fields to compare:
+curriculumId
+canonicalLessonKey
+questionCount
+randomize flags
+locale
+
+But tags/types/difficulty are not currently persisted explicitly.
+
+Options:
+A. accept id key as "same request" regardless payload
+B. add strict generationRequestHash field
+C. persist generation filter JSON
+
+#001 schema did not include filter JSON/hash.
+
+Audit.
+
+Strong recommendation:
+add a migration NOW only if needed:
+generation_request_hash varchar(64) nullable/required when clientRequestId exists
+
+Canonical hash of normalized create payload.
+
+Then same id + different payload -> 409 PRACTICE_IDEMPOTENCY_CONFLICT.
+
+This is mobile-safe and avoids surprising behavior.
+
+If you add schema:
+- migration additive
+- entity field
+- tests
+- no generic config JSON.
+
+23. Session Stored Generation Metadata
+--------------------------------------
+Already stores:
+locale
+curriculumId
+canonicalLessonKey
+requestedQuestionCount
+randomize flags
+maxAttempts
+
+Tags/questionTypes/difficulty are not persisted.
+
+For audit/reproducibility, consider strict:
+generation_filters_json nvarchar(max)
+schemaVersioned
+
+But avoid schema creep.
+
+Preferred:
+generationRequestHash for idempotency, not full filter persistence.
+Report that filter audit metadata is deferred unless required.
+
+24. Question Order
+------------------
+If randomizeQuestions=true:
+shuffle selected candidates once.
+
+Persist position 1..N.
+
+If false:
+use stable Question Bank candidate ordering.
+
+Need deterministic stable ordering when no randomization:
+question code / root id / version id.
+Document.
+
+25. Option Order
+----------------
+For each selected version:
+get learner projection.
+
+If randomizeOptions=true:
+shuffle projection option IDs once.
+persist JSON array.
+
+If false:
+set deliveredOptionOrderJson NULL and use canonical projection sortOrder.
+
+Validate all option IDs belong exact version projection.
+
+26. Session Snapshot DTO
+------------------------
+Response:
+
+session:
+id
+enrollmentId
+sessionType
+status
+locale
+curriculumId
+canonicalLessonKey
+requestedQuestionCount
+maxAttemptsPerQuestion
+randomizeQuestions
+randomizeOptions
+startedAt
+completedAt
+abandonedAt
+
+questions:
+sessionQuestionId
+position
+questionVersionId
+questionType
+prompt
+instruction
+difficulty
+promptMediaJson
+options in delivered order:
+  id
+  text
+  mediaAssetId
+  sortOrder/deliveredPosition
+
+attempt state:
+for #003 no attempts yet, but DTO can include:
+attemptCount=0
+canRetry=true
+finalized=false
+
+Do NOT include:
+correct answers
+explanation
+option code
+answerDefinitionJson
+
+27. GET Session
+---------------
+GET /api/v1/practice-sessions/:sessionId
+
+For Parent:
+linked enrollment only.
+
+For SUPER_ADMIN:
+allow inspection if project policy.
+
+CATECHIST/PARISH_ADMIN:
+default deny learner delivery in #003.
+
+Return same persisted question + option order on every reload.
+
+28. Archived Version Compatibility
+----------------------------------
+A session pinned PUBLISHED version may later become ARCHIVED.
+
+GET session must still work because QuestionBank learner projection supports ARCHIVED.
+
+Do not require current root pointer.
+
+29. Inactive Question Root Later
+--------------------------------
+Existing session remains deliverable.
+
+Question Bank projection by version may still work.
+
+Do not invalidate session.
+
+New session selection excludes inactive roots.
+
+30. Abandon Endpoint
+--------------------
+Implement:
+
+PATCH /api/v1/practice-sessions/:sessionId/abandon
+
+Parent linked enrollment only.
+
+Rules:
+IN_PROGRESS -> ABANDONED
+ABANDONED idempotent return existing state
+COMPLETED -> 409
+
+Set abandonedAt.
+No answers allowed later (#004).
+
+31. No Complete Endpoint
+------------------------
+Do not implement completion now.
+Auto-complete belongs #004 answer transaction.
+
+32. Contextual Media Route
+--------------------------
+Implement groundwork and, if clean, full read route:
+
+GET /api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/media/:assetId/content
+
+Parent linked enrollment only.
+
+Flow:
+1. authorize session/enrollment
+2. assert sessionQuestion belongs session
+3. get learner projection for exact questionVersionId
+4. collect asset IDs referenced in:
+   - prompt media JSON
+   - option mediaAssetId
+5. assetId must be referenced
+6. stream via MediaAssetService.openAssetContent
+
+Explanation media excluded because explanation is not revealed in #003.
+
+33. Media Asset Reference Extraction
+------------------------------------
+Do not duplicate unsafe parsing.
+
+Reuse Question Bank learner projection/media structures.
+
+If promptMediaJson is raw string, use strict existing Question Bank media parser via public/narrow helper if needed.
+
+Do NOT import private utility from another module.
+
+If QuestionBankService can expose learner projection with normalized media refs, use that.
+
+34. Media Route Security
+------------------------
+Wrong asset -> 404/403 safe response.
+Wrong sessionQuestion -> 404.
+Cross-enrollment -> 403.
+Generic media route remains unavailable.
+
+Set private/no-store headers consistent with Media/Curriculum contextual routes.
+
+Support content headers via MediaAssetService.
+
+Range not needed for IMAGE-only MVP.
+
+35. PracticeService Public Facade
+---------------------------------
+Export PracticeService only.
+
+Suggested methods:
+createSession(input, actorContext)
+getSession(sessionId, actorContext)
+abandonSession(...)
+openSessionQuestionMedia(...)
+
+Internal:
+PracticeGenerationService
+PracticeAccessService maybe
+PracticeSessionQueryService
+
+Avoid god service.
+
+36. Scope Service
+-----------------
+Create internal PracticeAccessService if useful.
+
+Centralize:
+assertCanManageEnrollmentPractice
+assertCanReadSession
+resolveSessionEnrollmentContext
+
+Do not scatter guardian/catechist checks.
+
+37. Permissions
+---------------
+Seed:
+practice.read
+practice.manage
+
+Role grants:
+SUPER_ADMIN: read/manage
+PARENT: read/manage
+CATECHIST: read only (but #003 learner session route still relationship policy may deny; permission used later for progress)
+PARISH_ADMIN: read only by default
+No manage for parish admin unless required.
+
+Important:
+role permission does NOT automatically grant learner session GET; relationship/scope still applies.
+
+38. Parent Relationship
+-----------------------
+Use existing public EnrollmentAccessService / StudentGuardianService.
+
+No direct joins into enrollment/student tables outside Practice repositories except public services.
+
+39. Error Model
+---------------
+Implement typed errors:
+
+PracticeSessionNotFoundError
+PracticeEnrollmentNotEligibleError
+PracticeInsufficientQuestionsError
+PracticeAccessDeniedError
+PracticeSessionCompletedError
+PracticeSessionAbandonedError
+PracticeQuestionNotFoundError
+PracticeMediaNotReferencedError
+PracticeIdempotencyConflictError if generation hash added
+PracticeCurriculumMismatchError
+PracticeCanonicalLessonInvalidError
+
+Safe HTTP mapping.
+
+40. HTTP Status
+--------------
+Create:
+201 first creation
+200 idempotent replay existing session acceptable
+
+GET:
+200
+
+Abandon:
+200 or 204; prefer 200 snapshot for mobile resume state.
+
+Insufficient questions:
+422
+
+Scope:
+403
+
+Not found:
+404
+
+Conflict:
+409
+
+41. Swagger
+-----------
+Document:
+create session
+session GET
+abandon
+contextual media
+
+Document:
+Parent linked-enrollment requirement
+no answers endpoint yet
+MVP filters
+question count bounds
+idempotency
+learner-safe response
+
+42. No Answer Logic
+-------------------
+Strictly no:
+POST answers
+gradeAnswer
+attempt rows writes
+retry/finalized logic
+review-wrong creation
+feedback reveal
+
+#004.
+
+43. Session Query Efficient Loading
+-----------------------------------
+GET session:
+- load session
+- load session questions ordered
+- call QuestionBank projections
+
+Avoid N+1 DB against Practice.
+
+QuestionBank projection per version may be N service calls; for max 50 this may work but audit.
+
+If QuestionBankService lacks batch projection:
+consider adding:
+getLearnerQuestionProjections(versionIds[])
+
+Strong preference:
+add a narrow batch public method to avoid N+1 and future service chatter.
+
+No entity leakage.
+
+44. Batch Projection Contract
+-----------------------------
+Potential:
+
+getLearnerQuestionProjections(questionVersionIds: readonly string[])
+
+Requirements:
+- preserve input/order mapping
+- PUBLISHED/ARCHIVED only
+- return learner-safe DTOs
+- reject missing/non-deliverable version
+
+Could be used generation + GET.
+
+45. Selection Performance MEDIUM Risk
+-------------------------------------
+#001 flagged selection performance MEDIUM.
+
+Address now:
+
+- query one bounded candidate pool in Question Bank
+- no per-question admin list call
+- no N+1 root/version lookups
+- test with e.g. 100+ candidate questions if practical
+- questionCount <=50
+
+Do not build complex caching yet.
+
+46. Selection Randomness
+------------------------
+Random query using ORDER BY NEWID() can be expensive at scale.
+
+Prefer application sampling from bounded candidate IDs if query can fetch candidates efficiently.
+
+Set max candidate pool e.g. 500/1000 if needed.
+
+Audit and document.
+
+47. Current Published Integrity
+-------------------------------
+QuestionBank selector must verify:
+root.currentPublishedVersionId = selected version
+version status PUBLISHED
+root ACTIVE
+
+No archived version for NEW session generation.
+
+48. Filter Semantics
+--------------------
+Support:
+curriculumId
+canonicalLessonKey
+tagIds/tagCodes
+questionTypes
+difficulty
+
+Same semantics as Question Bank admin search where applicable.
+
+No prompt text filter for learner generation.
+
+49. Locale
+----------
+Session locale resolved:
+request locale if valid
+else user/enrollment/parish default if available
+else question sourceLocale? This could vary per question.
+
+Strong recommendation:
+use parish/default platform locale with explicit fallback `vi-VN` only if existing system standard defines it.
+
+Do NOT invent hidden fallback if project config already has a system locale.
+
+Audit existing locale resolution patterns and choose deterministic rule.
+
+50. Multilingual Readiness
+--------------------------
+No translation runtime.
+
+Session stores locale.
+Question projections may still be source content.
+
+Future localization will resolve translated projection before persistence/delivery snapshot if needed.
+
+No schema change unless translationRevisionId planned later.
+
+51. Tests — Unit
+----------------
+PracticeService/Generation:
+- linked Parent create success
+- unlinked Parent denied
+- inactive enrollment denied
+- curriculum mismatch
+- canonicalLesson invalid
+- selection insufficient
+- exact questionVersion pinning
+- question randomization on/off
+- option randomization on/off
+- generation idempotent replay
+- idempotency payload conflict if hash implemented
+- no duplicate question versions
+- stable session GET order
+- archived version still readable
+- abandon success/idempotent/completed conflict
+- media reference allowed/denied
+- no answer fields leakage
+
+QuestionBank additions:
+- selection filters
+- only current PUBLISHED
+- inactive roots excluded
+- batch projection if added
+
+52. Integration Tests
+---------------------
+Real MSSQL:
+- create Parent-linked enrollment session
+- N selected question versions persisted
+- version IDs exact/current at creation
+- position stable
+- delivered option JSON stable
+- clientRequestId unique/replay
+- no duplicate questions
+- session GET resume
+- archive selected version after create; GET still works
+- abandon lifecycle
+- contextual media referenced asset works
+- unreferenced media denied
+
+53. DB E2E
+----------
+- unauthenticated 401
+- Parent linked create 201
+- Parent unlinked 403
+- PARENT GET linked 200
+- CATECHIST create denied
+- CATECHIST learner session GET denied
+- PARISH_ADMIN create denied
+- SUPER_ADMIN create/inspect policy documented/tested
+- insufficient questions 422
+- idempotent replay
+- GET stable ordering
+- abandon
+- no answer endpoint exists
+- contextual media
+
+54. Existing Regression
+-----------------------
+Question Bank
+Enrollment/Class
+Curriculum
+Media
+Auth
+Practice schema
+
+PASS.
+
+55. quality:full
+----------------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+
+56. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:practice-generation .
+
+PASS required.
+
+57. Required Commands
+---------------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:practice-generation .
+
+58. Required Report
+-------------------
+Create:
+
+docs/PRACTICE_003_GENERATION_SESSION_DELIVERY_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #002
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final PracticeModule architecture
+7 Public export
+8 Dependency graph
+9 no cycle/forwardRef
+10 RBAC permissions
+11 Parent proxy scope
+12 Catechist policy
+13 Parish admin policy
+14 Session create endpoint
+15 Create DTO/defaults
+16 Enrollment validation
+17 Curriculum assignment resolution
+18 Curriculum filter policy
+19 QuestionBank selection contract
+20 Selection implementation/performance
+21 Candidate shortage behavior
+22 RNG/shuffle design
+23 Generation transaction
+24 clientRequestId idempotency
+25 idempotency payload mismatch policy
+26 generation request hash/schema delta if any
+27 Question order persistence
+28 Option order persistence
+29 Batch learner projection contract
+30 Session response DTO
+31 Answer leakage audit
+32 GET/resume
+33 archived-version compatibility
+34 inactive-root compatibility
+35 abandon lifecycle
+36 contextual media route
+37 media reference validation
+38 media headers/security
+39 PracticeService decomposition
+40 scope/access service
+41 error mapping
+42 Swagger/OpenAPI
+43 Unit tests
+44 Integration tests
+45 DB e2e
+46 selection performance risk closure
+47 multilingual readiness
+48 mobile/offline readiness
+49 existing regression
+50 pristine quality:full
+51 Docker
+52 security/privacy
+53 microservice extraction
+54 commands
+55 validation matrix
+56 known/deferred
+57 out-of-scope
+58 PRACTICE #004 readiness
+59 prompt count
+60 commit recommendation
+
+59. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- PracticeService only export
+- practice.read/manage seeded
+- PARENT linked create
+- unlinked parent denied
+- inactive enrollment denied
+- CATECHIST create denied
+- CATECHIST learner GET denied
+- PARISH_ADMIN create policy
+- curriculum assignment validation
+- curriculum mismatch denied
+- canonicalLesson validation
+- QuestionBank batch selection
+- only ACTIVE/current PUBLISHED selected
+- no duplicate versions
+- insufficient candidates 422
+- question randomization stable
+- option randomization stable
+- session transaction atomic
+- clientRequestId replay
+- idempotency payload mismatch safe
+- session GET resume
+- persisted order stable
+- ARCHIVED selected version still deliverable
+- abandoned session read
+- contextual media referenced allowed
+- unreferenced media denied
+- no answer leakage
+- no answer endpoint
+- no grading/retry/review logic
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+60. #004 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+PRACTICE ENGINE #004/6 — Answer Submission + Grading + Retry + Review-Wrong
+
+#004 should implement:
+- answer POST
+- clientAnswerId idempotency
+- attempt transaction/locking
+- QuestionBank grading
+- max attempts/finalization
+- immediate correctness
+- feedback reveal gate
+- QuestionBank getPracticeFeedback service method
+- auto session completion
+- review-wrong child session
+
+61. Prompt Count
+----------------
+State:
+PRACTICE ENGINE #003/6 complete
+approximately 3 prompts remain (#004–#006)
+
+62. Final Response
+------------------
+Respond concisely:
+- PRACTICE #003 status
+- generation PASS/FAIL
+- session delivery PASS/FAIL
+- selection contract PASS/FAIL
+- contextual media PASS/FAIL
+- mobile/offline idempotency PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly ONE line:
+
+git commit -m "feat(practice): add session generation and delivery"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

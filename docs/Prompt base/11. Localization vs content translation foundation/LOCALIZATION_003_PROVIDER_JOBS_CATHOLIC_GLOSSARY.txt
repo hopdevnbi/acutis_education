@@ -1,0 +1,745 @@
+CURSOR PROMPT — LOCALIZATION #003/6
+PROVIDER ABSTRACTION + DB JOBS + CATHOLIC GLOSSARY FOUNDATION
+
+CONTEXT
+-------
+Completed:
+- LOCALIZATION #001/6 — Cross-Domain Audit + Translation Model Design
+- LOCALIZATION #002/6 — Locale Preferences + Translation Persistence Foundation
+
+Current:
+LOCALIZATION #003 / 6
+
+Remaining:
+#004 Resource adapters + localized Curriculum Delivery/QB integration + Practice snapshot
+#005 Admin/review/approve APIs + RBAC + FE/Mobile hardening
+#006 Final audit + demo/Postman + quality/full + Docker
+
+Inherited guarantees:
+- LocalizationModule exists
+- public exports: LocalizationService + LocaleResolutionService only
+- shared BCP47 + Accept-Language parser ready
+- users.preferredLocale ready
+- parishes.defaultLocale ready
+- translation_resources ready
+- translation_revisions ready
+- revision payload immutable
+- staleness derived from source hash mismatch
+- provider not on GET path
+- no adapters/localized reads yet
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001/#002 reports and current code first
+- stay within #003
+- create detailed report in docs/
+- not auto-proceed to #004
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(localization): add provider jobs and catholic glossary"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/LOCALIZATION_002_LOCALE_PREFERENCES_TRANSLATION_PERSISTENCE_REPORT.md
+
+Inspect:
+src/modules/localization/
+src/common/locale/
+src/config/
+src/database/
+src/database/seeds/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect provider patterns from Media/S3 if useful.
+Inspect git status read-only.
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+- TranslationProvider abstraction
+- deterministic MockTranslationProvider
+- GoogleCloudTranslationProvider boundary/config
+- translation_jobs
+- idempotent queueing
+- DB worker/processor
+- CLI worker
+- retry/backoff/failure model
+- batch/cost guardrails
+- Catholic glossary versions/terms
+- glossary lifecycle/publish/archive
+- provider glossary mapping
+- tests
+- quality:full + Docker
+
+Do NOT implement:
+- source resource adapters
+- localized learner GET integration
+- Practice translationRevisionId snapshot
+- admin translation HTTP APIs
+- FE/Mobile localized contract hardening
+- Exam
+
+PROVIDER ABSTRACTION
+--------------------
+Create internal TranslationProvider interface:
+
+translateBatch({
+  units,
+  sourceLocale,
+  targetLocale,
+  glossary?,
+  context?
+}) => TranslatedUnit[]
+
+Provider contract must not expose Google SDK types.
+
+TranslatableUnit:
+id
+text
+optional context/type metadata
+
+Output must preserve every unit ID exactly once.
+
+MOCK PROVIDER
+-------------
+Deterministic, no network, CI-safe.
+Preserve IDs.
+Stable output.
+Can simulate glossary mapping.
+No randomness.
+
+GOOGLE PROVIDER
+---------------
+Create GoogleCloudTranslationProvider boundary.
+
+Rules:
+- only Localization imports Google SDK/types
+- no live Google call in CI
+- external errors mapped to internal error codes
+- credentials backend only
+
+Install SDK only if project dependency policy allows and implementation requires it.
+
+PROVIDER CONFIG
+---------------
+TRANSLATION_PROVIDER=mock|google
+
+Google config:
+GOOGLE_CLOUD_PROJECT_ID
+GOOGLE_CLOUD_LOCATION
+GOOGLE_APPLICATION_CREDENTIALS or workload identity
+
+Optional limits:
+TRANSLATION_MAX_BATCH_UNITS
+TRANSLATION_MAX_BATCH_CHARS
+TRANSLATION_JOB_MAX_ATTEMPTS
+
+Dev/test default mock.
+
+Production:
+if provider=google, required config must fail fast when missing.
+
+Avoid accidental fake translation in production:
+prefer disallow mock in production unless explicit ALLOW_MOCK_TRANSLATION_PROVIDER=true.
+
+PROVIDER SELECTION
+------------------
+Use one provider token/factory.
+Internal services depend on TranslationProvider token.
+No provider switch scattered across business code.
+
+TRANSLATION JOBS TABLE
+----------------------
+Create Localization-owned translation_jobs.
+
+Recommended fields:
+id UUID PK
+translation_resource_id UUID NOT NULL
+target_locale varchar(32) NOT NULL
+source_content_hash varchar(64) NOT NULL
+source_version_key varchar(128) NULL
+status varchar(32) NOT NULL
+attempt_count int NOT NULL
+max_attempts int NOT NULL
+requested_by_user_id UUID NULL
+provider_id varchar(64) NULL
+last_error_code varchar(128) NULL
+last_error_message nvarchar(1000) NULL
+next_attempt_at datetime2 NULL
+locked_at datetime2 NULL
+started_at datetime2 NULL
+completed_at datetime2 NULL
+created_at
+updated_at
+
+Separate JobStatus:
+QUEUED
+PROCESSING
+SUCCEEDED
+FAILED
+DEAD
+
+JOB IDEMPOTENCY
+---------------
+Semantic key:
+resource + targetLocale + sourceContentHash + provider
+
+Do not duplicate work for unchanged source.
+
+Strong behavior:
+- current APPROVED revision for same hash/target => no new job
+- current MACHINE_TRANSLATED revision for same hash/target => no duplicate provider work
+- existing active job => return existing job
+- FAILED/DEAD requeue only through explicit retry method
+
+Use a robust DB uniqueness strategy.
+
+TRANSLATION JOB SERVICE
+-----------------------
+Internal service:
+queueTranslation(...)
+claimNextBatch(...)
+markSucceeded(...)
+markFailed(...)
+retryFailed(...)
+
+No HTTP controller yet.
+
+SOURCE RESOLUTION PORT
+----------------------
+#003 has no real Curriculum/QB/LearningContent adapters yet.
+
+Define internal resolver/registry port only as needed:
+resolveSource(resourceRef) -> source snapshot
+extract units/build payload later via adapter interface
+
+Real adapters come #004.
+
+Tests can inject deterministic fake adapter.
+
+Production worker must fail unsupported resources safely, not crash.
+
+JOB PROCESSOR
+-------------
+Flow:
+1 claim due QUEUED job transactionally
+2 mark PROCESSING
+3 resolve source snapshot through registry
+4 verify current source hash == job hash
+5 extract units
+6 resolve current published glossary for locale pair
+7 provider.translateBatch
+8 validate returned IDs/count
+9 adapter builds payload
+10 create MACHINE_TRANSLATED revision
+11 mark SUCCEEDED
+12 errors:
+   retryable -> FAILED/queued with next_attempt_at
+   nonretryable or exhausted -> DEAD
+
+Do NOT auto-APPROVE.
+
+SOURCE CHANGED
+--------------
+If current source hash != queued hash:
+do not translate.
+Mark nonretryable terminal state with SOURCE_CHANGED.
+Admin queues new job later.
+
+RETRY POLICY
+------------
+Default max attempts 3 unless project config convention suggests another bounded value.
+
+Retryable:
+timeout
+429/rate limit
+5xx/unavailable
+
+Nonretryable:
+source changed
+invalid resource
+unsupported resource
+invalid locale
+payload invalid
+provider output invalid
+
+Use bounded backoff via next_attempt_at.
+
+CLI WORKER
+----------
+Add:
+npm run localization:process-jobs
+
+Nest application context only.
+No HTTP server.
+Process bounded batch then exit.
+
+Support batch size env/arg if useful.
+
+CLAIM CONCURRENCY
+-----------------
+Multiple workers must not process same job.
+Use MSSQL-safe pessimistic locking / transaction / READPAST strategy as appropriate.
+
+Document and test.
+
+LOGGING
+-------
+Log metadata only:
+jobId
+resourceType/resourceId
+targetLocale
+provider
+status
+duration
+error code
+
+Never log:
+source text
+translated payload
+credentials
+PII
+
+COST GUARDRAILS
+---------------
+Before provider:
+max units
+max total chars
+per-unit max
+source/payload size
+dedupe
+approved-current short-circuit
+
+PROVIDER OUTPUT VALIDATION
+--------------------------
+Require:
+- every input ID exactly once
+- no extra IDs
+- bounded text
+- no invalid nulls
+- preserve logical count
+
+Internal error:
+PROVIDER_OUTPUT_INVALID
+
+GOOGLE ERROR MAPPING
+--------------------
+Map:
+RATE_LIMIT
+TIMEOUT
+UNAVAILABLE
+AUTH
+INVALID_REQUEST
+UNKNOWN
+
+Do not persist/log raw provider body.
+
+CATHOLIC GLOSSARY
+-----------------
+Create:
+catholic_glossary_versions
+catholic_glossary_terms
+
+System-global MVP only.
+No parish overrides now.
+
+GlossaryVersion:
+id UUID
+source_locale
+target_locale
+version_number
+status DRAFT|PUBLISHED|ARCHIVED
+provider_glossary_id nullable
+created_by_user_id nullable
+published_by_user_id nullable
+created_at
+published_at nullable
+updated_at
+
+Unique:
+(source_locale,target_locale,version_number)
+
+Only one PUBLISHED per locale pair.
+
+GlossaryTerm:
+id UUID
+glossary_version_id UUID
+source_term nvarchar(512)
+target_term nvarchar(512)
+notes nvarchar(1000) NULL
+case_sensitive bit
+created_at
+updated_at
+
+Unique at least:
+(glossary_version_id, source_term)
+
+GLOSSARY RULES
+--------------
+sourceLocale != targetLocale
+valid BCP47
+
+DRAFT mutable.
+PUBLISHED immutable.
+ARCHIVED immutable.
+
+Publishing new version:
+archive previous PUBLISHED of same pair.
+Set publisher/timestamp.
+
+No real doctrinal terms in migrations.
+
+CATHOLIC GLOSSARY SERVICE
+-------------------------
+Internal service:
+createDraft
+add/update/deleteTerm
+publish
+getPublishedForPair
+clonePublishedToDraft optional
+
+No controller.
+
+PROVIDER GLOSSARY MAPPING
+-------------------------
+Neutral reference:
+{
+  glossaryVersionId,
+  providerGlossaryId?
+}
+
+Mock provider can apply internal terms.
+Google provider can use provider_glossary_id when configured.
+
+Provider-side glossary provisioning may remain deferred if too large; document.
+
+REVISION GLOSSARY METADATA
+--------------------------
+Machine translation revision stores glossaryVersionId used.
+
+Changing glossary does NOT automatically stale old translations.
+
+TABLE OWNERSHIP AFTER #003
+--------------------------
+Localization owns exactly 5 tables:
+translation_resources
+translation_revisions
+translation_jobs
+catholic_glossary_versions
+catholic_glossary_terms
+
+No extra tables.
+
+MIGRATION/FK
+------------
+Add migration for 3 new tables.
+
+Within Localization:
+job -> resource FK
+term -> glossaryVersion FK
+revision.glossaryVersionId may gain same-module FK if safe
+
+Actor IDs -> users NO ACTION if consistent.
+
+No ORM relations.
+
+No source-module FK.
+
+INDEXES
+-------
+Jobs:
+(status,next_attempt_at,created_at)
+(resource,target_locale,source_hash/provider)
+
+Glossary:
+(source_locale,target_locale,status)
+terms(glossary_version_id)
+
+SECURITY
+--------
+No PII in jobs.
+No secrets persisted.
+Sanitize last_error_message.
+No HTTP admin routes yet.
+No permissions yet.
+No auto translate at startup.
+No translate-on-GET.
+No source module writes jobs directly.
+
+LOCALIZATION FACADE
+-------------------
+Keep public export boundary:
+LocalizationService
+LocaleResolutionService
+
+Internal provider/job/glossary services not exported.
+
+Add facade methods only as needed for future #004/#005.
+
+UNIT TESTS
+----------
+Provider:
+- mock deterministic
+- ID preservation
+- output validation
+- Google error mapping/config
+
+Jobs:
+- queue idempotent
+- active duplicate returns existing
+- approved current short-circuit
+- machine translated dedupe
+- one-worker claim
+- processor success -> MACHINE_TRANSLATED
+- retryable failure
+- source changed terminal
+- max attempts
+- no full-content logging behavior where testable
+
+Glossary:
+- create draft
+- locale validation
+- source != target
+- draft term CRUD
+- publish
+- previous published archived
+- published immutable
+- published lookup
+- revision stores glossaryVersionId
+
+INTEGRATION TESTS
+-----------------
+Real MSSQL:
+- schema constraints
+- queue dedupe
+- processor with fake adapter + mock provider
+- second request no duplicate work
+- source changed blocked
+- retry/backoff persistence
+- glossary version/terms
+- publish/archive
+- no extra tables
+
+DB E2E
+------
+No new HTTP needed.
+Existing DB e2e regression PASS.
+Optional CLI application-context integration test.
+
+QUALITY
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require one clean PASS.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:localization-provider-jobs ."
+
+PASS required.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+npm run localization:process-jobs
+
+Docker build.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/LOCALIZATION_003_PROVIDER_JOBS_CATHOLIC_GLOSSARY_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #002
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final LocalizationModule architecture
+7 Public exports
+8 TranslationProvider interface
+9 TranslatableUnit contract
+10 Mock provider
+11 Google provider adapter
+12 Provider selection
+13 Config/env validation
+14 Provider error mapping
+15 translation_jobs schema
+16 job status enum
+17 job idempotency
+18 queue semantics
+19 approved-current short-circuit
+20 machine-translation dedupe
+21 claim/locking strategy
+22 job processor
+23 source resolver/adapter registry stub
+24 source-changed behavior
+25 retry/backoff
+26 max attempts
+27 CLI worker
+28 logging/privacy
+29 cost guardrails
+30 provider output validation
+31 MACHINE_TRANSLATED revision creation
+32 provider metadata persistence
+33 glossary version schema
+34 glossary term schema
+35 glossary status lifecycle
+36 publish/archive behavior
+37 glossary immutability
+38 CatholicGlossaryService
+39 provider glossary mapping
+40 revision glossaryVersionId
+41 table ownership
+42 FK strategy
+43 indexes
+44 no learner read integration
+45 no Practice changes
+46 permission seed decision
+47 security
+48 microservice extraction
+49 unit tests
+50 integration tests
+51 DB e2e/regression
+52 pristine quality:full
+53 Docker
+54 commands
+55 validation matrix
+56 known/deferred
+57 out-of-scope
+58 LOCALIZATION #004 readiness
+59 prompt count
+60 commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- LocalizationService facade boundary
+- provider interface no Google types
+- deterministic mock
+- Google adapter boundary
+- production config validation
+- exactly 5 Localization-owned tables
+- jobs table
+- glossary version table
+- glossary terms table
+- no extra table
+- job idempotency
+- approved current short-circuit
+- machine translated dedupe
+- concurrency-safe claim
+- retryable failure
+- nonretryable terminal
+- source changed blocked
+- max attempts
+- CLI worker
+- no content logging
+- bounded batch chars/units
+- provider output IDs preserved
+- MACHINE_TRANSLATED revision
+- no auto APPROVED
+- glossary draft
+- glossary publish
+- prior published archived
+- published immutable
+- source != target
+- glossaryVersionId on revision
+- no learner localization
+- no Practice changes
+- no admin HTTP
+- no permissions yet
+- prior regression
+- Git compliance
+
+#004 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH.
+
+Recommend:
+LOCALIZATION #004/6 —
+RESOURCE ADAPTERS + LOCALIZED DELIVERY + QUESTION BANK INTEGRATION + PRACTICE SNAPSHOT
+
+Do not auto-proceed.
+
+PROMPT COUNT
+------------
+LOCALIZATION #003/6 complete
+approximately 3 prompts remain
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- LOCALIZATION #003 status
+- provider abstraction PASS/FAIL
+- jobs PASS/FAIL
+- glossary PASS/FAIL
+- worker PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then exactly:
+git commit -m "feat(localization): add provider jobs and catholic glossary"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

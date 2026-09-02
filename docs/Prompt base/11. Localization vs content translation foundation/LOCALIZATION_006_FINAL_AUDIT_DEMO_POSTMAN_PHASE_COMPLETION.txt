@@ -1,0 +1,679 @@
+CURSOR PROMPT — LOCALIZATION #006/6
+FINAL AUDIT + CORRECTIVE HARDENING + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION
+
+CONTEXT
+-------
+Completed:
+- LOCALIZATION #001/6 — Cross-Domain Audit + Translation Model Design
+- LOCALIZATION #002/6 — Locale Preferences + Translation Persistence
+- LOCALIZATION #003/6 — Provider + Jobs + Catholic Glossary
+- LOCALIZATION #004/6 — Resource Adapters + Localized Delivery + Practice Snapshot
+- LOCALIZATION #005/6 — Admin Review/Approval APIs + RBAC + Contract Hardening
+
+Current:
+LOCALIZATION #006 / 6 — FINAL GATE
+
+#005 final state:
+- #004 integration test debt CLOSED
+- Admin APIs PASS
+- RBAC / tenant scope PASS
+- Review / approve PASS
+- FE admin READY
+- FE learner READY
+- Mobile READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+IMPORTANT KNOWN #005 ITEMS TO CLOSE
+-----------------------------------
+Before declaring Localization COMPLETE:
+
+1. Fix `translationStatus` filtering currently applied after pagination.
+   Final semantics must paginate the FILTERED result set correctly.
+   `total`, `page`, `limit`, and returned items must all reflect the filtered set.
+
+2. Harden glossary controller request validation to proper DTO/class-validator/OpenAPI parity where feasible.
+
+3. Complete the deferred README Localization narrative.
+
+Do NOT ignore these because #005 otherwise passed.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- audit #001–#005 first
+- close remaining correctness/documentation gaps
+- create final report
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+- NOT start Exam or any new module automatically
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(localization): finalize multilingual content foundation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/LOCALIZATION_002_LOCALE_PREFERENCES_TRANSLATION_PERSISTENCE_REPORT.md
+docs/LOCALIZATION_003_PROVIDER_JOBS_CATHOLIC_GLOSSARY_REPORT.md
+docs/LOCALIZATION_004_RESOURCE_ADAPTERS_LOCALIZED_DELIVERY_PRACTICE_REPORT.md
+docs/LOCALIZATION_005_ADMIN_REVIEW_RBAC_CONTRACT_HARDENING_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/localization/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/learning-content/
+src/modules/question-bank/
+src/modules/practice/
+src/modules/users/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+docs/postman/
+README.md
+package.json
+Dockerfile
+
+Inspect git status read-only.
+
+PRIMARY OBJECTIVE
+-----------------
+Close Localization only if all critical gates pass:
+- bounded context clean
+- exactly 5 Localization-owned tables
+- LocalizationService + LocaleResolutionService only public exports
+- no cycles / no forwardRef
+- adapters public-service-only
+- locale preferences/resolution stable
+- immutable revision/staleness model stable
+- jobs/provider/glossary stable
+- localized learner delivery stable
+- Practice translation snapshot deterministic
+- admin workflow stable
+- tenant scope secure
+- pagination/filter correctness fixed
+- glossary validation hardened
+- demo seed ready
+- Postman ready
+- README/OpenAPI complete
+- FE admin READY
+- FE learner READY
+- Mobile READY
+- multilingual foundation READY
+- pristine quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+FINAL ARCHITECTURE
+------------------
+Allowed:
+Localization -> Curriculum/LearningContent/QuestionBank
+CurriculumDelivery -> Localization
+Practice -> Localization
+
+Forbidden:
+Curriculum -> Localization
+LearningContent -> Localization
+QuestionBank -> Localization
+Localization -> Practice
+LearningProgress -> Localization
+
+No cross-module repositories/entities.
+No forwardRef.
+No cycles.
+
+PUBLIC EXPORTS
+--------------
+LocalizationModule exports only:
+- LocalizationService
+- LocaleResolutionService
+
+DATA OWNERSHIP
+--------------
+Localization owns exactly:
+1 translation_resources
+2 translation_revisions
+3 translation_jobs
+4 catholic_glossary_versions
+5 catholic_glossary_terms
+
+No new table unless a concrete blocker demands it.
+
+LOCALE FINAL AUDIT
+------------------
+Verify:
+- users.preferredLocale
+- parishes.defaultLocale
+- BCP47 normalization
+- Accept-Language q parsing
+- learner precedence: user preferred -> header -> parish default -> vi-VN
+- explicit locale override admin-preview only where designed
+- country != language != locale
+- no locale in JWT claims
+
+REVISION/STALENESS FINAL AUDIT
+------------------------------
+Verify:
+- immutable payload revisions
+- target != source locale
+- sourceContentHash/version stored
+- latest current-hash APPROVED wins for new delivery
+- historical revisions retained
+- STALE derived from hash mismatch
+- review creates NEW revision
+- approval records actor/timestamp
+- stale approval denied
+
+LEARNER READ FINAL AUDIT
+------------------------
+Normal learner states:
+SOURCE
+APPROVED
+MISSING fallback
+STALE fallback
+
+MACHINE_TRANSLATED must not be served as learner translation.
+Provider NEVER called on learner GET.
+Localization failure alone must not make source educational content unavailable.
+
+ADAPTER FINAL AUDIT
+-------------------
+Curriculum metadata/version/topic/lesson
+LearningContent structured document
+QuestionBankVersion
+
+Preserve:
+- IDs/order
+- canonicalLessonKey
+- block structure
+- media asset IDs
+- option UUIDs
+- correct answers
+- answerDefinition/grading semantics
+
+PRACTICE SNAPSHOT FINAL AUDIT
+-----------------------------
+Verify:
+- translationRevisionId pinned
+- deliveredLocale pinned
+- no Practice->Localization SQL FK
+- existing session exact revision
+- newer approval does not change old session
+- review-wrong inherits snapshot
+- grading/retry/idempotency unchanged
+- source fallback remains safe
+
+ADMIN WORKFLOW FINAL AUDIT
+--------------------------
+Audit:
+- resource sync/discovery
+- resource list/detail
+- request translation
+- bounded bulk translation
+- job list/detail
+- retry
+- revision detail
+- human review
+- approve
+- preview
+- glossary lifecycle
+- parish tenant scope
+- rate limits
+
+CORRECTIVE FIX 1 — STATUS FILTER + PAGINATION
+---------------------------------------------
+Current known issue:
+translationStatus filtering after page fetch can under-fill pages incorrectly.
+
+Required:
+pagination MUST apply to filtered results.
+
+Tests:
+- dataset spanning multiple pages
+- status matches distributed across pages
+- first page fills to limit when enough matches exist
+- next page correct
+- filtered `total` correct
+- parish scope remains correct
+- no N+1 explosion
+
+Push filter into SQL/query if practical.
+If effective status is derived, implement a correct bounded query strategy rather than knowingly incorrect pagination.
+
+CORRECTIVE FIX 2 — GLOSSARY DTO VALIDATION
+------------------------------------------
+Use proper DTO/class-validator/OpenAPI parity for glossary HTTP requests.
+
+Validate:
+- BCP47 locales
+- source != target
+- source/target term lengths
+- notes bounds
+- required fields
+- UUID path params by project convention
+- PUBLISHED/ARCHIVED immutability
+
+Add HTTP validation tests.
+
+DEMO LOCALIZATION SEED — REQUIRED
+---------------------------------
+Create DEV-ONLY idempotent seed using existing demo ecosystem.
+
+Demonstrate:
+- vi-VN source curriculum
+- APPROVED en-US curriculum metadata/tree
+- APPROVED en-US lesson content
+- APPROVED en-US question
+- one MACHINE_TRANSLATED pending-review revision
+- one effective STALE case if practical
+- one published demo Catholic glossary version
+
+No production auto-seed.
+No real child/user data beyond existing demo fixtures.
+No hardcoded production doctrinal corpus.
+
+Run twice:
+- no duplicate logical resources
+- no duplicate equivalent demo revisions
+- no duplicate glossary version/terms
+- no cross-parish data
+
+POSTMAN — REQUIRED
+------------------
+Create:
+docs/postman/Acutis-Education-Localization.postman_collection.json
+
+Cover:
+1 auth for SuperAdmin/ParishAdmin/Catechist/Parent
+2 resource sync
+3 resource list
+4 translationStatus filter + pagination
+5 resource detail
+6 cross-parish denial
+7 request translation 201
+8 replay 200
+9 job detail/list
+10 machine revision detail
+11 review -> NEW REVIEWED revision
+12 original revision unchanged
+13 approve
+14 preview APPROVED en-US
+15 stale conflict
+16 retry semantics
+17 Parent admin denied
+18 Catechist manage denied
+19 ParishAdmin own parish allowed
+20 SuperAdmin global
+21 glossary draft/term/publish/clone
+22 ParishAdmin global glossary mutation denied
+23 learner curriculum tree en-US
+24 learner lesson content en-US
+25 missing/stale fallback
+26 Practice localized session create/get
+27 translationRevisionId pinned
+
+No real tokens/secrets.
+
+README FINALIZATION
+-------------------
+Document:
+- module purpose
+- country/language/locale
+- preferredLocale/defaultLocale
+- locale precedence
+- sourceLocale
+- resources/revisions
+- immutable workflow
+- statuses/staleness
+- provider/jobs/worker
+- mock vs Google boundary
+- no provider on GET
+- Catholic glossary
+- adapters
+- learner fallback
+- CurriculumDelivery localization
+- Practice revision pinning
+- admin workflow
+- RBAC/tenant scope
+- FE/Mobile cache metadata
+- privacy/security
+- deferred search/export/import
+- known performance limitations
+
+OPENAPI FINAL AUDIT
+-------------------
+Audit all Localization admin endpoints + localized learner DTOs.
+
+Ensure proper:
+400/401/403/404/409/422/429
+pagination/filter semantics
+translation status vs job status
+immutable revision semantics
+stale conflict
+glossary lifecycle
+tenant scope
+fallback metadata
+
+SECURITY FINAL AUDIT
+--------------------
+Verify:
+- no cross-parish IDOR
+- Parent admin denied
+- Catechist mutations denied
+- ParishAdmin own parish
+- SuperAdmin global
+- global glossary mutation SuperAdmin only
+- provider creds never exposed
+- no PII/provider leakage
+- no Practice answers/correct answers
+- sanitized job errors
+- bounded payloads/bulk
+- no raw provider responses
+- no auto-approval
+- no full educational content logs by default
+
+PERFORMANCE FINAL AUDIT
+-----------------------
+Verify:
+- curriculum tree translation batch lookup
+- Practice batch localization
+- correct filtered pagination
+- indexed resource/revision/job lookups
+- no structural N+1
+
+Allowed documented MEDIUM:
+- very large curriculum tree localization
+- DB worker throughput at scale
+
+FE/MOBILE FINAL VERDICTS
+------------------------
+FE LOCALIZATION ADMIN CONTRACT READY: YES/NO
+FE LOCALIZED LEARNER CONTRACT READY: YES/NO
+MOBILE LOCALIZED CONTENT CONTRACT READY: YES/NO
+MULTILINGUAL CONTENT DELIVERY FOUNDATION READY: YES/NO
+
+All must be YES for completion.
+
+REGRESSION
+----------
+Must remain green:
+Auth/User
+Parish/Academic
+Class/Enrollment
+Curriculum
+LearningContent
+CurriculumDelivery
+Media
+QuestionBank
+Practice
+LearningProgress
+Localization
+
+QUALITY
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+NPM AUDIT
+---------
+npm audit --audit-level=moderate
+No unresolved HIGH vulnerability.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:localization-final ."
+
+PASS required.
+
+OPTIONAL RUNTIME SMOKE
+----------------------
+If practical boot production image/application and verify Localization controllers/adapters/Practice DI.
+If skipped, document why.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run test:db:prepare -- --reset
+npm run quality:full
+npm run migration:show
+run Localization demo seed
+npm run localization:process-jobs where safe/applicable
+Docker build
+
+REQUIRED FINAL REPORT
+---------------------
+Create:
+docs/LOCALIZATION_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited #001–#005
+3 Working tree audit
+4 Rules
+5 Findings/severity
+6 Pagination/filter audit
+7 Pagination/filter fix
+8 Glossary validation hardening
+9 Dependency graph
+10 Module boundary
+11 Public exports
+12 Table ownership
+13 Locale model
+14 Locale resolution
+15 User preferred locale
+16 Parish default locale
+17 Source locale
+18 Translation resources
+19 Translation revisions
+20 Revision immutability
+21 Approval
+22 Staleness
+23 Provider abstraction
+24 Mock provider
+25 Google boundary
+26 Jobs
+27 Worker CLI
+28 Cost controls
+29 Catholic glossary
+30 Resource adapters
+31 Curriculum localization
+32 LearningContent localization
+33 QuestionBank localization
+34 Correctness preservation
+35 Learner fallback
+36 CurriculumDelivery integration
+37 Practice snapshot
+38 Review-wrong
+39 Grading invariants
+40 Admin resource APIs
+41 Admin job APIs
+42 Review/approve APIs
+43 Preview
+44 Glossary admin
+45 RBAC
+46 Tenant isolation
+47 Security/privacy
+48 Performance/N+1
+49 Demo seed
+50 Seed idempotency
+51 Postman
+52 README
+53 OpenAPI
+54 FE admin readiness
+55 FE learner readiness
+56 Mobile readiness
+57 Multilingual readiness
+58 Microservice extraction
+59 Unit tests
+60 Integration tests
+61 DB e2e
+62 Regression
+63 pristine quality:full
+64 npm audit
+65 Docker
+66 runtime smoke
+67 Files created
+68 Files modified
+69 Commands
+70 Validation matrix
+71 Known/deferred
+72 Out-of-scope
+73 Final completion
+74 Next backend phase recommendation
+75 Prompt count
+76 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+Include all critical gates:
+- filtered pagination correctness
+- filtered total correctness
+- glossary DTO validation
+- full quality gates
+- no cycles/forwardRef
+- exactly 5 tables
+- only two exports
+- locale precedence
+- immutable revisions
+- staleness
+- jobs/provider/glossary
+- no provider on GET
+- all adapters
+- localized tree/content
+- fallback states
+- Practice pinning
+- review-wrong inheritance
+- grading unchanged
+- admin APIs
+- RBAC/tenant scope
+- review creates new revision
+- stale approval denied
+- demo seed/idempotency
+- Postman
+- README/OpenAPI
+- FE admin/learner/Mobile ready
+- multilingual ready
+- regression
+- Git compliance
+
+PHASE COMPLETION
+----------------
+Only if:
+- BLOCKER=0
+- HIGH=0
+- pagination/filter issue fixed
+- glossary validation hardened
+- demo/Postman/docs PASS
+- FE admin READY
+- FE learner READY
+- Mobile READY
+- integration PASS
+- DB e2e PASS
+- one clean quality:full PASS
+- Docker PASS
+
+Then state exactly:
+
+LOCALIZATION / CONTENT TRANSLATION FOUNDATION PHASE COMPLETE
+
+LOCALIZATION DOMAIN READY: YES
+
+FE LOCALIZATION ADMIN CONTRACT READY: YES
+
+FE LOCALIZED LEARNER CONTRACT READY: YES
+
+MOBILE LOCALIZED CONTENT CONTRACT READY: YES
+
+MULTILINGUAL CONTENT DELIVERY FOUNDATION READY: YES
+
+Otherwise:
+LOCALIZATION / CONTENT TRANSLATION FOUNDATION PHASE NOT COMPLETE
+and list blockers.
+
+NEXT BACKEND PHASE
+------------------
+If COMPLETE:
+re-audit roadmap.
+
+Expected next:
+EXAM ENGINE / FORMAL ASSESSMENT
+
+Explain why Exam can now be designed with:
+- Question Bank stable
+- Practice stable
+- Learning Progress stable
+- Localization stable
+- locale + translationRevisionId snapshot semantics available from day one
+
+Do NOT implement Exam automatically.
+
+PROMPT COUNT
+------------
+LOCALIZATION #006/6 complete
+Localization phase COMPLETE or BLOCKED
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- LOCALIZATION #006 status
+- phase COMPLETE/NOT COMPLETE
+- pagination/filter fix PASS/FAIL
+- glossary validation PASS/FAIL
+- architecture PASS/FAIL
+- demo seed PASS/FAIL
+- Postman PASS/FAIL
+- FE admin readiness
+- FE learner readiness
+- Mobile readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- next phase recommendation
+- report path
+
+Then exactly:
+git commit -m "feat(localization): finalize multilingual content foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start Exam automatically.

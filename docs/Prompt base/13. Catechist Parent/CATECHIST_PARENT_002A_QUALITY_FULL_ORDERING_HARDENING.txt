@@ -1,0 +1,304 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #002A
+CORRECTIVE HARDENING — QUALITY:FULL ORDERING / CLEAN DB BASELINE
+
+1. Context
+----------
+CATECHIST + PARENT #002/5 implemented successfully:
+- FamilyPortalModule
+- zero tables
+- Catechist context/classes/roster
+- Class/Enrollment/Exam batch APIs
+- DB e2e
+- Docker
+
+Report says:
+- build PASS
+- unit PASS
+- integration PASS after explicit DB reset
+- DB e2e PASS
+- Docker PASS
+
+BUT:
+`quality:full` is NOT proven clean.
+Report explicitly notes it can fail when DB is dirty because integration runs before reset in the current quality flow.
+
+This corrective prompt must close that gate before #003.
+
+Do NOT implement Parent APIs yet.
+
+2. Permanent rules
+------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect package.json scripts and test ordering
+- determine exact reason pristine `quality:full` can depend on dirty DB state
+- make the smallest safe correction
+- create a detailed report
+- not proceed to #003
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "test: harden quality full database ordering"
+
+Do not execute it.
+
+3. Mandatory reading
+--------------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+docs/CATECHIST_PARENT_002_FAMILY_PORTAL_CATECHIST_CONTEXT_CLASSES_ROSTER_REPORT.md
+
+Inspect:
+package.json
+test scripts
+DB reset scripts
+integration test bootstrap
+DB e2e bootstrap
+test/integration/helpers/
+family-portal tests
+existing quality:full definition
+
+4. Primary objective
+--------------------
+Make `npm run quality:full` deterministic from a dirty local test DB.
+
+Required:
+A. identify current script order
+B. determine why integration can run before reset
+C. ensure quality:full owns its DB lifecycle
+D. keep existing individual scripts usable
+E. avoid hiding actual failures
+F. prove one clean quality:full PASS from intentionally dirty DB state if practical
+G. rerun Docker
+
+5. Strong preference
+--------------------
+`quality:full` should reset/prepare the test DB BEFORE any DB-dependent suite.
+
+Preferred structure conceptually:
+
+quality
+→ test:db:prepare --reset
+→ test:db:migrations
+→ test:integration
+→ test:e2e:db
+
+Exact project naming/order may differ.
+
+Do not invent a new parallel framework if a simple package.json script fix is enough.
+
+6. Dirty DB reproducibility
+---------------------------
+Before changing scripts:
+confirm the current failure mode if practical.
+
+Create/leave DB in a state representative of prior DB e2e run, then run current quality:full.
+
+Document:
+- whether failure reproduces
+- exact stage
+- exact reason
+
+Do not intentionally corrupt production/local dev DB.
+Test DB only.
+
+7. Smallest correction
+-----------------------
+Allowed:
+- package.json test script ordering
+- narrowly scoped test bootstrap/cleanup helper
+- docs report
+- targeted tests if needed
+
+Avoid production code changes.
+
+Do NOT change Family Portal business logic unless a separate bug is discovered.
+
+8. Individual script behavior
+-----------------------------
+After fix, these must still work independently:
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Do not make each suite secretly reset state in a way that breaks intentional fixture sequencing unless clearly required.
+
+9. quality:full semantics
+-------------------------
+The top-level `quality:full` must be self-contained.
+
+A developer should be able to run:
+
+npm run quality:full
+
+without manually remembering to reset DB first.
+
+That is the acceptance criterion.
+
+10. Family Portal regression
+----------------------------
+Re-run:
+- unit family portal
+- integration
+- DB e2e family portal
+- module-boundary tests
+
+No regression to #002.
+
+11. Full validation
+-------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+npm audit --audit-level=moderate
+
+Then intentionally ensure test DB is not assumed pristine and run:
+
+npm run quality:full
+
+Require ONE CLEAN PASS without a manual pre-reset command immediately before it.
+
+If the corrected `quality:full` internally performs the reset, that is acceptable and preferred.
+
+12. Additional DB validation
+----------------------------
+Also run individually:
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+PASS required.
+
+13. Docker
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:family-portal-quality-hardened ."
+
+PASS required.
+
+14. npm audit
+-------------
+npm audit --audit-level=moderate
+
+No unresolved HIGH.
+
+15. Required report
+-------------------
+Create:
+
+docs/CATECHIST_PARENT_002A_QUALITY_FULL_ORDERING_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 Why #002A was required
+3 Original quality:full definition
+4 Dirty DB failure mode
+5 Root cause
+6 Fix decision
+7 Files created
+8 Files modified
+9 Production code changed? YES/NO
+10 Production behavior changed? YES/NO
+11 quality:full final definition
+12 Individual DB scripts
+13 Family Portal regression
+14 Integration
+15 DB e2e
+16 quality:full from dirty state
+17 npm audit
+18 Docker
+19 Git status
+20 Risks
+21 BLOCKER/HIGH/MEDIUM/LOW
+22 #003 readiness
+23 Commit recommendation
+
+16. Required verdicts
+---------------------
+QUALITY:FULL SELF-CONTAINED: YES/NO
+
+QUALITY:FULL DIRTY-DB SAFE: YES/NO
+
+FAMILY PORTAL #002 REGRESSION: PASS/FAIL
+
+FULL INTEGRATION: PASS/FAIL
+
+DB E2E: PASS/FAIL
+
+PRISTINE/SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+
+NPM AUDIT: PASS/FAIL
+
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+CATECHIST + PARENT #003 READINESS: YES/NO
+
+17. #003 gate
+-------------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- quality:full self-contained
+- quality:full PASS
+- integration PASS
+- DB e2e PASS
+- Docker PASS
+
+Then recommend:
+
+CATECHIST + PARENT SUPPORTING APIs #003/5 —
+PARENT CONTEXT + LINKED CHILDREN + ENROLLMENT PROGRESS READ MODELS
+
+Do not auto-proceed.
+
+18. Final response
+------------------
+Respond concisely:
+- #002A status
+- root cause
+- final quality:full behavior
+- production code changed yes/no
+- integration
+- DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH
+- #003 readiness
+- report path
+
+Then exactly:
+git commit -m "test: harden quality full database ordering"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

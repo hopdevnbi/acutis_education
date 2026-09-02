@@ -1,0 +1,1229 @@
+CURSOR PROMPT — CLASS/PEOPLE/ENROLLMENT #001/7
+DOMAIN AUDIT + BOUNDED CONTEXT DESIGN
+
+1. Context
+----------
+We are building a long-term parish catechism platform backend.
+
+Completed backend phases:
+- Backend Foundation: COMPLETE
+- Bitbucket CI Foundation: COMPLETE
+- Auth / User / Role / Permission: COMPLETE
+- Parish / Academic Year / Catechism Level: COMPLETE
+
+Current phase:
+Class + Student + Catechist + Parent + Enrollment
+
+Estimated:
+7 prompts
+
+Planned sequence:
+
+#001 Domain audit + bounded-context design
+#002 Schema + entities + migrations
+#003 Class service + API + RBAC/scope foundations
+#004 Student + Parent relationship services/APIs
+#005 Catechist assignment + Enrollment history services/APIs
+#006 Cross-domain integration + parish-scope authorization hardening
+#007 Final audit + seed/Postman + FE contract readiness
+
+This prompt is #001/7.
+
+DO NOT implement schema, entities, services, controllers, migrations, seeds, or APIs yet.
+
+2. Mandatory Reading
+--------------------
+Before doing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+   docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+5. Inspect:
+   src/modules/users/
+   src/modules/auth/
+   src/modules/access-control/
+   src/modules/parish/
+   src/modules/academic-structure/
+   src/database/
+   test/
+   README.md
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Permanent Architecture Principles
+------------------------------------
+Apply existing project rules rigorously:
+
+- modular monolith now
+- future microservice extraction readiness
+- each business module owns its own persistence
+- no cross-module repository access
+- no ORM entities as public contracts
+- scalar IDs across module boundaries
+- no cyclic dependencies
+- no god service
+- no giant generic "shared business" module
+- public service contracts only
+- SQL FKs allowed in monolith, but application ownership remains isolated
+- FE is a separate ReactJS repo and calls BE by HTTP only
+- FE/BE Docker and CI/CD are independent
+
+Do NOT modify FE in this prompt.
+
+4. Primary Objective
+--------------------
+Perform a deep domain audit for:
+
+- Class
+- Student
+- Catechist
+- Parent
+- Enrollment
+
+The key challenge is historical correctness.
+
+We need to design relationships so future requirements can support:
+
+- one person serving multiple roles
+- multi-parish users
+- class changes over time
+- enrollment history across academic years
+- catechist assignments per class
+- parent-child relationships
+- student progression between levels
+- attendance/exam/progress referencing stable enrollment/class context
+- parish-scoped authorization
+
+No implementation yet.
+
+5. Critical Identity Question
+-----------------------------
+Audit whether Student, Catechist, Parent should be:
+
+A. separate identities/accounts
+B. profile tables linked to User
+C. pure RBAC roles
+D. domain relationships around a common User identity
+
+Do NOT assume one role = one table.
+
+Strongly evaluate this model:
+
+User = authentication identity
+
+StudentProfile = student-specific domain profile
+Parent relationship = user-to-student relation
+Catechist assignment = user-to-class relation
+Enrollment = student-to-class historical relation
+
+This is likely cleaner than duplicating user identity.
+
+But audit carefully and justify final decision.
+
+6. Child Accounts / Minors
+--------------------------
+Important privacy rule:
+
+Not every student necessarily needs a login account.
+
+Audit model options:
+
+A. Student requires User account
+B. Student can exist independently, optional userId
+C. Student is always User
+
+Preferred direction likely:
+StudentProfile/domain student can exist without login;
+optional User link may be added later.
+
+Reason:
+young children may not authenticate directly.
+
+Do NOT force all students into UsersModule unless requirement demands it.
+
+7. Parent Identity
+------------------
+Parent is likely an authenticated User.
+
+But "Parent" as a domain concept should probably be represented by relationship to child/student, not a standalone duplicated identity record.
+
+Audit whether a separate ParentProfile is necessary now.
+
+Possible simpler model:
+parent_student_links
+- parent_user_id
+- student_id
+- relationship_type
+- status
+- timestamps
+
+Avoid unnecessary Parent table unless there is parent-specific profile data requiring ownership.
+
+8. Catechist Identity
+---------------------
+Catechist is likely an authenticated User assigned to one or more classes.
+
+Audit whether separate CatechistProfile is needed.
+
+Likely:
+class_catechists
+- class_id
+- catechist_user_id
+- role/type
+- status
+- assigned_at
+- ended_at
+
+This supports multi-class and historical assignment.
+
+Do not put catechist_id directly on classes if multiple catechists are possible.
+
+9. Class Domain Definition
+--------------------------
+Define Class precisely.
+
+A Class belongs to:
+- Parish
+- AcademicYear
+- CatechismLevel
+
+Potential fields:
+
+id
+parish_id
+academic_year_id
+catechism_level_id
+code
+name
+status
+capacity
+start_date?
+end_date?
+created_at
+updated_at
+
+Do NOT automatically include all.
+
+Class should represent one operational cohort/group inside one parish/year/level.
+
+10. Class Ownership
+-------------------
+Evaluate a dedicated:
+
+ClassModule
+
+Likely owns:
+- classes
+- class_catechists
+- enrollments?
+
+But enrollment may be a separate bounded context.
+
+Audit alternatives.
+
+11. Enrollment as First-Class Domain
+------------------------------------
+Enrollment is NOT just a join table.
+
+It must preserve history.
+
+Define:
+Enrollment = a Student's membership in a Class for a specific period/status.
+
+Potential fields:
+
+id
+student_id
+class_id
+status
+enrolled_at
+left_at
+reason?
+created_at
+updated_at
+
+Potential statuses:
+PENDING
+ACTIVE
+COMPLETED
+WITHDRAWN
+TRANSFERRED
+CANCELLED
+
+Do not over-enumerate without justification.
+
+12. Enrollment History
+----------------------
+Critical invariants to audit:
+
+- a student may enroll in different classes across years
+- a student may transfer within same academic year
+- historical enrollment rows must not be overwritten
+- attendance/exam/progress later should reference the enrollment/class context valid at that time
+- class changes should create new enrollment or transition history rather than mutating old class_id
+
+Design for auditability.
+
+13. Student Domain Definition
+-----------------------------
+Define Student as domain participant.
+
+Potential Student table fields:
+
+id
+user_id nullable
+parish_id?
+student_code?
+display_name?
+date_of_birth?
+gender?
+status?
+created_at
+updated_at
+
+Be conservative due privacy.
+
+Do not store sensitive child data unless needed now.
+
+14. Student Parish Relationship
+-------------------------------
+Audit whether student belongs directly to one parish.
+
+Given multi-parish/history possibilities, do NOT assume permanent one-parish ownership blindly.
+
+Possible models:
+
+A. student has parish_id
+B. parish relationship derives from enrollment
+C. separate parish_student_membership
+
+Preferred minimal direction likely:
+Student is global domain person/profile;
+parish participation derives through enrollment/class.
+
+But audit carefully.
+
+15. Student Code
+----------------
+Evaluate whether student needs:
+- global code
+- parish-local code
+- no code initially
+
+Do not add code just for convenience.
+
+If useful for catechism admin/import:
+consider parish-scoped stable code via membership/enrollment layer.
+
+16. Parent-Child Relationship
+-----------------------------
+Design relationship history.
+
+Potential table:
+
+student_guardians
+- id
+- student_id
+- guardian_user_id
+- relationship_type
+- is_primary
+- status
+- starts_at
+- ends_at
+- created_at
+- updated_at
+
+Do not hard-code only FATHER/MOTHER if guardians may vary.
+
+Possible relation types:
+PARENT
+GUARDIAN
+OTHER
+
+Avoid collecting unnecessary family/private detail.
+
+17. Multi-Guardian Support
+--------------------------
+Must support:
+- multiple parents/guardians per student
+- one parent linked to multiple children
+- future blended-family cases
+
+No parent_id on student row.
+
+18. Class Catechist Assignment
+------------------------------
+Design history-aware assignment.
+
+Potential:
+class_catechist_assignments
+
+Fields:
+id
+class_id
+catechist_user_id
+assignment_role
+status
+assigned_at
+ended_at
+
+Possible assignment roles:
+LEAD
+ASSISTANT
+
+Audit if role distinction needed now.
+
+Do not use a single catechist_id column on classes.
+
+19. Module Split Candidates
+---------------------------
+Evaluate:
+
+Option A:
+ClassModule
+- classes
+- class_catechist_assignments
+- enrollments
+
+StudentModule
+- students
+- student_guardians
+
+Option B:
+ClassModule
+StudentModule
+EnrollmentModule
+
+Option C:
+PeopleModule
+ClassModule
+EnrollmentModule
+
+Avoid vague generic PeopleModule unless it truly improves cohesion.
+
+Likely clean split:
+StudentModule
+ClassModule
+EnrollmentModule
+
+But determine carefully.
+
+20. Proposed Ownership Candidate
+--------------------------------
+Evaluate this candidate:
+
+StudentModule:
+- students
+- student_guardians
+
+ClassModule:
+- classes
+- class_catechist_assignments
+
+EnrollmentModule:
+- enrollments
+
+This gives Enrollment its own historical lifecycle.
+
+Future Attendance/Exam/Learning modules can consume enrollment/class snapshots.
+
+Audit whether this is sufficiently clean without over-fragmentation.
+
+21. Dependency Direction
+------------------------
+Possible future dependency:
+
+StudentModule -> UsersModule? 
+Only if validating optional linked user/guardian identities.
+
+ClassModule -> ParishModule
+ClassModule -> AcademicStructureModule
+
+EnrollmentModule -> StudentModule
+EnrollmentModule -> ClassModule
+
+Controllers additionally use:
+AuthModule
+AccessControlModule
+
+Avoid:
+ClassModule -> EnrollmentModule if Enrollment already depends on ClassModule.
+
+No cycles.
+
+22. UsersModule Boundary
+------------------------
+UsersModule must remain authentication/account owner.
+
+Do NOT:
+- add class_id to users
+- add parish_id to users
+- add parent/student/catechist domain fields to UserEntity
+
+If Student optionally links to User:
+store scalar userId in StudentModule persistence.
+
+No UserEntity import.
+
+23. Parish Scope Authorization
+------------------------------
+This phase is where global RBAC becomes insufficient.
+
+Audit how parish-scoped authorization should be introduced.
+
+We need eventual rules such as:
+
+PARISH_ADMIN can manage classes only in assigned parish.
+CATECHIST can access assigned classes.
+PARENT can see only linked children.
+STUDENT can see only own learning context.
+
+Do NOT implement yet.
+
+But design the scope model and identify which table/contract supplies evidence.
+
+24. Parish Membership Question
+------------------------------
+PARISH #001 deferred parish membership.
+
+Now decide whether this phase needs:
+
+parish_memberships
+
+Potential:
+id
+parish_id
+user_id
+status
+joined_at
+ended_at
+
+Question:
+Should parish admin/catechist/parent membership be explicit or inferred from assignments/relationships?
+
+Audit.
+
+Likely:
+- PARISH_ADMIN needs explicit parish membership/scope
+- CATECHIST scope can derive from class assignment
+- PARENT scope derives from child relation
+- STUDENT scope derives from student-user link/enrollment
+
+Maybe a generic parish_memberships table is useful for admin scope.
+
+But avoid creating redundant duplicated scope sources.
+
+25. Scoped RBAC Strategy
+------------------------
+Audit design options:
+
+A. modify user_roles to include parish_id
+B. add scoped_role_assignments
+C. keep global RBAC + resource scope services
+D. parish_memberships + permission guard composition
+
+Do NOT change Auth/RBAC schema in #001.
+
+Preferred likely:
+retain permission capability globally,
+then enforce domain scope using dedicated scope service/policies.
+
+Example:
+@RequirePermissions('classes.manage')
++
+ClassScopeService.assertCanManageClass(userId, classId)
+
+But parish admin scope needs membership evidence.
+
+Document.
+
+26. Class Status
+---------------
+Audit lifecycle.
+
+Potential:
+PLANNED
+ACTIVE
+COMPLETED
+CANCELLED
+
+Prefer explicit lifecycle over ACTIVE/INACTIVE if classes are year-bound operational records.
+
+No hard delete once referenced.
+
+27. Class Uniqueness
+--------------------
+Potential uniqueness:
+(parish_id, academic_year_id, code)
+
+or:
+(parish_id, academic_year_id, name)
+
+Prefer code if stable machine identifier exists.
+
+Audit whether class code is needed.
+
+28. Class Dates
+--------------
+AcademicYear already has date range.
+
+Do classes need their own start/end dates?
+
+Maybe yes for actual schedule period,
+but can defer until Schedule/Attendance phase.
+
+Avoid duplication unless immediate need.
+
+29. Capacity
+-----------
+Evaluate capacity field.
+
+Could be useful but not foundational.
+Likely defer.
+
+30. Enrollment Status Model
+---------------------------
+Choose minimal status set.
+
+Candidate:
+ACTIVE
+COMPLETED
+WITHDRAWN
+TRANSFERRED
+
+Question:
+Do we need PENDING/CANCELLED now?
+
+Prefer smaller model.
+
+Document transitions.
+
+31. Enrollment Uniqueness
+-------------------------
+Critical.
+
+Should a student have only one ACTIVE enrollment per academic year?
+
+Likely yes within same parish.
+
+But transfer requires:
+old -> TRANSFERRED/WITHDRAWN
+new -> ACTIVE
+
+Potential DB invariant:
+only one ACTIVE enrollment for a student per academic year.
+
+Since enrollment row references class, academic year derived from Class.
+
+DB filtered unique index cannot easily include academic_year without duplication unless denormalized.
+
+Audit options:
+- duplicate academic_year_id into enrollment for invariant
+- service transaction/lock
+- query via join
+
+Do not choose casually.
+
+32. Denormalized Scope Keys
+---------------------------
+Evaluate whether Enrollment should store:
+- classId only
+or
+- classId + parishId + academicYearId + catechismLevelId snapshots
+
+Avoid unnecessary duplication, but historical/reporting and invariant enforcement may justify selective denormalization.
+
+Document tradeoff.
+
+33. Historical Snapshot Strategy
+--------------------------------
+Future exams/results may need historical values even if class metadata changes.
+
+Do we:
+- make class/year/level immutable after certain status
+- store snapshots in exam/attendance later
+- duplicate fields in enrollment now
+
+Prefer preserving stable foreign-key references and lifecycle immutability rather than premature snapshots.
+
+34. Student Status
+------------------
+Potential:
+ACTIVE
+INACTIVE
+
+But student's operational status may depend on enrollment.
+
+Audit whether Student needs status at all.
+
+Avoid redundant status if enrollment is authoritative.
+
+35. Student Personal Fields
+---------------------------
+Because platform serves minors:
+
+Classify fields:
+Required now
+Deferred
+Avoid unless necessary
+
+Potential:
+fullName
+preferredName
+dateOfBirth
+gender
+notes
+baptismName?
+contact?
+
+Be privacy-minimal.
+
+Likely required for class roster:
+name
+possibly dateOfBirth
+
+But if user account may not exist, Student must have display identity.
+
+Document carefully.
+
+36. Catholic-Specific Fields
+----------------------------
+Do NOT put:
+baptism date
+first communion
+confirmation
+confession history
+pastoral notes
+
+into Student foundation unless explicit requirements exist.
+
+Those belong in later Faith Journey / sacramental domain if needed.
+
+37. Parent Visibility Boundary
+-----------------------------
+Parent APIs later must never use role PARENT alone.
+
+They require actual link:
+parent user -> student
+
+Document this as a permanent security invariant.
+
+38. Catechist Visibility Boundary
+---------------------------------
+Catechist access should derive from:
+class assignment
+
+not merely CATECHIST role.
+
+Document.
+
+39. Class API Planning
+----------------------
+Conceptual only.
+
+Possible:
+
+POST /api/v1/parishes/:parishId/classes
+GET /api/v1/parishes/:parishId/classes
+GET /api/v1/classes/:id
+PATCH /api/v1/classes/:id
+PATCH /api/v1/classes/:id/status
+
+Filters:
+academicYearId
+catechismLevelId
+status
+
+No implementation.
+
+40. Student API Planning
+------------------------
+Conceptual:
+
+POST /api/v1/students
+GET /api/v1/students/:id
+PATCH /api/v1/students/:id
+
+Parish lists likely:
+GET /api/v1/parishes/:parishId/students
+
+But if parish relation derives from enrollment:
+route semantics need care.
+
+Audit.
+
+41. Parent/Guardian API Planning
+--------------------------------
+Conceptual:
+
+POST /students/:studentId/guardians
+GET /students/:studentId/guardians
+DELETE/terminate relationship?
+
+Prefer historical deactivate/end rather than destructive delete.
+
+No implementation.
+
+42. Catechist Assignment API Planning
+-------------------------------------
+Conceptual:
+
+POST /classes/:classId/catechists
+GET /classes/:classId/catechists
+PATCH /class-catechist-assignments/:id/status
+
+No implementation.
+
+43. Enrollment API Planning
+---------------------------
+Conceptual:
+
+POST /classes/:classId/enrollments
+GET /classes/:classId/enrollments
+GET /students/:studentId/enrollments
+PATCH /enrollments/:id/status
+POST /enrollments/:id/transfer ?
+
+Audit whether transfer deserves explicit command endpoint rather than generic status update.
+
+44. Transfer Semantics
+----------------------
+Strongly evaluate explicit service operation:
+
+transferEnrollment(enrollmentId, targetClassId)
+
+Transaction:
+- validate same parish/year rules
+- close old enrollment as TRANSFERRED
+- create new ACTIVE enrollment
+- preserve history
+
+This is likely safer than callers manually changing statuses.
+
+Document.
+
+45. Promotion / New Academic Year
+---------------------------------
+Moving to a new academic year should likely be:
+new enrollment
+
+not update old enrollment.
+
+Important historical rule.
+
+46. Future Attendance Integration
+---------------------------------
+Attendance later should reference:
+- classId
+- studentId
+and possibly enrollmentId
+
+Audit recommendation.
+
+Prefer enrollmentId where historical membership matters.
+
+47. Future Exam Integration
+---------------------------
+Exam assignment/result later may reference:
+- classId
+- studentId
+- enrollmentId
+
+Document which stable IDs should be exposed.
+
+48. Future Learning Progress
+----------------------------
+Progress may span classes/years.
+
+Do not bind Student identity entirely to Enrollment.
+
+Student is stable; Enrollment is historical context.
+
+49. Future Microservice Extraction
+----------------------------------
+Potential future services:
+
+Student Service
+- students
+- guardian relationships
+
+Class Service
+- classes
+- catechist assignments
+
+Enrollment Service
+- enrollments
+
+Parish/Academic services already separate boundaries.
+
+Document API/RPC dependencies after extraction.
+
+50. Cross-Service FK Future
+---------------------------
+Today SQL FKs may exist.
+
+Future extraction:
+- scalar IDs
+- synchronous validation for writes
+- events/cache for reads
+
+No distributed transactions today.
+
+51. Transaction Boundaries
+--------------------------
+Identify operations likely needing transactions:
+
+- transfer enrollment
+- end old + create new enrollment
+- maybe class activation with academic rules
+- catechist reassignment if exclusivity exists
+
+Do not span repositories owned by unrelated modules in one transaction if architecture can avoid it.
+
+If EnrollmentService needs Student/Class validation:
+validate via public service contracts, then own enrollment transaction only.
+
+52. Scope Service Candidate
+---------------------------
+Audit whether we should eventually introduce:
+ParishScopeService
+ClassScopeService
+StudentAccessService
+
+Avoid generic AuthorizationGodService.
+
+Prefer domain-owned scope checks.
+
+Example:
+ClassService.assertClassBelongsToParish(...)
+EnrollmentService.assertStudentEnrolledInClass(...)
+StudentService.assertGuardianLinked(...)
+
+53. Permission Namespace Plan
+-----------------------------
+Conceptual permissions:
+
+classes.read
+classes.manage
+
+students.read
+students.manage
+
+enrollments.read
+enrollments.manage
+
+class-catechists.read
+class-catechists.manage
+
+Do not seed yet.
+
+Parent/self access may later be relationship-based, not broad students.read.
+
+54. Security Model Matrix
+------------------------
+Report must propose access rules for:
+
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST
+PARENT
+STUDENT
+
+Separate:
+permission capability
+from
+resource scope.
+
+55. No Role-as-Identity Anti-Pattern
+-----------------------------------
+Explicitly avoid assumptions:
+
+role CATECHIST => owns Catechist row
+role PARENT => parent of all students
+role STUDENT => student profile automatically exists
+
+Identity/domain relationships must be explicit.
+
+56. Deletion Strategy
+---------------------
+Prefer no hard deletes for:
+
+students
+classes
+enrollments
+guardian links
+catechist assignments
+
+Use statuses/end timestamps.
+
+Audit exceptions for erroneous test/demo data but no routine DELETE API.
+
+57. Timestamps
+--------------
+Use UTC datetime2 for event timestamps.
+
+Date-only fields only where truly calendar date.
+
+58. PII / Minor Data Review
+---------------------------
+Required report section:
+
+- what child data is necessary
+- what is deferred
+- what should never be logged
+- guardian relationship privacy
+- no medical/sensitive notes in foundational tables
+
+59. Import/Export Future
+------------------------
+Student/class data may later be imported from spreadsheets.
+
+Design codes/constraints to support deterministic idempotent imports without compromising domain model.
+
+Do not implement imports now.
+
+60. Seed Strategy
+-----------------
+No domain seed in #001.
+
+Plan later local/dev seed:
+- synthetic class
+- synthetic students
+- synthetic guardian/catechist assignments
+- enrollment history examples
+
+No real child data.
+
+61. Frontend Contract Planning
+------------------------------
+Because FE is independent React repo:
+
+Plan DTOs suitable for:
+- class list/admin
+- student roster
+- guardian view
+- catechist assignments
+- enrollment history
+
+No entity-shaped API responses.
+
+62. Pagination Convention
+-------------------------
+Follow existing project rule:
+page
+limit
+sort
+sortBy
+search/filter as relevant
+
+No implementation now.
+
+63. Module Split Decision
+-------------------------
+Choose exact split and justify.
+
+Strong candidate:
+- StudentModule
+- ClassModule
+- EnrollmentModule
+
+But if audit shows another split is cleaner, explain.
+
+64. Data Ownership Matrix
+-------------------------
+Required report table:
+
+Concept/table
+Owner module
+Allowed writer
+Public readers/contracts
+Future microservice owner
+
+65. Dependency Graph
+--------------------
+Required explicit graph.
+
+Must be acyclic.
+
+66. Public Contract Plan
+------------------------
+Plan snapshots such as:
+
+StudentSnapshot
+ClassSnapshot
+EnrollmentSnapshot
+GuardianLinkSnapshot
+ClassCatechistAssignmentSnapshot
+
+No entities.
+
+67. Schema Plan
+---------------
+For every proposed table:
+- fields
+- types
+- required/deferred
+- PK/FK
+- unique constraints
+- indexes
+- status enums
+- history semantics
+
+No migrations yet.
+
+68. Open Questions
+------------------
+If product requirements are genuinely missing:
+choose conservative defaults and document them.
+
+Do NOT stop and ask user unless impossible.
+
+Best-effort design is preferred.
+
+69. Existing Project Compatibility
+----------------------------------
+Audit compatibility with:
+- TypeORM patterns
+- UUID helper
+- migrations
+- module-boundary tests
+- Auth/RBAC
+- ParishService
+- AcademicYearService
+- CatechismLevelService
+
+70. Validation
+-------------
+This is audit/design only.
+
+Run:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+No DB/Docker required unless code/rules change unexpectedly.
+
+71. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If only gitignored report is created:
+No code/config changes; no commit message required.
+
+If tracked rules genuinely need update:
+print exactly ONE appropriate commit command.
+
+Do not manufacture changes.
+
+72. Required Report
+-------------------
+Create:
+
+docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from previous phases
+3. Rules applied
+4. Domain definitions
+5. User identity vs domain profile decision
+6. Student identity model
+7. Parent/guardian model
+8. Catechist model
+9. Class model
+10. Enrollment as first-class domain
+11. Historical enrollment rules
+12. Transfer semantics
+13. Promotion/new academic year semantics
+14. Module split decision
+15. Data ownership matrix
+16. Dependency graph
+17. Public contract plan
+18. Class schema plan
+19. Student schema plan
+20. Guardian relationship schema plan
+21. Catechist assignment schema plan
+22. Enrollment schema plan
+23. Status enums/lifecycles
+24. Uniqueness constraints
+25. Index strategy
+26. Cross-module FK strategy
+27. Cross-module ORM rules
+28. Multi-parish user implications
+29. Parish membership decision
+30. Scoped authorization strategy
+31. Parent visibility security invariant
+32. Catechist visibility security invariant
+33. Permission namespace plan
+34. API plan — Class
+35. API plan — Student
+36. API plan — Guardians
+37. API plan — Catechist assignments
+38. API plan — Enrollment
+39. Attendance integration recommendation
+40. Exam integration recommendation
+41. Learning progress integration recommendation
+42. PII/minor privacy review
+43. Deletion/history policy
+44. Seed strategy
+45. FE contract planning
+46. Future microservice extraction map
+47. Risks/open questions
+48. Files created
+49. Files modified
+50. Commands executed
+51. Validation results
+52. Out-of-scope confirmation
+53. CLASS #002 readiness
+54. Prompt count status
+55. Commit recommendation
+
+73. CLASS #002 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+CLASS/PEOPLE/ENROLLMENT #002 — Schema + Entities + Migrations
+
+#002 should implement ONLY:
+- selected module skeletons
+- entities
+- enums
+- migrations
+- FKs/indexes/checks
+- metadata/integration tests
+
+No business services/controllers yet.
+
+74. Prompt Count
+----------------
+State:
+#001/7 complete
+approximately 6 prompts remain
+
+75. Final Response
+-----------------
+Respond concisely:
+
+- CLASS/PEOPLE/ENROLLMENT #001 status
+- selected module split
+- enrollment history design ready YES/NO
+- scoped authorization direction defined YES/NO
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #002 automatically.

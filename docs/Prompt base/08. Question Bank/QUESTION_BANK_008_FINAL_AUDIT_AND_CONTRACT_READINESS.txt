@@ -1,0 +1,786 @@
+CURSOR PROMPT — QUESTION BANK #008/8
+FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION GATE
+
+Context
+-------
+Completed:
+#001 Domain Audit + Model Design
+#002 Schema + Entities + Migrations
+#003 Metadata CRUD + Tags/Curriculum Links + RBAC
+#004 Options + Correct Answers + Publish
+#005 Clone/Versioning + Learner Projection + Grading
+#006 Curriculum/Media Integration + Scoped Delivery
+#007 Search/Filter + Export V1 + Import Validate + OpenAPI Hardening
+
+Current:
+QUESTION BANK #008 / 8
+
+This is the FINAL gate.
+Do NOT start the next backend module automatically.
+
+Permanent rules
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read all previous reports and current code first
+- audit before changing code
+- only fix issues needed to close Question Bank
+- create one final report in docs/
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+- not auto-proceed to the next module
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(question-bank): finalize assessment content foundation"
+
+Do not execute it.
+
+Mandatory reading
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read all:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+docs/QUESTION_BANK_004_OPTIONS_ANSWERS_PUBLISH_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+docs/QUESTION_BANK_007_SEARCH_IMPORT_EXPORT_CONTRACT_HARDENING_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/curriculum/
+src/modules/media/
+src/modules/parish/
+src/modules/access-control/
+src/modules/auth/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+Dockerfile
+docker-compose*.yml
+
+Primary objective
+-----------------
+Close the Question Bank phase only if all mandatory gates pass.
+
+Required final outcomes:
+- clean bounded context
+- no cycle / no forwardRef
+- QuestionBankService only export
+- 7 owned tables isolated
+- stable root/version model
+- immutable PUBLISHED/ARCHIVED
+- clone lineage safe
+- MVP question types stable
+- options/correct answers correct
+- publish validation stable
+- grading contracts stable
+- learner projection safe
+- Curriculum/Media integration safe
+- parish RBAC safe
+- CATECHIST policy final
+- search/filter stable
+- export V1 stable
+- import validate-only stable
+- multilingual foundation ready
+- FE admin ready
+- Mobile delivery ready
+- Practice ready
+- Exam ready
+- demo seed
+- Postman
+- README/OpenAPI
+- pristine quality:full PASS
+- Docker production build PASS
+- BLOCKER/HIGH = 0
+
+Final architecture audit
+------------------------
+QuestionBankModule owns:
+questions
+question_versions
+question_options
+question_correct_options
+question_tags
+question_tag_links
+question_curriculum_links
+
+Exports:
+QuestionBankService only
+
+Internal services may include:
+QuestionOptionService
+QuestionGradingService
+QuestionTagService
+QuestionCurriculumLinkService
+QuestionExportService
+QuestionImportValidationService
+
+Allowed dependencies:
+QuestionBank -> Parish public APIs
+QuestionBank -> Curriculum public APIs
+QuestionBank -> Media public APIs
+QuestionBank -> Auth/AccessControl
+
+Future consumers:
+Practice/Exam -> QuestionBank
+
+Forbidden:
+entity/repository export
+cross-module repository import
+reverse dependency from Curriculum/Media
+forwardRef
+cycles
+
+Root/version final audit
+------------------------
+Verify:
+- parish-scoped root
+- ACTIVE/INACTIVE
+- sourceLocale
+- currentPublishedVersionId
+- one DRAFT
+- monotonic versionNumber
+- DRAFT mutable
+- PUBLISHED immutable
+- ARCHIVED immutable
+- clone PUBLISHED/ARCHIVED -> new DRAFT
+- new option UUIDs on clone
+- correct mappings remapped
+- historical versions remain readable/gradable
+
+sourceContentHash
+-----------------
+Must be translation-source semantic.
+
+Include human-visible/translatable source content.
+Exclude:
+- option DB UUID
+- correct-answer mappings
+- audit timestamps
+
+Pure clone unchanged content -> same hash.
+Prompt/option/media display change -> hash changes.
+
+Question types
+--------------
+Only active MVP types:
+SINGLE_CHOICE
+MULTIPLE_CHOICE
+TRUE_FALSE
+
+Deferred:
+SHORT_TEXT
+NUMBER
+LONG_TEXT
+ORDERING
+MATCHING
+FILL_IN_THE_BLANK
+
+Do not add unsupported types.
+
+TRUE_FALSE:
+- two normal options
+- codes true/false
+- correctness by option UUID
+- option code not exposed learner-side
+
+MULTIPLE_CHOICE:
+- exact-set grading
+- no partial credit
+- order irrelevant
+- duplicate selected IDs denied
+
+Publish
+-------
+Require:
+prompt
+difficulty
+valid option count
+valid correct answers
+objective answerDefinitionJson empty
+valid media
+DRAFT
+ACTIVE root
+
+Publishing newer draft:
+archive previous PUBLISHED
+update currentPublishedVersionId
+
+Learner-safe projection
+-----------------------
+Must exclude:
+correct answers
+answerDefinitionJson
+explanation
+option code
+createdBy/publishedBy
+storage internals
+
+Allow PUBLISHED/ARCHIVED service projection.
+Reject DRAFT for learner delivery.
+
+Grading
+-------
+Service-to-service only.
+No public HTTP grading.
+
+Support:
+SINGLE_CHOICE
+MULTIPLE_CHOICE exact-set
+TRUE_FALSE
+
+Allow:
+PUBLISHED
+ARCHIVED
+
+Reject:
+DRAFT
+unknown option
+cross-version option
+duplicates
+invalid cardinality
+
+No learner answer persistence here.
+
+Assessment snapshot
+-------------------
+Service-to-service only.
+Contains exact immutable version/options/correct answers/sourceContentHash/sourceLocale.
+No HTTP endpoint.
+
+Curriculum integration
+----------------------
+Verify:
+same parish
+ACTIVE curriculum required for new links
+canonicalLessonKey belongs curriculum lineage
+authoringCurriculumVersionId belongs curriculum
+historical links survive inactive curriculum
+
+No direct lessonId/topicId.
+
+Media integration
+-----------------
+Store only assetId.
+Validate prompt/explanation/option image:
+exists
+READY
+IMAGE
+
+Publish revalidates.
+
+No Media FK.
+No bucket/key/path/URL persistence.
+
+RBAC final matrix
+-----------------
+SUPER_ADMIN:
+read/manage/publish all
+
+PARISH_ADMIN:
+read/manage/publish own parish
+
+CATECHIST:
+read own parish only
+
+PARENT:
+none
+
+Do not add STUDENT.
+
+All by-id routes resolve parish scope.
+
+Search final audit
+------------------
+Confirm:
+- one root row per question
+- effective version DRAFT else current PUBLISHED
+- Unicode search
+- root status
+- sourceLocale
+- questionType
+- difficulty
+- hasDraft
+- hasPublished
+- tag filters
+- curriculum filter
+- canonicalLessonKey
+- pagination
+- whitelist sort
+- no answers in list
+
+Export V1
+---------
+GET question-version export remains read-only.
+
+schemaVersion = 1.
+Correct answers reference export-local option keys.
+No actor PII.
+No storage internals.
+
+Document media/curriculum environment portability limits.
+
+Import validate-only
+--------------------
+NO DB mutation.
+NO commit endpoint.
+
+Validate:
+schema
+type
+locale
+option keys
+correct keys
+question code conflict
+tags
+curriculum
+media
+bounds
+
+Demo seed — REQUIRED
+--------------------
+Create an idempotent development/demo Question Bank seed using project seed conventions.
+
+Use public services where practical.
+
+Create 3–5 coherent demo questions for an existing demo parish/curriculum context:
+- >=1 SINGLE_CHOICE
+- >=1 MULTIPLE_CHOICE
+- >=1 TRUE_FALSE
+
+Recommended stable codes:
+qb-demo-single-001
+qb-demo-multi-001
+qb-demo-tf-001
+
+Include:
+- tags
+- valid curriculum/canonicalLessonKey link when demo curriculum supports it
+- publish at least several questions
+- optionally leave one DRAFT for editor testing
+
+Do NOT:
+- require S3
+- use real child names
+- create copyrighted long quotations
+- create cross-parish data
+
+Use neutral catechism demo content.
+
+Seed idempotency tests
+----------------------
+Test:
+first run creates expected records
+second run creates no duplicates
+published versions valid
+correct answers valid
+tags/links valid
+no duplicate versions/options
+no cross-parish leakage
+
+Postman — REQUIRED
+------------------
+Create:
+docs/postman/Acutis-Education-Question-Bank.postman_collection.json
+
+Use variables:
+baseUrl
+adminEmail
+adminPassword
+catechistEmail
+catechistPassword
+parentEmail
+parentPassword
+parishId
+curriculumId
+canonicalLessonKey
+questionId
+versionId
+tagId
+
+No hardcoded production secrets/tokens.
+
+Cover:
+1 admin login
+2 list/search
+3 create question + initial draft
+4 update draft
+5 set options
+6 set correct options
+7 create/link tag
+8 curriculum link
+9 learner-safe preview
+10 publish
+11 export
+12 clone-to-draft
+13 edit clone
+14 publish v2
+15 search/filter
+16 import validate-only
+17 CATECHIST read allowed
+18 CATECHIST manage denied
+19 PARENT denied
+
+Postman tests:
+status assertions
+capture IDs
+publish validation flow
+export schemaVersion=1
+import validate no-write
+permission denials
+
+README/OpenAPI
+--------------
+Ensure docs cover:
+- bounded context
+- MVP types
+- version lifecycle
+- RBAC matrix
+- authoring flow
+- options/answers
+- publish/clone
+- grading service-only
+- search/filter semantics
+- export V1
+- import validate-only
+- Curriculum/Media integration
+- Practice/Exam boundary
+- Mobile delivery contract
+- multilingual readiness
+- deferred types/features
+
+FE readiness
+------------
+Final verdict:
+FE QUESTION BANK ADMIN CONTRACT READY: YES/NO
+
+Must support:
+list/search/filter
+create/edit
+options/correct answers
+tags
+curriculum links
+media refs
+publish validation/publish
+clone
+preview
+export
+import validate
+status management
+
+Mobile readiness
+----------------
+Final verdict:
+MOBILE QUESTION DELIVERY CONTRACT READY: YES/NO
+
+Question Bank base can be READY even if contextual Practice/Exam media routes are future work, as long as Mobile consumes through future Practice/Exam, not direct generic Question Bank learner API.
+
+Practice readiness
+------------------
+Final verdict:
+PRACTICE INTEGRATION CONTRACT READY: YES/NO
+
+Exam readiness
+--------------
+Final verdict:
+EXAM INTEGRATION CONTRACT READY: YES/NO
+
+Multilingual
+------------
+Final verdict:
+QUESTION BANK MULTILINGUAL FOUNDATION READY: YES/NO
+
+Require:
+sourceLocale
+sourceContentHash
+Unicode
+stable type/status codes
+correctness independent of display strings
+no runtime translation
+
+Security final audit
+--------------------
+Verify:
+- no answer leakage
+- no public grading
+- no generic learner browse
+- no cross-parish search
+- no learner PII
+- no PII in export
+- no raw SQL injection
+- no raw HTML
+- no Media storage internals
+- no Postman secrets
+- no CATECHIST manage/publish
+
+Existing regression
+-------------------
+Run all:
+Auth
+Parish
+Class/Enrollment
+Curriculum/LearningContent
+Media
+QuestionBank
+
+quality:full
+------------
+Must run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+No contradictory reporting.
+
+Docker
+------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-final .
+
+PASS required.
+
+Optional Docker runtime smoke:
+If practical, run image and verify startup/routes.
+If skipped, justify.
+
+Required commands
+-----------------
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+wsl docker build --target production -t catechism-api:question-bank-final .
+
+Run demo seed command using actual project convention.
+
+Required final report
+---------------------
+Create:
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #001–#007
+3 Rules applied
+4 Final findings summary/severity
+5 Final dependency graph
+6 Module boundary
+7 Data ownership
+8 Public exports
+9 Question root model
+10 Version lifecycle
+11 Immutability
+12 Clone/version lineage
+13 sourceContentHash
+14 MVP question types
+15 Deferred question types
+16 Option/correct-answer semantics
+17 TRUE_FALSE semantics
+18 MULTIPLE_CHOICE scoring
+19 Publish validation
+20 Learner-safe projection
+21 Grading contract
+22 Assessment snapshot
+23 Curriculum integration
+24 Media integration
+25 RBAC final matrix
+26 CATECHIST policy
+27 Search/filter final contract
+28 Export V1
+29 Import validate-only
+30 Security/privacy
+31 Multilingual readiness
+32 FE admin readiness
+33 Mobile delivery readiness
+34 Practice readiness
+35 Exam readiness
+36 Demo seed
+37 Seed idempotency
+38 Postman collection
+39 README/docs
+40 Swagger/OpenAPI
+41 Unit tests
+42 Integration tests
+43 DB e2e
+44 Existing regression
+45 pristine quality:full
+46 Docker production build
+47 Docker runtime decision
+48 Microservice extraction
+49 Files created
+50 Files modified
+51 Commands
+52 Explicit validation matrix
+53 Known/deferred
+54 Out-of-scope
+55 Final completion decision
+56 Next backend phase recommendation
+57 Prompt count
+58 Commit recommendation
+
+Explicit PASS/FAIL matrix
+-------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker build
+- no cycle
+- no forwardRef
+- QuestionBankService only export
+- 7 owned tables isolated
+- parish ownership
+- one DRAFT
+- immutable PUBLISHED
+- immutable ARCHIVED
+- clone PUBLISHED
+- clone ARCHIVED
+- source hash semantic stability
+- SINGLE_CHOICE
+- MULTIPLE_CHOICE
+- TRUE_FALSE
+- no unsupported active question type
+- correct answer same-version integrity
+- exact-set multiple grading
+- no partial credit
+- publish validation
+- media revalidation
+- learner projection no answers
+- learner projection no explanation
+- grade service-only
+- archived grading
+- assessment snapshot service-only
+- curriculum same-parish
+- canonicalLessonKey
+- no direct topic FK
+- media assetId only
+- no media FK
+- CATECHIST read-only
+- PARENT denied
+- cross-parish denied
+- search unique roots
+- Unicode search
+- tag/curriculum filters
+- export V1 schema
+- export option keys
+- import validate no write
+- no import commit
+- FE admin contract ready
+- Mobile delivery contract ready
+- Practice contract ready
+- Exam contract ready
+- multilingual ready
+- demo seed
+- seed idempotent
+- Postman
+- README/OpenAPI
+- no answer leakage
+- no public grading
+- no generic learner browse
+- no secrets
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+Completion decision
+-------------------
+If and ONLY if no unresolved BLOCKER/HIGH and all mandatory gates PASS, print exactly:
+
+QUESTION BANK / ASSESSMENT CONTENT FOUNDATION PHASE COMPLETE
+
+QUESTION BANK DOMAIN READY: YES
+
+FE QUESTION BANK ADMIN CONTRACT READY: YES
+
+MOBILE QUESTION DELIVERY CONTRACT READY: YES
+
+PRACTICE INTEGRATION CONTRACT READY: YES
+
+EXAM INTEGRATION CONTRACT READY: YES
+
+QUESTION BANK MULTILINGUAL FOUNDATION READY: YES
+
+Otherwise print:
+QUESTION BANK / ASSESSMENT CONTENT FOUNDATION PHASE NOT COMPLETE
+and list blockers.
+
+Next backend phase recommendation
+---------------------------------
+Only if COMPLETE:
+
+Recommend:
+PRACTICE / QUIZ DELIVERY FOUNDATION
+
+Reason:
+Question Bank now provides immutable published versions, learner-safe projections, grading, selection metadata, and Curriculum/Media integration.
+
+Do NOT implement automatically.
+
+If project roadmap explicitly requires another module first, state it instead.
+
+Prompt count
+------------
+State:
+QUESTION BANK #008/8 complete
+phase complete or blocked
+
+Final response
+--------------
+Respond concisely:
+- QUESTION BANK #008 status
+- phase COMPLETE/NOT COMPLETE
+- demo seed PASS/FAIL
+- Postman PASS/FAIL
+- FE readiness
+- Mobile readiness
+- Practice readiness
+- Exam readiness
+- multilingual readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- next backend phase
+- report path
+
+Then print exactly:
+git commit -m "feat(question-bank): finalize assessment content foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next phase automatically.

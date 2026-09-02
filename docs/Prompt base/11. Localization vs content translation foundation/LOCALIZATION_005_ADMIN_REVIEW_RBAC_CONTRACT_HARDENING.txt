@@ -1,0 +1,646 @@
+CURSOR PROMPT — LOCALIZATION #005/6
+ADMIN REVIEW / APPROVAL APIs + RBAC + FE / MOBILE CONTRACT HARDENING
++ CLOSE #004 LOCALIZED-DELIVERY INTEGRATION TEST DEBT
+
+CONTEXT
+-------
+Completed:
+- #001 Audit + translation model design
+- #002 Locale preferences + persistence
+- #003 Provider/jobs/glossary
+- #004 Resource adapters + localized Curriculum Delivery + Question localization + Practice snapshot
+
+Current:
+LOCALIZATION #005 / 6
+
+Remaining:
+#006 Final audit + demo seed + Postman + quality/full + Docker + phase completion
+
+#004 verdict:
+- adapters PASS
+- Curriculum Delivery PASS
+- Question localization PASS
+- Practice snapshot PASS
+- FE/Mobile readiness PASS
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+IMPORTANT #004 TEST DEBT — MUST CLOSE FIRST
+-------------------------------------------
+#004 deferred dedicated integration coverage for:
+1. APPROVED en-US curriculum tree using seeded translation revisions
+2. translated Practice session create/get using seeded APPROVED question revisions
+
+Before implementing #005 admin APIs, ADD these dedicated integration tests and make them PASS.
+If either reveals a real defect, fix it within Localization scope before continuing.
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001–#004 reports/current code first
+- close #004 integration test debt first
+- stay within #005
+- create detailed report in docs/
+- not auto-proceed #006
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(localization): add translation review and approval workflow"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/LOCALIZATION_002_LOCALE_PREFERENCES_TRANSLATION_PERSISTENCE_REPORT.md
+docs/LOCALIZATION_003_PROVIDER_JOBS_CATHOLIC_GLOSSARY_REPORT.md
+docs/LOCALIZATION_004_RESOURCE_ADAPTERS_LOCALIZED_DELIVERY_PRACTICE_REPORT.md
+
+Inspect:
+src/modules/localization/
+src/modules/curriculum-delivery/
+src/modules/question-bank/
+src/modules/practice/
+src/modules/users/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/seeds/
+test/
+docs/postman/
+README.md
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+A. close #004 approved-translation integration coverage gap
+B. localization permission seeds
+C. admin translation controller
+D. list/filter translation resources/status
+E. request translation job
+F. get resource/revisions
+G. human edit => new REVIEWED revision
+H. approve revision
+I. retry failed/dead job
+J. bounded parish-scoped bulk translation
+K. admin preview/resolution
+L. glossary admin APIs where appropriate
+M. parish-scoped authorization
+N. rate/cost controls
+O. FE admin contract hardening
+P. FE learner + Mobile localized contract hardening
+Q. export/import/search MVP decision
+R. Swagger/OpenAPI
+S. tests + quality/full + Docker
+
+Do NOT implement:
+Exam, notifications, private chat translation, translated full-text search, provider calls on learner GET, automatic approval, cross-parish sharing.
+
+#004 TEST DEBT — REQUIRED
+-------------------------
+Test A — APPROVED en-US Curriculum Tree:
+- vi-VN source curriculum
+- seeded translation_resources/revisions
+- current APPROVED en-US revisions for curriculum metadata/version/topic/lesson
+- CurriculumDelivery learner GET returns translated fields
+- IDs/order/canonicalLessonKey unchanged
+- APPROVED metadata, resolvedLocale=en-US, isFallback=false
+- no provider call on GET
+- no write-on-GET
+
+Test B — APPROVED en-US Practice Session:
+- published QB question(s)
+- APPROVED en-US question revision(s)
+- create Practice session requesting en-US
+- persisted translationRevisionId + deliveredLocale
+- GET returns translated display
+- approve newer revision after session creation
+- old session remains pinned to old revision
+- review-wrong inherits revision + deliveredLocale
+- grading/retry/idempotency unchanged
+
+These tests are mandatory for #005 completion.
+
+RBAC
+----
+Add:
+localization.read
+localization.manage
+localization.approve
+
+Recommended grants:
+SUPER_ADMIN: read/manage/approve globally
+PARISH_ADMIN: read/manage/approve own parish
+CATECHIST: read only if useful
+PARENT: none
+
+Permission + tenant scope both required.
+
+ADMIN ROUTES
+------------
+Prefix:
+`/api/v1/localization`
+
+Suggested:
+GET  /resources
+GET  /resources/:id
+POST /resources/sync
+POST /resources/:id/translations
+POST /bulk-translations
+GET  /revisions/:revisionId
+POST /revisions/:revisionId/review
+POST /revisions/:revisionId/approve
+GET  /jobs
+GET  /jobs/:jobId
+POST /jobs/:jobId/retry
+
+Glossary admin routes may be added under `/localization/glossaries` if internal #003 service is ready.
+
+RESOURCE LIST
+-------------
+Filters:
+resourceType
+sourceLocale
+targetLocale
+translationStatus
+parishId (super-admin explicit; parish admin forced own parish)
+page/limit
+
+Return metadata only, not full source payload.
+
+RESOURCE DETAIL
+---------------
+Return:
+binding metadata
+effective translation status by target locale
+latest revision summary
+job summary
+current source hash metadata where safe
+
+REQUEST TRANSLATION
+-------------------
+POST resource translation with targetLocale.
+
+Behavior:
+- scope check
+- current source resolved by adapter
+- target != source
+- queue idempotently
+- APPROVED current => 200 short-circuit
+- MACHINE_TRANSLATED current => 200 existing
+- active job => 200 existing
+- new queue => 201
+
+Never call provider inline.
+
+BULK TRANSLATION
+----------------
+Parish-scoped, bounded resource count, one target locale per request preferred.
+No unbounded translate-all operation.
+Return queued/existing/skipped counts.
+
+RESOURCE DISCOVERY / SYNC
+-------------------------
+Learner GET intentionally does not create translation resources.
+
+Add explicit admin sync/discovery:
+resourceType + resourceId -> adapter fetch -> get/create binding.
+
+Bulk discovery must use source public services only.
+No source repo/entity imports.
+
+REVISION DETAIL
+---------------
+Admin-only.
+Return payload, source hash, target locale, status, provider/glossary metadata, audit metadata, derived stale status.
+
+HUMAN REVIEW
+------------
+Human edit creates NEW immutable revision with status REVIEWED.
+Do not mutate machine revision payload.
+
+Validate using resource adapter:
+IDs/structure/correctness/media semantics preserved.
+
+APPROVAL
+--------
+Allowed for MACHINE_TRANSLATED or REVIEWED.
+Before approval:
+- resolve current source snapshot
+- source hash must match
+- payload adapter validation must pass
+
+If stale:
+409/422 conflict.
+
+Approval records actor/timestamp.
+No auto-approve.
+
+APPROVED SUPERSESSION
+---------------------
+Latest current-hash APPROVED revision wins for NEW learner delivery.
+Old APPROVED revisions remain.
+Existing Practice sessions pinned to older approved revision remain unchanged.
+
+JOB RETRY
+---------
+FAILED retryable jobs may be requeued.
+DEAD SOURCE_CHANGED must not process obsolete source hash.
+Queue fresh job from current source instead or return explicit conflict.
+
+JOB LIST/DETAIL
+---------------
+Metadata only.
+Sanitized errors.
+No raw provider payload/errors.
+Pagination and filters required.
+
+GLOSSARY ADMIN
+--------------
+System-global Catholic glossary mutation:
+SUPER_ADMIN only.
+
+If implementing routes:
+- list/create draft
+- term CRUD on DRAFT
+- publish
+- clone published to draft
+
+PARISH_ADMIN must not mutate global glossary.
+Published/archived immutable.
+
+ADMIN PREVIEW
+-------------
+Optional but recommended:
+GET /resources/:id/preview?locale=en-US
+
+Requires localization.read.
+Uses same DB-only resolve path.
+Never calls provider.
+
+TENANT SCOPE
+------------
+Translation resource parishId is authoritative.
+PARISH_ADMIN own parish only.
+CATECHIST read-only within allowed parish if granted.
+SUPER_ADMIN global.
+No cross-parish resource/revision/job IDOR.
+
+STATUS MODEL
+------------
+Keep revision/job statuses distinct.
+
+Admin effective translation status may expose:
+MISSING
+MACHINE_TRANSLATED
+REVIEWED
+APPROVED
+STALE
+
+Job status separately:
+QUEUED
+PROCESSING
+SUCCEEDED
+FAILED
+DEAD
+
+RATE/COST CONTROLS
+------------------
+Rate-limit request/bulk/retry endpoints.
+Bound:
+resource count
+target locales
+payload size
+queued jobs
+No Parent access.
+
+EXPORT / IMPORT / SEARCH DECISION
+---------------------------------
+Do not alter existing source export/import contracts.
+
+Strong MVP:
+- translated full-text search deferred
+- localized export/import deferred post-MVP
+
+Document clearly.
+
+FE ADMIN CONTRACT
+-----------------
+Final verdict:
+FE LOCALIZATION ADMIN CONTRACT READY: YES/NO
+
+Must support:
+list/filter resources
+request translation
+view jobs
+inspect machine revision
+review/edit
+approve
+stale state
+retry
+preview
+tenant scope
+glossary governance if exposed
+
+FE LEARNER CONTRACT
+-------------------
+Final verdict:
+FE LOCALIZED LEARNER CONTRACT READY: YES/NO
+
+Curriculum tree, lesson content, Practice, fallback/cache metadata stable.
+
+MOBILE CONTRACT
+---------------
+Final verdict:
+MOBILE LOCALIZED CONTENT CONTRACT READY: YES/NO
+
+Mobile uses learner delivery only, not admin APIs.
+Cache key includes locale + source/content hash + translationRevisionId.
+
+ERROR CONTRACT
+--------------
+Stable errors:
+LocalizationResourceNotFound
+LocalizationAccessDenied
+LocalizationInvalidLocale
+LocalizationTargetMatchesSource
+LocalizationInvalidPayload
+LocalizationRevisionNotApprovable
+LocalizationRevisionStale
+LocalizationJobNotRetryable
+LocalizationBulkLimitExceeded
+LocalizationSourceUnavailable
+
+Map 400/403/404/409/422/429 appropriately.
+Never expose provider internals.
+
+SECURITY
+--------
+Audit:
+tenant scope on every object
+no IDOR
+no provider credentials
+no student/user PII
+no Practice answers
+no grading data
+sanitized errors
+rate limits
+payload bounds
+adapter validation
+no script/HTML execution introduced
+
+MODULE BOUNDARY
+---------------
+Localization still owns exactly 5 tables:
+translation_resources
+translation_revisions
+translation_jobs
+catholic_glossary_versions
+catholic_glossary_terms
+
+No new table expected.
+
+Public exports remain:
+LocalizationService
+LocaleResolutionService
+
+No entity/repo export.
+No forwardRef/cycles.
+
+TESTS
+-----
+Mandatory #004 debt tests listed above.
+
+Unit:
+- permission/scope
+- queue short-circuit
+- bulk limits
+- review creates new revision
+- original revision unchanged
+- adapter validation
+- approval
+- stale approval denial
+- latest approved behavior
+- retry semantics
+- cross-parish denial
+- status mapping
+
+Integration:
+- resource sync
+- queue -> worker -> MACHINE_TRANSLATED
+- review -> REVIEWED
+- approve -> learner delivery uses approved
+- source change -> STALE
+- stale approval denied
+- new job new hash
+- old Practice session remains pinned
+- tenant isolation
+- bounded bulk
+- glossary lifecycle if routed
+
+DB E2E:
+- 401 unauthenticated
+- Parent denied admin
+- Catechist manage denied
+- ParishAdmin own parish manage/approve
+- cross-parish 403
+- SuperAdmin global
+- list/filter/pagination
+- request 201/200 replay
+- review
+- approve
+- stale conflict
+- retry
+- preview
+- learner localized content still works
+- Practice snapshot unchanged
+- no answer leakage
+
+REGRESSION
+----------
+Keep all previous modules green.
+
+QUALITY
+-------
+npm run test:db:prepare -- --reset
+npm run quality:full
+Require ONE CLEAN PASS.
+
+DOCKER
+------
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:localization-admin ."
+PASS required.
+
+README / OPENAPI
+----------------
+Document:
+locale resolution
+SOURCE/APPROVED/MISSING/STALE
+jobs
+review/approval
+glossary governance
+RBAC
+Practice pinning
+no provider on learner GET
+FE/Mobile cache metadata
+deferred search/export/import
+
+Swagger all admin endpoints, scopes, statuses, pagination, errors, idempotency.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/LOCALIZATION_005_ADMIN_REVIEW_RBAC_CONTRACT_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #004
+3 #004 integration test debt closure
+4 Approved en-US curriculum tree integration test
+5 Translated Practice session integration test
+6 Rules applied
+7 Files created
+8 Files modified
+9 Final module architecture
+10 Public exports
+11 Permission seeds
+12 Role grants
+13 Tenant scope
+14 Resource discovery/sync
+15 Resource list API
+16 Resource detail API
+17 Request translation API
+18 Queue idempotency
+19 Bulk translation
+20 Job list/detail
+21 Retry job
+22 Revision detail
+23 Human review/edit
+24 Immutable revision proof
+25 Approval
+26 Stale approval protection
+27 Approved supersession
+28 Preview
+29 Glossary admin APIs
+30 Glossary RBAC
+31 Status model
+32 Error contract
+33 Rate/cost controls
+34 FE Localization admin readiness
+35 FE learner localized readiness
+36 Mobile localized readiness
+37 Export/import/search decisions
+38 Security/IDOR
+39 Swagger/OpenAPI
+40 README/docs
+41 Unit tests
+42 Integration tests
+43 DB e2e
+44 Existing regression
+45 pristine quality:full
+46 Docker
+47 Multilingual readiness
+48 Microservice extraction
+49 Commands
+50 Validation matrix
+51 Known/deferred
+52 Out-of-scope
+53 LOCALIZATION #006 readiness
+54 Prompt count
+55 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- #004 approved curriculum-tree integration test
+- #004 translated Practice integration test
+- format/lint/typecheck/unit/e2e/build/audit/quality
+- pristine DB reset/migrations/integration/DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle/forwardRef
+- only LocalizationService + LocaleResolutionService exported
+- no new table
+- localization.read/manage/approve seeded
+- SuperAdmin global
+- ParishAdmin own parish
+- Catechist read-only if granted
+- Parent denied
+- cross-parish denied
+- resource sync public-service-only
+- list pagination
+- translation request idempotent
+- approved-current short-circuit
+- machine-current dedupe
+- bounded bulk
+- review creates NEW revision
+- source revision unchanged
+- payload adapter validation
+- approval
+- stale approval denied
+- old approved retained
+- new learner latest approved
+- old Practice session pinned
+- retry semantics
+- SOURCE_CHANGED safe
+- glossary admin lifecycle if implemented
+- provider never on learner GET
+- no answer leakage
+- rate limiting
+- stable errors
+- FE admin ready
+- FE learner ready
+- Mobile ready
+- search/export/import decision documented
+- regression
+- Git compliance
+
+#006 READINESS
+--------------
+Only if:
+- #004 test debt closed
+- no BLOCKER/HIGH
+- admin workflow complete
+- FE/Mobile contracts READY
+- quality:full PASS
+- Docker PASS
+
+Recommend:
+LOCALIZATION #006/6 — FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION
+
+PROMPT COUNT
+------------
+LOCALIZATION #005/6 complete
+approximately 1 prompt remains (#006)
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- LOCALIZATION #005 status
+- #004 test debt CLOSED/NOT CLOSED
+- admin APIs PASS/FAIL
+- RBAC/tenant scope PASS/FAIL
+- review/approve PASS/FAIL
+- FE admin readiness
+- FE learner readiness
+- Mobile readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then exactly:
+git commit -m "feat(localization): add translation review and approval workflow"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.

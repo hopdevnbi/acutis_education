@@ -1,0 +1,779 @@
+CURSOR PROMPT — PRACTICE ENGINE #001/6
+DOMAIN AUDIT + SESSION / ATTEMPT / SCORING / REVIEW / PROGRESS DESIGN
+
+CONTEXT
+-------
+Question Bank / Assessment Content Foundation is COMPLETE:
+- immutable published question versions
+- learner-safe projection
+- grading service contract
+- archived grading
+- current-published selection metadata
+- Curriculum/Media integration
+- FE/Mobile/Practice/Exam contracts READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+New major phase:
+PRACTICE ENGINE / QUIZ DELIVERY FOUNDATION
+
+Planned sequence:
+#001/6 Domain audit + session/attempt/scoring/review/progress design
+#002/6 Schema + entities + migrations + module boundaries
+#003/6 Practice generation + session lifecycle + question selection + contextual media groundwork
+#004/6 Answer submission + grading + retry + review-wrong
+#005/6 Progress/statistics + scoped Parent/Catechist access + FE/Mobile contracts
+#006/6 Final audit + demo seed + Postman + quality/full + Docker + completion gate
+
+This prompt is #001/6.
+AUDIT/DESIGN ONLY.
+DO NOT implement production code/schema/API.
+
+PERMANENT RULES
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect current code deeply before proposing implementation
+- create exactly one detailed report in docs/
+- not modify production source/schema
+- not auto-proceed to #002
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+Audit-only: no commit recommendation needed unless tracked source changes somehow occur.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/modules/media/
+src/database/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Design a future-safe Practice Engine covering:
+- generate bài luyện
+- learner-scoped practice sessions
+- immutable selected questionVersionIds
+- question + option ordering
+- answer submissions
+- server-side grading
+- retry
+- review wrong answers
+- completion
+- progress/statistics
+- Curriculum/lesson/tag/difficulty filters
+- Parent/Catechist authorization
+- Web/Mobile delivery
+- offline/network retry idempotency
+- multilingual readiness
+- strict separation from Exam
+- future microservice extraction
+
+BOUNDARY
+--------
+Strong candidate: PracticeModule.
+
+Practice owns:
+- practice sessions
+- selected session question references
+- learner answer attempt history
+- retry/review state
+- practice progress query/aggregate
+
+Practice does NOT own:
+- question content/correct-answer semantics
+- Question Bank entities/repos
+- Curriculum entities
+- Media storage
+- Exam attempts
+
+Future ExamModule stays separate.
+
+PRACTICE VS EXAM — CRITICAL
+---------------------------
+Practice:
+- formative
+- retry/review wrong allowed
+- immediate correctness can be allowed
+- flexible generation
+- progress tracking
+
+Exam:
+- formal/high stakes
+- stricter snapshot/timing/submission
+- delayed feedback policy
+- separate attempt model
+
+Never reuse Practice attempt tables for Exam.
+
+SESSION MODEL
+-------------
+Audit whether MVP needs reusable PracticeDefinition.
+
+Strong recommendation:
+start with generated learner sessions directly unless repeated teacher-authored templates are a confirmed requirement.
+
+Core PracticeSession:
+- generated once
+- exact questionVersionIds persisted
+- resumable
+- immutable question list/order after creation
+
+Candidate statuses:
+IN_PROGRESS
+COMPLETED
+ABANDONED
+
+Candidate types:
+STANDARD
+REVIEW_WRONG
+
+LEARNER IDENTITY — CRITICAL
+---------------------------
+Audit existing Enrollment/Student/Auth model.
+
+Strong recommendation:
+session learner context = enrollmentId.
+
+Why:
+- ties practice to student/class/academic context
+- Parent scope can reuse guardian/enrollment access
+- Catechist progress can reuse assigned class scope
+- future STUDENT login can still map to enrollment
+
+Store actor separately:
+session.createdByUserId
+answer.submittedByUserId
+
+Progress attributed to enrollment, not actor.
+
+Do NOT create STUDENT role just for Practice.
+
+PARENT POLICY
+-------------
+Audit whether linked Parent may initiate/submit practice on behalf of linked child.
+
+Strong default:
+allow linked Parent for MVP if current product has no direct student login.
+
+Preserve:
+enrollmentId = learner
+submittedByUserId = actor
+
+CATECHIST POLICY
+----------------
+Do not let Catechist submit learner answers by default.
+
+Recommended:
+Catechist can read progress only for assigned scope.
+Teacher-assigned practice is a future feature unless explicit requirements exist.
+
+GENERATION INPUTS
+-----------------
+Candidate:
+- enrollmentId
+- curriculumId optional
+- canonicalLessonKey optional
+- tagIds/tagCodes optional
+- difficulty optional
+- questionTypes optional
+- questionCount
+- randomizeQuestions
+- randomizeOptions
+- clientRequestId optional/required for idempotency
+
+For learner Practice prefer enrollment-based generation.
+
+Generation must select:
+- same parish
+- root ACTIVE
+- current PUBLISHED version only
+- supported MVP question types
+- matching Curriculum/tag/difficulty filters
+
+Never select DRAFT.
+
+CURRICULUM-AWARE GENERATION
+---------------------------
+Resolve enrollment/class assigned curriculum.
+If canonicalLessonKey supplied, validate against assigned curriculum.
+
+Question Bank links already use curriculumId + canonicalLessonKey.
+
+QUESTION SELECTION
+------------------
+Mandatory:
+- select candidate current published versions
+- sample N without duplication
+- persist exact questionVersionIds
+- never re-query current version for an existing session
+
+If newer version publishes later, current session stays unchanged.
+
+If selected version becomes ARCHIVED, session remains deliverable/gradable.
+
+If candidates < requested questionCount:
+prefer 422 PRACTICE_INSUFFICIENT_QUESTIONS rather than duplicating questions.
+
+QUESTION/OPTION ORDER
+---------------------
+Persist session question position.
+
+If randomizeQuestions:
+shuffle once and persist.
+
+If randomizeOptions:
+persist delivered option order for each session question.
+
+No re-randomization on reload.
+
+ANSWER ATTEMPT MODEL
+--------------------
+Strong recommendation:
+keep full attempt history.
+
+Potential practice_answer_attempts:
+- id
+- sessionQuestionId
+- attemptNumber
+- clientAnswerId
+- selectedOptionIdsJson
+- isCorrect
+- score
+- submittedByUserId
+- submittedAt
+
+Do not overwrite only latest answer.
+
+For current MVP answer payload:
+selectedOptionIds[] only.
+
+QuestionBankService.gradeAnswer owns correctness.
+
+Practice never reads correct-answer repositories.
+
+IDEMPOTENCY
+-----------
+Mobile/network retry is important.
+
+Strong recommendation:
+answer submission has clientAnswerId UUID.
+
+Unique:
+(sessionQuestionId, clientAnswerId)
+
+Duplicate same id returns same existing result rather than creating new attempt.
+
+Also audit generation `clientRequestId` to prevent duplicate sessions.
+
+CONCURRENCY
+-----------
+Answer attemptNumber must be transaction-safe.
+Lock sessionQuestion row or equivalent.
+
+Session generation transaction must create session + all selected question rows atomically.
+
+SCORING
+-------
+Need explicit semantics.
+
+Recommended MVP:
+- per attempt score = 0|1 from Question Bank
+- session final score = latest/final correctness per question
+- firstAttemptCorrectCount tracked/derived separately
+- no partial credit
+- no mastery score yet
+
+Progress metrics:
+firstAttemptAccuracy
+finalAccuracy
+
+Do not call either "mastery".
+
+RETRY POLICY
+------------
+Audit product-friendly MVP.
+
+Recommended simple policy:
+- immediate isCorrect returned
+- wrong answer may retry
+- correct answer/explanation reveal only after final attempt or session completion
+- exact retry count should be explicit
+
+Potential config:
+maxAttemptsPerQuestion
+
+Avoid large configurable policy system in MVP.
+
+Report must choose exact default and whether stored on session.
+
+REVIEW WRONG
+------------
+Strong recommendation:
+create a new REVIEW_WRONG child session from completed STANDARD session.
+
+Why:
+- original completion stays immutable
+- separate attempt history
+- easy repeated review
+- clean metrics
+
+Review session:
+sourceSessionId
+exact wrong questionVersionIds
+no fresh Question Bank selection
+
+If no wrong questions:
+PRACTICE_NO_WRONG_QUESTIONS.
+
+COMPLETION
+----------
+Prefer auto-complete when every session question reaches final answered state.
+
+Resume IN_PROGRESS by reloading persisted session/order/attempts.
+
+ABANDONED is soft lifecycle; no hard delete.
+
+PROGRESS
+--------
+User requirement explicitly includes progress.
+
+Strong recommendation:
+raw sessions/questions/attempts are source of truth.
+
+Do NOT invent mastery model.
+
+Audit whether initial progress API can derive:
+- sessionsCompleted
+- questionsAttempted
+- firstAttemptCorrect
+- finalCorrect
+- firstAttemptAccuracy
+- finalAccuracy
+- wrongReviewedCount
+- lastPracticedAt
+
+Potential lesson breakdown:
+by curriculumId + canonicalLessonKey.
+
+Only add aggregate table if necessary for stable UX/performance.
+Prefer derive initially.
+
+REVIEW METRICS
+--------------
+Review sessions should not inflate standard sessionsCompleted incorrectly.
+
+Track STANDARD and REVIEW_WRONG separately.
+
+QUESTION-LEVEL PROGRESS
+-----------------------
+Potential per-question aggregate is useful but may be premature.
+Prefer derive unless concrete requirement.
+
+PRACTICE DELIVERY
+-----------------
+Session GET should return:
+- session metadata
+- persisted question order
+- learner-safe Question Bank projection
+- persisted delivered option order
+- per-question attempt state
+- canRetry
+- completion/review status
+
+Do NOT return correct answers early.
+
+FEEDBACK
+--------
+Question Bank currently has learner-safe projection and grading, but Practice needs controlled explanation/correct-answer reveal.
+
+Audit whether a new narrow QuestionBankService contract is needed, e.g.:
+getPracticeFeedback(questionVersionId)
+
+Service-only.
+Potential:
+- explanation
+- explanationMedia
+- correctOptionIds
+
+Practice decides when to expose.
+
+Do not expose correct answers directly from generic Question Bank HTTP.
+
+CONTEXTUAL MEDIA
+----------------
+Future route:
+
+GET /api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/media/:assetId/content
+
+Auth flow:
+- validate session learner/actor scope
+- validate sessionQuestion belongs session
+- validate asset referenced by exact question projection
+- stream through MediaAssetService
+
+No generic learner Media read.
+
+PRACTICE SERVICE DEPENDENCIES
+-----------------------------
+Preferred:
+PracticeModule
+  -> QuestionBankModule / QuestionBankService
+  -> EnrollmentModule access services
+  -> Curriculum/Class public services as needed
+  -> MediaModule public service for contextual media
+  -> Auth/AccessControl
+
+No reverse deps.
+No entity/repo leakage.
+No forwardRef.
+
+QUESTION BANK CONTRACT GAPS
+---------------------------
+Audit whether Practice needs narrow additions:
+- selectCurrentPublishedQuestions(filters)
+- getLearnerQuestionProjection(versionId) [exists]
+- gradeAnswer(...) [exists]
+- getImmutableAssessmentSnapshot(...) [exists]
+- getPracticeFeedback(...) [likely missing]
+
+Practice must not duplicate Question Bank SQL.
+
+AUTHORIZATION
+-------------
+Potential:
+PARENT:
+start/read/answer linked enrollment
+
+CATECHIST:
+progress read assigned class/enrollment only
+
+PARISH_ADMIN:
+progress read own parish
+
+SUPER_ADMIN:
+admin read
+
+Future STUDENT:
+own enrollment start/read/answer
+
+Answer submission must depend on enrollment relationship, not generic permission only.
+
+Do not let admin/catechist impersonate learner by default.
+
+API CONCEPTS
+------------
+Potential:
+
+POST /api/v1/enrollments/:enrollmentId/practice-sessions
+GET /api/v1/practice-sessions/:sessionId
+POST /api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/answers
+POST /api/v1/practice-sessions/:sessionId/review-wrong
+GET /api/v1/enrollments/:enrollmentId/practice/progress
+
+Explicit complete endpoint likely unnecessary if auto-completion is clean.
+
+ERROR MODEL
+-----------
+Plan structured errors:
+PRACTICE_INSUFFICIENT_QUESTIONS
+PRACTICE_SESSION_NOT_FOUND
+PRACTICE_SESSION_COMPLETED
+PRACTICE_SESSION_ABANDONED
+PRACTICE_QUESTION_NOT_FOUND
+PRACTICE_RETRY_NOT_ALLOWED
+PRACTICE_DUPLICATE_ANSWER
+PRACTICE_INVALID_OPTION
+PRACTICE_NO_WRONG_QUESTIONS
+PRACTICE_ACCESS_DENIED
+
+SCHEMA CANDIDATES — AUDIT ONLY
+------------------------------
+Likely MVP tables:
+
+practice_sessions
+practice_session_questions
+practice_answer_attempts
+
+Maybe no progress aggregate table initially.
+
+practice_sessions candidate:
+id
+enrollmentId
+sessionType
+sourceSessionId nullable
+status
+locale
+curriculumId nullable
+canonicalLessonKey nullable
+requestedQuestionCount
+randomizeQuestions
+randomizeOptions
+clientRequestId nullable
+createdByUserId
+startedAt
+completedAt
+abandonedAt
+createdAt
+updatedAt
+
+practice_session_questions candidate:
+id
+practiceSessionId
+questionVersionId
+position
+deliveredOptionOrderJson
+createdAt
+
+Possible denormalized:
+attemptCount / latestCorrect / finalCorrect
+but prefer attempt rows as source of truth unless needed.
+
+practice_answer_attempts:
+id
+practiceSessionQuestionId
+attemptNumber
+clientAnswerId
+selectedOptionIdsJson
+isCorrect
+score
+submittedByUserId
+submittedAt
+
+Strict JSON arrays of UUIDs for current MVP.
+
+MULTILINGUAL
+------------
+Practice should be ready to preserve delivery locale.
+
+Strong recommendation:
+session.locale from day one.
+
+Future per-question translationRevisionId may belong session question/snapshot once Localization exists.
+
+Do NOT machine-translate in answer hot path.
+
+MOBILE/OFFLINE
+--------------
+Design for:
+- stable session IDs
+- persisted question/option order
+- resume
+- idempotent answer submit
+- idempotent generation
+- retry-safe APIs
+
+OBSERVABILITY
+-------------
+Log IDs only:
+sessionId
+enrollmentId
+sessionQuestionId
+questionVersionId
+attemptNumber
+actorUserId
+action
+
+Do not log full question/correct answers/child names.
+
+MICROSERVICE EXTRACTION
+-----------------------
+Future Practice Service owns practice tables and consumes:
+Question Bank API
+Enrollment/Class API
+Curriculum API
+Media API
+
+No shared ORM dependency required.
+
+PROMPT PLAN
+-----------
+Exactly 6 prompts:
+
+#001/6 Audit/design — THIS PROMPT
+#002/6 Schema + entities + migrations + boundaries
+#003/6 Generation + session lifecycle + selection + contextual media groundwork
+#004/6 Answer submission + grading + retry + review-wrong
+#005/6 Progress/statistics + scoped Parent/Catechist access + FE/Mobile hardening
+#006/6 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+VALIDATION
+----------
+Audit-only:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+No DB mutation required.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from Question Bank
+3 Existing Practice/Quiz code audit
+4 Rules applied
+5 Bounded context
+6 Practice vs Exam boundary
+7 PracticeDefinition decision
+8 Session definition
+9 Session lifecycle
+10 Session type
+11 Learner identity
+12 enrollmentId decision
+13 Actor vs learner
+14 Parent proxy policy
+15 Catechist role
+16 Generation inputs
+17 Generation scope
+18 Curriculum-aware generation
+19 Question selection contract
+20 Exact version snapshot
+21 Question ordering
+22 Option ordering
+23 Session question model
+24 Answer attempt model
+25 Answer payload
+26 Grading boundary
+27 Immediate feedback
+28 Explanation reveal
+29 Correct-answer reveal
+30 Retry policy
+31 Review-wrong design
+32 Review session relationship
+33 Completion
+34 Resume/abandon
+35 Answer idempotency
+36 Generation idempotency
+37 Concurrency
+38 Scoring
+39 First-attempt accuracy
+40 Final accuracy
+41 Progress architecture
+42 Aggregate-table decision
+43 Progress API
+44 Review progress semantics
+45 Question-level progress decision
+46 Security scopes
+47 Parent scope
+48 Catechist scope
+49 Parish admin scope
+50 Future student scope
+51 Session API
+52 Answer API
+53 Review API
+54 Progress API
+55 Contextual media design
+56 Media security
+57 QuestionBank feedback contract gap
+58 QuestionBank selection contract gap
+59 Enrollment/Curriculum contract gaps
+60 Multilingual readiness
+61 Offline/mobile readiness
+62 Observability
+63 practice_sessions candidate
+64 practice_session_questions candidate
+65 practice_answer_attempts candidate
+66 progress schema decision
+67 FK strategy
+68 indexes/uniqueness
+69 dependency graph
+70 public exports
+71 permissions/RBAC
+72 error model
+73 transactions
+74 microservice extraction
+75 risks/open questions
+76 files created
+77 files modified
+78 commands
+79 validation
+80 out-of-scope
+81 PRACTICE #002 readiness
+82 prompt count
+83 commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+PRACTICE DOMAIN DESIGN READY: YES/NO
+SESSION MODEL READY: YES/NO
+ANSWER/GRADING FLOW READY: YES/NO
+RETRY/REVIEW-WRONG MODEL READY: YES/NO
+PROGRESS MODEL READY: YES/NO
+PARENT/LEARNER SCOPE READY: YES/NO
+QUESTION BANK INTEGRATION MODEL READY: YES/NO
+MOBILE/OFFLINE FOUNDATION READY: YES/NO
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+#002 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH recommend:
+
+PRACTICE ENGINE #002/6 — Schema + Entities + Migrations + Module Boundaries
+
+#002 is persistence-only:
+- PracticeModule skeleton
+- enums/entities/tables
+- constraints/indexes
+- UUID + idempotency foundations
+- no HTTP API
+- no answer/grading logic
+
+PROMPT COUNT
+------------
+State:
+PRACTICE ENGINE #001/6 complete
+approximately 5 prompts remain
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- PRACTICE #001 status
+- session model
+- answer/retry model
+- review-wrong model
+- progress model
+- parent/learner identity decision
+- Question Bank integration
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #002 automatically.

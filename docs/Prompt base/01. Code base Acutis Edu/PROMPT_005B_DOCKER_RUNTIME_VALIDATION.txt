@@ -1,0 +1,643 @@
+CURSOR PROMPT #005B — VALIDATE DOCKER + LOCAL MSSQL RUNTIME
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Backend technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm
+- MSSQL
+- TypeORM 0.3.x
+- @nestjs/typeorm 11.x
+- Docker / Docker Compose for local development
+- Bitbucket Pipelines later
+
+Prompt #005 already IMPLEMENTED the Docker infrastructure:
+- Dockerfile
+- .dockerignore
+- docker-compose.yml
+- MSSQL container
+- mssql-init one-shot service
+- MSSQL health check
+- API Docker development/runtime strategy
+- persistent volumes
+- configurable MSSQL host port
+- Compose networking
+- local DB creation script
+- migration commands
+
+However, Prompt #005 could NOT validate the Docker runtime because Docker Engine / Docker Compose CLI was not available on the Cursor validation host.
+
+This prompt is a VALIDATION + FIX prompt only.
+
+Do NOT expand scope.
+
+2. Required Reading
+-------------------
+Before making any changes:
+
+1. Read PROJECT_RULES.md.
+2. Read AGENTS.md.
+3. Read all .cursor/rules/*.mdc.
+4. Read all prior reports:
+   - docs/PROMPT_001_PROJECT_RULES_REPORT.md
+   - docs/PROMPT_002_NESTJS_BOOTSTRAP_REPORT.md
+   - docs/PROMPT_003_APPLICATION_BOOTSTRAP_INFRASTRUCTURE_REPORT.md
+   - docs/PROMPT_004_MSSQL_TYPEORM_MIGRATION_ARCHITECTURE_REPORT.md
+   - docs/PROMPT_005_DOCKER_LOCAL_MSSQL_RUNTIME_REPORT.md
+5. Inspect all Docker-related files created by Prompt #005.
+
+3. Current Phase
+----------------
+Backend Foundation.
+
+Prompt #005 infrastructure exists but runtime validation is incomplete.
+
+This prompt is:
+
+Prompt #005B — Docker Runtime Validation
+
+Do NOT proceed to Prompt #006 work.
+
+4. Primary Objective
+--------------------
+Validate the Docker stack implemented in Prompt #005 against a REAL Docker Engine and REAL MSSQL container.
+
+The success criteria are:
+
+- Docker CLI available
+- Docker Compose available
+- Compose config valid
+- API development image builds
+- production Docker image builds
+- MSSQL starts and becomes healthy
+- mssql-init succeeds
+- configured application database exists
+- API starts successfully
+- TypeORM connects successfully
+- migration CLI connects successfully
+- GET /api/v1/health returns 200
+- Swagger still works when enabled
+- DB contains no unexpected business tables
+- no secret leakage
+- data persists across docker compose down/up
+
+If any Docker implementation bug from Prompt #005 is discovered:
+- fix ONLY what is necessary for Docker/MSSQL runtime correctness
+- do not refactor unrelated code
+- document every fix
+
+5. First Check — Docker Availability
+------------------------------------
+Run:
+
+docker --version
+docker compose version
+
+If Docker is STILL unavailable:
+
+DO NOT modify the implementation speculatively.
+
+Create the required report stating:
+- Docker remains unavailable
+- exact observed error
+- Prompt #005 runtime validation is still blocked
+
+Then STOP.
+
+Do not pretend validation succeeded.
+
+6. Environment Setup
+--------------------
+Ensure local .env exists.
+
+If .env does not exist:
+- copy .env.example to .env
+- this file must remain gitignored
+
+Use a valid SQL Server-compliant local password.
+
+Do NOT:
+- commit .env
+- print the password in the report
+- print the password in final output
+
+Verify .gitignore still ignores .env.
+
+7. Scope Safety
+---------------
+Operate ONLY on this project's Compose stack.
+
+Do NOT:
+- stop unrelated containers
+- delete unrelated containers
+- prune Docker globally
+- prune global volumes
+- modify native Windows SQL Server
+- change system network configuration
+
+Forbidden examples:
+
+docker system prune
+docker volume prune
+docker container prune
+docker rm -f $(docker ps -aq)
+
+8. Validate Compose Configuration
+---------------------------------
+Run:
+
+docker compose config
+
+Confirm:
+- no YAML errors
+- api service exists
+- mssql service exists
+- mssql-init service exists
+- DB_HOST resolves to mssql inside api
+- internal MSSQL port remains 1433
+- host publish port remains configurable
+- secrets are not embedded directly in tracked Compose config
+
+Do not include expanded password values in the report.
+
+9. Build API Images
+-------------------
+Validate both:
+
+A. development target / Compose build
+
+docker compose build api
+
+B. production image
+
+docker build --target production -t catechism-api:prod .
+
+Confirm:
+- Node 22.23.1 base is used
+- dependency installation succeeds
+- Nest build succeeds
+- production runtime image builds
+- no .env copied into image
+- no docs/ copied into image
+
+10. Start Stack
+---------------
+Run:
+
+docker compose up -d
+
+Then:
+
+docker compose ps
+
+Observe startup order:
+1. mssql
+2. mssql-init
+3. api
+
+Do not rely only on immediate status.
+
+Wait/recheck health within reasonable bounds.
+
+Inspect targeted logs only if needed:
+
+docker compose logs mssql
+docker compose logs mssql-init
+docker compose logs api
+
+Do not dump environment variables.
+
+11. MSSQL Health
+----------------
+Confirm MSSQL reports healthy.
+
+If unhealthy:
+- inspect MSSQL logs
+- inspect healthcheck script
+- verify sqlcmd path
+- verify SQL Server image compatibility
+- verify password requirements
+- verify LF/shell behavior
+- fix only concrete issues
+
+Do not replace health check with a fake check merely to make Compose green.
+
+12. mssql-init Validation
+-------------------------
+Confirm mssql-init:
+- waits for MSSQL
+- connects successfully
+- creates DB_NAME if absent
+- exits 0
+- is idempotent
+
+Run/restart in a safe way if needed to prove idempotency.
+
+It must NOT:
+- drop database
+- recreate existing database
+- wipe data
+
+13. Direct SQL Verification
+---------------------------
+Using sqlcmd inside the Docker environment, verify:
+
+A. SQL Server responds:
+SELECT @@VERSION
+
+B. configured DB exists:
+SELECT name FROM sys.databases
+
+C. connect to DB_NAME successfully
+
+D. inspect tables:
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_TYPE = 'BASE TABLE'
+
+Expected:
+- no catechism business tables
+- possibly TypeORM migration metadata depending on whether migration command has been run
+
+Do NOT create dummy business tables.
+
+Do not include passwords in the report command transcript.
+
+14. API Runtime Validation
+--------------------------
+Confirm api container:
+- starts successfully
+- remains running
+- becomes healthy
+- TypeORM connects to MSSQL
+- no database connection retry loop remains indefinitely
+- no synchronize schema activity occurs
+
+Check logs for:
+- successful Nest startup
+- database connection failures
+- secrets
+
+No DB_PASSWORD should appear in logs.
+
+15. API Health
+--------------
+From host, verify:
+
+GET http://localhost:3000/api/v1/health
+
+or configured PORT.
+
+Expected:
+HTTP 200
+
+Body:
+{
+  "status": "ok"
+}
+
+Confirm:
+- X-Request-Id exists
+- health endpoint remains liveness-only
+
+16. Swagger Regression
+----------------------
+When SWAGGER_ENABLED=true, verify:
+
+GET /api/docs-json
+
+returns HTTP 200 and valid OpenAPI metadata.
+
+Do not change Swagger architecture unless a real Docker-only bug exists.
+
+17. Migration CLI — Live MSSQL
+------------------------------
+Run against the live database from the API container:
+
+docker compose exec api npm run migration:show
+
+Then:
+
+docker compose exec api npm run migration:run
+
+Because there are currently no business migrations, no pending migration is acceptable.
+
+Confirm:
+- DataSource loads
+- real connection succeeds
+- no synchronize activity
+- migrationsRun remains false
+
+If TypeORM creates migration metadata behavior only after a real migration exists, report that accurately.
+
+Do not add a meaningless migration merely to make the table appear.
+
+18. Persistence Validation
+--------------------------
+Validate persistent database volume behavior without destroying data.
+
+Create a harmless technical marker only if needed for persistence verification, but DO NOT create a product/business table.
+
+Preferred options:
+- inspect database existence across restart
+- use existing database metadata rather than adding schema
+
+Run:
+
+docker compose down
+docker compose up -d
+
+Confirm:
+- mssql-data volume was preserved
+- DB_NAME still exists
+- mssql-init safely recognizes existing DB
+- API reconnects successfully
+
+Do NOT use -v during this persistence test.
+
+19. Reset Semantics
+-------------------
+Do NOT run:
+
+docker compose down -v
+
+unless there is a compelling need to validate reset and there is certainty this project's volume contains no valuable data.
+
+It is sufficient to document that:
+- docker compose down preserves the named volume
+- docker compose down -v destroys this project's local DB
+
+Do not destroy data unnecessarily.
+
+20. Host MSSQL Port
+-------------------
+Verify the host published port if practical.
+
+Expected default:
+
+localhost:14330
+
+or configured MSSQL_PUBLISH_PORT.
+
+Confirm port forwarding is active.
+
+Do not change native MSSQL configuration.
+
+If host 14330 is unavailable due to conflict:
+- choose another configurable local publish port
+- update .env only when possible
+- do not hard-code machine-specific values into source
+
+21. DBeaver Connection Information
+----------------------------------
+Report only non-secret settings:
+
+Host:
+localhost
+
+Port:
+MSSQL_PUBLISH_PORT
+
+Database:
+DB_NAME
+
+Username:
+DB_USER
+
+Encrypt:
+true
+
+Trust server certificate:
+true for local Docker
+
+Password:
+from local .env
+
+Do NOT include the actual password.
+
+22. Regression Quality Checks
+-----------------------------
+Run using Node.js v22.23.1:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run test:cov
+npm run build
+npm audit --audit-level=moderate
+
+All previously passing non-DB tests must remain passing.
+
+23. Security Review
+-------------------
+Explicitly verify:
+
+- .env remains ignored
+- DB_PASSWORD does not appear in Git-tracked files
+- DB_PASSWORD does not appear in custom application/init logs
+- Dockerfile uses no secret build args
+- API container does not globally dump environment
+- synchronize=false
+- migrationsRun=false
+- DB_TRUST_SERVER_CERTIFICATE=true is local Docker configuration only
+- production config defaults were not weakened
+- Swagger production behavior remains environment-controlled
+
+24. Changes Allowed
+-------------------
+Changes are allowed ONLY when required to fix concrete Prompt #005 runtime failures.
+
+Examples of legitimate fixes:
+- wrong MSSQL image/tool path
+- broken healthcheck
+- bad Compose dependency condition
+- incorrect port/container mapping
+- bad shell syntax
+- CRLF issue
+- DB init script bug
+- API bind mount/node_modules issue
+- wrong Dockerfile permissions
+- migration CLI path issue inside container
+
+Do NOT:
+- add product modules
+- add business entities
+- add auth
+- add CI/CD
+- redesign TypeORM architecture without a demonstrated blocker
+
+25. Git Behavior
+----------------
+DO NOT commit.
+
+Do not run:
+git add
+git commit
+git push
+
+Use read-only inspection.
+
+26. Required Cursor Report
+--------------------------
+Create:
+
+docs/PROMPT_005B_DOCKER_RUNTIME_VALIDATION_REPORT.md
+
+The report must contain:
+
+1. Objective
+
+2. Why Prompt #005B Was Required
+Reference the Docker availability blocker from Prompt #005.
+
+3. Docker Environment
+Document:
+- docker version
+- docker compose version
+- host environment summary
+
+4. Files Changed
+If none, explicitly say none.
+For every fix, explain the concrete runtime failure it addressed.
+
+5. Compose Configuration Validation
+PASS/FAIL.
+
+6. Docker Build Validation
+Document:
+- api development build
+- production build
+- Node image/runtime
+
+7. MSSQL Container
+Document:
+- image
+- health status
+- startup result
+
+8. mssql-init
+Document:
+- execution result
+- DB creation result
+- idempotency
+
+9. Real Database Verification
+Document:
+- SQL connectivity
+- DB_NAME existence
+- current tables
+- confirmation of no business schema
+
+10. Real NestJS → MSSQL Connectivity
+Explicit PASS/FAIL.
+
+11. Migration CLI Validation
+Document:
+- migration:show
+- migration:run
+- live DataSource connection
+
+12. API Runtime
+Document:
+- API container health
+- GET /api/v1/health
+- request ID
+- Swagger regression
+
+13. Persistence Test
+Document:
+- docker compose down
+- docker compose up
+- DB persisted
+- init remains idempotent
+
+14. Host MSSQL Connectivity
+Document published host/port status.
+
+15. DBeaver Settings
+Non-secret values only.
+
+16. Quality Regression
+Explicit PASS/FAIL for:
+- format
+- lint
+- typecheck
+- unit tests
+- e2e
+- coverage
+- build
+- npm audit
+
+17. Security Review
+
+18. Docker/Compose Logs Review
+Confirm no project-created secret leakage.
+
+19. Commands Executed
+Redact passwords.
+
+20. Final Validation Matrix
+Explicit PASS/FAIL for:
+- docker CLI
+- compose CLI
+- compose config
+- dev image build
+- prod image build
+- MSSQL health
+- mssql-init
+- database creation
+- direct SQL
+- API startup
+- TypeORM live connection
+- migration CLI
+- health endpoint
+- Swagger
+- persistence
+- security
+- regression tests
+
+21. Known Issues / Assumptions
+
+22. Final Container State
+State whether stack is left running or stopped.
+State that DB volume remains preserved.
+
+23. Out-of-Scope Confirmation
+Confirm no:
+- business entities/tables
+- auth/RBAC
+- catechism features
+- CI/CD
+- production deployment
+
+24. Recommendation
+
+ONLY if all critical runtime validation passes:
+Recommend proceeding to:
+
+Prompt #006 — Database Integration/E2E Testing + Quality Gates
+
+If critical Docker/MSSQL validation still fails:
+do NOT recommend Prompt #006 yet.
+Clearly identify the remaining blocker.
+
+27. Final Response
+------------------
+When finished, respond concisely with:
+
+- Prompt #005B completion status
+- whether real Docker + MSSQL + TypeORM validation passed
+- report path:
+  docs/PROMPT_005B_DOCKER_RUNTIME_VALIDATION_REPORT.md
+- blocker if any
+
+Do not proceed to Prompt #006 automatically.

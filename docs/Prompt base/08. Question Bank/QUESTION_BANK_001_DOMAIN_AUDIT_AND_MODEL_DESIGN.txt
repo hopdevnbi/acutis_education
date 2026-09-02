@@ -1,0 +1,880 @@
+CURSOR PROMPT — QUESTION BANK #001/8
+DOMAIN AUDIT + BOUNDED CONTEXT + QUESTION MODEL / VERSIONING DESIGN
+
+CONTEXT
+-------
+Completed major backend phases:
+- Foundation
+- Auth/User/RBAC
+- Parish/Academic Structure
+- Class/Student/Catechist/Parent/Enrollment
+- Curriculum/Topic/Lesson/Learning Content
+- File/Media Storage Abstraction
+
+File/Media final gate:
+- PHASE COMPLETE
+- Local provider READY
+- S3 provider READY
+- FE/Mobile Media contracts READY
+- contextual learner media PASS
+- Docker PASS
+- quality:full PASS
+- BLOCKER/HIGH = 0
+
+New phase:
+QUESTION BANK / ASSESSMENT CONTENT FOUNDATION
+
+Planned 8 prompts:
+#001 Domain audit + bounded context + question model/versioning design
+#002 Schema + entities + migrations
+#003 Question root/version CRUD + tags/link metadata + RBAC
+#004 Question types + options + answer validation engine
+#005 Publish/clone/archive + immutable delivery/grading contracts
+#006 Curriculum/Media integration + scoped authorization + learner-safe projection
+#007 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008 Final audit + demo seed + Postman + quality/full + Docker + completion gate
+
+This prompt is #001/8.
+AUDIT/DESIGN ONLY.
+DO NOT implement production code.
+
+PERMANENT WORKFLOW / GIT RULES
+------------------------------
+Follow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+This prompt is AUDIT only.
+
+Cursor MUST:
+- inspect current code deeply before proposing implementation
+- create one detailed report in docs/
+- not modify production source/schema
+- not auto-proceed to #002
+- NEVER run `git add`, `git commit`, or `git push`
+- NEVER suggest `git add`
+- no commit recommendation is needed for audit-only work unless tracked source changes somehow occur
+
+MANDATORY READING
+-----------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read latest final reports:
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+latest Auth final report if present
+docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/media/
+src/modules/access-control/
+src/modules/auth/
+src/modules/parish/
+src/modules/academic-structure/
+src/database/
+src/database/seeds/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+PRIMARY OBJECTIVE
+-----------------
+Design a future-safe Question Bank bounded context covering:
+
+- stable question identity
+- immutable published question versions
+- multiple question types
+- options/choices
+- correct-answer definitions
+- type-specific validation
+- explanations
+- tags
+- difficulty
+- curriculum/topic/lesson associations
+- question publishing workflow
+- clone/edit-after-publish workflow
+- multilingual readiness
+- Media asset references
+- future Practice integration
+- future Exam snapshot/auditability
+- future search/import/export
+- Web admin authoring
+- Web/Mobile learner rendering
+- future microservice extraction
+
+NO schema/API implementation.
+
+BOUNDED CONTEXT
+---------------
+Audit module naming and boundaries.
+
+Strong candidate:
+QuestionBankModule
+
+Prefer one cohesive module initially rather than QuestionTypeModule/TagModule/etc unless current architecture clearly justifies a split.
+
+Question Bank owns:
+- question roots
+- question versions
+- options
+- correct-answer definitions
+- question tags/linkage metadata
+- publish/clone lifecycle
+
+Question Bank does NOT own:
+- Practice sessions
+- Exam definitions/attempts
+- learner answers/history
+- Curriculum entities
+- Media storage
+
+DOMAIN DEFINITIONS
+------------------
+Define precisely:
+
+Question:
+long-lived stable semantic identity.
+
+QuestionVersion:
+point-in-time authoring/publishing snapshot.
+
+QuestionType:
+stable language-neutral machine code controlling render + answer semantics.
+
+QuestionOption:
+version-scoped selectable item.
+
+CorrectAnswer:
+machine-evaluable answer definition independent of localized display text.
+
+Explanation:
+feedback text owned by a question version.
+
+QuestionTag:
+search/classification metadata.
+
+Question Curriculum Link:
+classification/linkage to Curriculum/Lesson without transferring ownership.
+
+VERSION MODEL
+-------------
+Audit and strongly consider:
+
+questions
+= stable root identity
+
+question_versions
+= versioned content/answers
+
+Lifecycle:
+DRAFT
+PUBLISHED
+ARCHIVED
+
+Rules:
+- one DRAFT per question
+- published immutable
+- edits after publish require clone → new DRAFT
+- versionNumber monotonic
+- publishing newer version archives previous current published version
+- historical published/archived versions remain readable for audit
+
+Future Exam must reference EXACT questionVersionId, never mutable question root state.
+
+EXAM AUDITABILITY — CRITICAL
+----------------------------
+Design so future ExamAttempt can preserve:
+- exact questionVersionId
+- exact delivered option order
+- exact answer-definition revision
+- exact locale/translation revision later
+
+An exam attempt must remain gradable even if author publishes a newer question version later.
+
+QUESTION TYPES — REQUIRED DECISION
+----------------------------------
+Audit candidate types:
+
+SINGLE_CHOICE
+MULTIPLE_CHOICE
+TRUE_FALSE
+SHORT_TEXT
+LONG_TEXT
+NUMBER
+ORDERING
+MATCHING
+FILL_IN_THE_BLANK
+
+Recommend a deliberately small MVP.
+
+Strong recommendation:
+MVP:
+- SINGLE_CHOICE
+- MULTIPLE_CHOICE
+- TRUE_FALSE
+
+Potential next:
+- SHORT_TEXT
+- NUMBER
+
+Defer unless requirements justify:
+- LONG_TEXT
+- ORDERING
+- MATCHING
+- FILL_IN_THE_BLANK
+
+Report must make exact decision and explain tradeoffs.
+
+SINGLE_CHOICE
+-------------
+- 2..N options
+- exactly one correct
+- correctness references option ID, not display text
+- explicit canonical sort order
+
+MULTIPLE_CHOICE
+---------------
+- 2..N options
+- >=1 correct
+- default exact-set scoring
+- no partial credit until product explicitly defines it
+
+TRUE_FALSE
+----------
+Audit whether to model as:
+A. two ordinary options
+B. boolean answer definition
+
+Choose the model that keeps learner rendering and grading simplest without encoding correctness in display labels.
+
+SHORT_TEXT / NUMBER
+-------------------
+If deferred, explain why.
+
+If planned:
+SHORT_TEXT raises locale/case/accent/alias complexity.
+NUMBER requires numeric value/tolerance independent of formatted display strings.
+
+Do not invent fuzzy grading policy now.
+
+OPTION IDENTITY
+---------------
+Options need version-scoped UUID IDs.
+
+Correct answer must reference IDs, never:
+- array index
+- label text
+- translated string
+
+Canonical order stored by sortOrder.
+Practice/Exam may shuffle delivery later.
+
+If shuffled, Exam stores delivered order.
+
+Do not randomize at persistence layer.
+
+ANSWER MODEL
+------------
+Audit these designs:
+
+A. normalized correct-option join table
+B. strict type-specific `answer_definition_json`
+C. hybrid
+
+Strong candidate:
+- normalized `question_options`
+- objective option-based correctness in a normalized join table
+- optional strict schema-versioned answer JSON only for future NUMBER/TEXT types
+
+Avoid generic untyped JSON.
+
+If JSON exists:
+- strict schema
+- type discriminator
+- schemaVersion
+- unknown keys rejected
+
+QUESTION CONTENT MODEL
+----------------------
+Decide how to store:
+- prompt/stem
+- instruction
+- explanation
+- media references
+
+Avoid raw HTML.
+
+Audit:
+A. simple Unicode text columns
+B. strict structured question-content JSON
+C. hybrid
+
+Question Bank must support Media references without creating ad-hoc storage-provider fields.
+
+MEDIA INTEGRATION
+-----------------
+Media phase is complete.
+
+Question Bank stores only assetId.
+Never bucket/key/path/URL.
+
+Potential places:
+- prompt image
+- option image
+- explanation image
+- future audio
+
+Option model may allow:
+text nullable?
+mediaAssetId nullable?
+
+If supported:
+at least one display representation must exist.
+
+Media validation through public `MediaAssetService` only.
+QuestionBank -> Media is acceptable.
+Media must not depend back on QuestionBank.
+
+CURRICULUM LINKAGE — CRITICAL
+-----------------------------
+Questions should be reusable and should not break when Curriculum versions clone.
+
+Current Curriculum facts:
+- lessons have stable `canonicalLessonKey`
+- lesson row IDs are version-scoped
+- topics currently do NOT have canonicalTopicKey
+
+Audit linkage carefully.
+
+Strong candidate:
+question-version or question-root link references:
+- curriculumId
+- canonicalLessonKey optional
+- optional curriculumVersionId only as authoring context
+
+Avoid relying only on lessonId if semantic question association should survive curriculum version clone.
+
+Do NOT casually modify Curriculum schema just to add canonical topic identity.
+
+Topic linkage may need to be:
+- derived through lesson
+- tags
+- deferred until real canonical-topic requirement exists
+
+Report must decide.
+
+QUESTION OWNERSHIP / TENANCY
+----------------------------
+Audit whether Question root is parish-owned.
+
+Strong MVP recommendation:
+parishId required.
+
+SUPER_ADMIN can cross-parish via global role.
+PARISH_ADMIN own parish.
+CATECHIST authoring policy audited separately.
+
+Defer global/shared cross-parish bank unless product explicitly requires it.
+
+Do not add nullable parish/global scope prematurely.
+
+AUTHORING / RBAC
+----------------
+Plan permission namespace:
+
+questions.read
+questions.manage
+questions.publish
+
+Maybe question-tags.manage only if necessary.
+
+Proposed role direction:
+SUPER_ADMIN — all
+PARISH_ADMIN — read/manage/publish own parish
+CATECHIST — possibly read/manage based on assignment/parish scope; audit current scope services
+PARENT/STUDENT — no authoring
+
+Permission alone is never enough; resource scope required.
+
+TAGS
+----
+Audit normalized tags.
+
+Candidate:
+question_tags
+- id
+- parishId
+- code
+- name
+- status
+
+question_tag_links
+
+Tag code:
+stable language-neutral machine code.
+
+Name:
+Unicode display text.
+Future localization should not require changing tag code.
+
+DIFFICULTY
+----------
+Audit:
+EASY / MEDIUM / HARD
+vs numeric 1..5.
+
+Prefer simplest stable model.
+Do not add Bloom taxonomy without requirement.
+
+ROOT VS VERSION STATUS
+----------------------
+Root lifecycle:
+ACTIVE / INACTIVE
+
+Version lifecycle:
+DRAFT / PUBLISHED / ARCHIVED
+
+Keep separate.
+
+QUESTION CODE
+-------------
+Audit optional or required stable machine code.
+
+Useful for:
+- import/export
+- support
+- external references
+
+Potential:
+varchar(64), unique per parish.
+
+Never derive immutable canonical identity from Vietnamese title/prompt.
+
+PUBLISH VALIDATION
+------------------
+Design structured validation issues.
+
+Examples:
+PROMPT_REQUIRED
+INVALID_OPTION_COUNT
+CORRECT_ANSWER_REQUIRED
+TOO_MANY_CORRECT_ANSWERS
+ANSWER_OPTION_NOT_FOUND
+DUPLICATE_OPTION_CODE
+ASSET_NOT_FOUND
+ASSET_NOT_READY
+ASSET_CATEGORY_MISMATCH
+
+Rules by type.
+
+No publish until type-specific content/answers are valid.
+
+ANSWER LEAKAGE — CRITICAL
+-------------------------
+Admin/author DTO can contain answer definition.
+
+Learner-safe DTO must NEVER contain:
+- correct option IDs
+- answerDefinition
+- hidden validation config
+- author-only notes
+
+Explanation exposure policy should be controlled by Practice/Exam after submission, not automatically bundled before answer.
+
+Separate:
+- authoring snapshot
+- learner delivery snapshot
+- internal grading snapshot
+
+FUTURE GRADING SERVICE
+----------------------
+Audit clean boundary.
+
+Potential public method:
+gradeAnswer(questionVersionId, learnerAnswer)
+
+Practice/Exam should call Question Bank service/API.
+They must not read repositories directly.
+
+Do not implement grading in #001.
+
+FUTURE PRACTICE
+---------------
+Practice later needs:
+- select published versions
+- learner-safe projection
+- submit answer
+- grade
+- optionally show explanation
+- track progress
+
+Question Bank owns content/answer semantics only.
+
+FUTURE EXAM
+-----------
+Exam later needs:
+- exact published questionVersionIds
+- immutable content
+- deterministic grading
+- delivered option-order snapshot
+- localized revision snapshot later
+
+Question Bank must be designed around this.
+
+MULTILINGUAL READINESS — CRITICAL
+---------------------------------
+Question Bank must be localization-ready from schema day one.
+
+Rules:
+- country != language != locale
+- stable type/status codes in English
+- sourceLocale strategy
+- correctness independent of localized strings
+- option identity independent of translated text
+- explanation translatable later
+- tag code language-neutral
+- no Google Translation on active exam request
+- translations prepared/cached/versioned beforehand
+
+Audit sourceLocale placement:
+question root vs question version.
+
+Strong preference:
+root-level sourceLocale if source language is stable across lineage.
+
+If version source language may change, justify version-level.
+
+TRANSLATION STALENESS
+---------------------
+Future localization needs source version/hash.
+
+Audit field such as:
+source_content_hash
+
+Hash should cover translatable source fields, not volatile audit timestamps.
+
+Do NOT create translation tables now.
+
+Future translation keys may need:
+questionId
+questionVersionId
+optionId
+sourceLocale
+targetLocale
+sourceContentHash
+
+EXAM LOCALIZATION AUDITABILITY
+------------------------------
+Future exam snapshot must preserve:
+questionVersionId
+locale
+translationRevisionId if translated
+delivered option order
+
+This must be possible without rewriting Question Bank core schema.
+
+UNICODE / CONTENT SAFETY
+------------------------
+Use nvarchar for human-readable fields.
+
+No raw HTML.
+No executable content.
+
+If structured JSON:
+strict schema and block whitelist.
+
+SCHEMA CANDIDATES — DESIGN ONLY
+-------------------------------
+Audit candidate `questions`:
+id
+parishId
+code
+status
+sourceLocale
+currentPublishedVersionId nullable
+createdByUserId nullable
+createdAt
+updatedAt
+
+Audit candidate `question_versions`:
+id
+questionId
+versionNumber
+status
+questionType
+prompt/content
+instruction
+explanation
+difficulty
+sourceContentHash
+createdByUserId
+publishedByUserId
+publishedAt
+createdAt
+updatedAt
+
+Audit candidate `question_options`:
+id
+questionVersionId
+code optional
+text optional
+mediaAssetId optional
+sortOrder
+createdAt
+updatedAt
+
+Audit answer representation:
+question_correct_options and/or strict answer_definition_json.
+
+Audit:
+question_tags
+question_tag_links
+question curriculum/lesson linkage table.
+
+FK / MODULE BOUNDARIES
+----------------------
+SQL FKs allowed.
+Application ownership isolated.
+
+No imported ORM entities from Parish/Curriculum/Media.
+
+Use public services/snapshots.
+
+Likely dependency:
+ParishModule
+  ↓
+QuestionBankModule
+  → CurriculumModule public contracts
+  → MediaModule public contracts
+
+No reverse dependency back into QuestionBank.
+
+SEARCH / FILTER PLAN
+--------------------
+Admin will likely need:
+parish
+status
+type
+difficulty
+tag
+curriculum/lesson
+search
+published state
+code
+
+Plan indexes, but do not implement.
+
+IMPORT / EXPORT READINESS
+-------------------------
+#007 may implement/prepare import/export.
+
+Design stable codes/IDs now so export is not tied only to database UUIDs.
+
+Do not force human authors to manually maintain excessive identifiers without reason.
+
+OBSERVABILITY / PRIVACY
+-----------------------
+Log:
+questionId
+versionId
+type
+status
+action
+actorId
+
+Avoid logging:
+full question body
+correct answers
+child data
+
+Question Bank stores no learner attempt data.
+
+MICROSERVICE EXTRACTION
+-----------------------
+Future Question Bank Service owns:
+questions
+question_versions
+question_options
+answer tables
+tags
+curriculum-link tables
+
+Depends on:
+Parish API
+Curriculum taxonomy API
+Media metadata API
+
+Practice/Exam consume Question Bank API.
+
+PROMPT PLAN
+-----------
+Recommend exactly 8 prompts:
+
+#001/8 Audit/design — THIS PROMPT
+#002/8 Schema + entities + migrations
+#003/8 Question root/version CRUD + tags/link metadata + RBAC
+#004/8 Question types + options + answer validation engine
+#005/8 Publish/clone/archive + immutable delivery/grading contracts
+#006/8 Curriculum/Media integration + scoped authorization + learner-safe projection
+#007/8 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008/8 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+VALIDATION
+----------
+Audit-only:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+No DB mutation needed.
+
+REQUIRED REPORT
+---------------
+Create:
+
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from Curriculum/Media
+3 Existing question/assessment code audit
+4 Rules applied
+5 Bounded-context decision
+6 Module naming
+7 Domain definitions
+8 Parish ownership/scope
+9 Question root identity
+10 QuestionVersion identity
+11 Root lifecycle
+12 Version lifecycle
+13 Published immutability
+14 Clone semantics
+15 Exam auditability
+16 MVP question types
+17 Deferred question types
+18 SINGLE_CHOICE
+19 MULTIPLE_CHOICE
+20 TRUE_FALSE
+21 SHORT_TEXT/NUMBER
+22 Ordering/Matching/FillBlank/LongText
+23 Option identity
+24 Option ordering/randomization
+25 Answer representation
+26 Correct-answer storage
+27 Partial-credit policy
+28 Prompt/content representation
+29 Explanation model
+30 Media integration
+31 Option media
+32 Curriculum linkage
+33 canonicalLessonKey strategy
+34 Topic linkage limitation
+35 Tags model
+36 Difficulty model
+37 Question code
+38 Publish validation
+39 Admin/learner DTO separation
+40 Answer leakage prevention
+41 Grading service boundary
+42 Practice integration
+43 Exam integration
+44 Search/filter requirements
+45 Import/export readiness
+46 sourceLocale strategy
+47 source content hash readiness
+48 translation correctness safety
+49 exam localization auditability
+50 Unicode/no-HTML
+51 questions schema candidate
+52 question_versions schema candidate
+53 question_options schema candidate
+54 answer schema candidate
+55 tags schema candidate
+56 curriculum-link schema candidate
+57 uniqueness constraints
+58 indexes
+59 FK strategy
+60 dependency graph
+61 public contracts
+62 conceptual API surface
+63 RBAC namespace
+64 role/scope plan
+65 security/privacy
+66 observability
+67 microservice extraction
+68 risks/open questions
+69 files created
+70 files modified
+71 commands
+72 validation
+73 out-of-scope
+74 QUESTION BANK #002 readiness
+75 prompt count
+76 commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+Report must state:
+
+QUESTION BANK DOMAIN DESIGN READY: YES/NO
+QUESTION VERSIONING DESIGN READY: YES/NO
+MVP QUESTION TYPES DECIDED: YES/NO
+ANSWER MODEL READY: YES/NO
+CURRICULUM LINKAGE MODEL READY: YES/NO
+MEDIA INTEGRATION MODEL READY: YES/NO
+EXAM SNAPSHOT/AUDITABILITY READY: YES/NO
+MULTILINGUAL FOUNDATION READY: YES/NO
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+#002 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+QUESTION BANK #002/8 — Schema + Entities + Migrations
+
+#002 must be persistence-only:
+- QuestionBankModule skeleton
+- entities/enums
+- migrations
+- constraints/indexes
+- metadata/boundary tests
+- multilingual/version foundations
+
+No business HTTP API yet.
+
+PROMPT COUNT
+------------
+State:
+QUESTION BANK #001/8 complete
+approximately 7 prompts remain
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- QUESTION BANK #001 status
+- selected MVP types
+- versioning model
+- answer model
+- curriculum/media linkage
+- multilingual readiness
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #002 automatically.

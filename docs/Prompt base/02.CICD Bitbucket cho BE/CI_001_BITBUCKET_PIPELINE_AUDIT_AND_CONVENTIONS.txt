@@ -1,0 +1,519 @@
+CURSOR PROMPT — CI/CD BE #001/4
+AUDIT CURRENT BACKEND + DESIGN BITBUCKET PIPELINE CONVENTIONS
+
+1. Context
+----------
+We have completed the entire Backend Foundation phase.
+
+Foundation status:
+- Backend Foundation: COMPLETE
+- Prompts #001–#007 completed
+- Foundation changes have already been manually committed by the user
+- Repository should now have a clean Git baseline before CI/CD work begins
+
+Current technical baseline:
+- Node.js v22.23.1
+- NestJS 11.2.3
+- TypeScript strict
+- npm + package-lock.json
+- MSSQL
+- TypeORM
+- Docker / Docker Compose
+- Docker Engine through WSL2 for local development
+- Existing quality scripts
+- Existing DB integration test strategy
+- No Bitbucket Pipelines yet
+- No staging/deploy pipeline yet
+
+We are now starting the next phase:
+
+CI/CD Bitbucket for Backend
+Estimated: 4 prompts
+
+This prompt is:
+CI/CD BE #001/4 — Audit + Pipeline Conventions
+
+Do NOT create the final pipeline yet unless a tiny supporting change is clearly required by the audit.
+
+2. Required Reading
+-------------------
+Before doing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read docs/PROMPT_006_DATABASE_INTEGRATION_E2E_QUALITY_GATES_REPORT.md
+5. Read docs/PROMPT_007_FINAL_BACKEND_FOUNDATION_AUDIT_REPORT.md
+6. Inspect package.json, package-lock.json, Dockerfile, docker-compose.yml, .env.example, .env.test.example, README.md, test/, src/database/, scripts/, .gitignore
+7. Inspect current Git status and recent commit history using read-only commands.
+
+Do NOT assume the existing scripts are CI-ready just because they work locally.
+
+3. Current Phase
+----------------
+CI/CD Bitbucket for Backend
+Prompt #001 / 4
+
+Planned sequence:
+#001 Audit + Pipeline Conventions
+#002 Bitbucket Pipeline Baseline
+#003 MSSQL Integration + Docker Build Gates
+#004 Final CI Audit + Hardening
+
+This prompt should prepare #002.
+Do NOT jump ahead.
+
+4. Primary Objective
+--------------------
+Perform a CI-readiness audit of the current backend and define the exact Bitbucket Pipelines strategy.
+
+The audit must determine:
+- which existing npm scripts are safe for CI
+- which scripts require MSSQL
+- which scripts require Docker
+- which scripts are portable to Linux
+- what Node image/version should be used
+- cache strategy
+- branch strategy
+- pull-request strategy
+- test ordering
+- when Docker image build should run
+- when DB integration tests should run
+- how MSSQL should be provided inside Bitbucket Pipelines
+- how environment variables/secrets should be supplied
+- what artifacts, if any, are useful
+- failure semantics
+- timeout/resource expectations
+- future staging/deploy extension points
+
+The goal is to create a precise plan for Prompt #002 and #003.
+
+5. Important Scope Boundary
+---------------------------
+This prompt is mainly AUDIT + DESIGN.
+
+Do NOT create:
+- deployment scripts
+- staging environment
+- production deployment
+- registry push
+- Kubernetes manifests
+- Helm
+- Terraform
+- cloud credentials
+- branch deployment automation
+
+Do NOT add:
+- auth
+- business modules
+- catechism entities
+- product code
+
+Do NOT create bitbucket-pipelines.yml yet unless the audit proves a small skeleton is required for validation. Preferred: defer actual pipeline file to Prompt #002.
+
+6. Git Policy — CRITICAL
+------------------------
+Cursor must NEVER run:
+git add
+git commit
+git push
+
+This is a permanent user rule.
+
+If this prompt results in code/config/permanent documentation changes:
+- Cursor must print exactly ONE recommended commit command at the end
+- format:
+  git commit -m "<concise message>"
+- Cursor must NOT execute it.
+
+If this prompt makes NO code/config/permanent documentation changes:
+- state:
+  No code/config changes; no commit message required.
+
+Temporary docs report under docs/ does NOT count as a code/config change because docs/ is gitignored.
+
+7. Verify Git Baseline
+----------------------
+Run read-only commands such as:
+git status --short
+git log -5 --oneline
+git branch --show-current
+git remote -v
+
+Confirm:
+- foundation commit exists
+- working tree state
+- current branch
+- Bitbucket remote presence if configured
+
+Do not modify Git state.
+
+8. Audit Existing npm Scripts
+-----------------------------
+Inspect package.json carefully.
+
+Classify relevant scripts into:
+A. CI-fast / no external services
+B. Requires live MSSQL
+C. Requires Docker
+D. Developer-only / interactive
+E. Migration / operational
+F. Not suitable for CI as-is
+
+Pay special attention to:
+- format
+- format:check
+- lint
+- lint:fix
+- typecheck
+- test
+- test:watch
+- test:cov
+- test:e2e
+- test:db:prepare
+- test:db:migrations
+- test:integration
+- test:e2e:db
+- quality
+- quality:full
+- build
+- start
+- start:dev
+- start:prod
+- migration:create
+- migration:generate
+- migration:show
+- migration:run
+- migration:revert
+- migration:run:prod
+
+Do not rename scripts without strong reason.
+
+9. Validate CI-Safe Baseline
+----------------------------
+Run:
+node --version
+npm --version
+npm ci
+npm run quality
+npm audit --audit-level=moderate
+
+Confirm:
+- npm ci works from lockfile
+- quality is non-interactive
+- correct exit code behavior
+- no local-only assumptions
+- no WSL dependency in npm quality scripts
+
+10. Validate Full Quality Requirements
+--------------------------------------
+Review how npm run quality:full works today.
+
+Confirm what it requires:
+- MSSQL reachable
+- test DB credentials
+- test DB port
+- any Docker assumptions
+- any local .env files
+
+Determine whether quality:full can be used directly in Bitbucket Pipelines.
+If not, document exactly what must change in Prompt #003.
+
+11. Linux Portability Audit
+---------------------------
+Audit all scripts/tooling for:
+- Windows-only paths
+- PowerShell-only behavior
+- WSL-only invocation
+- shell quoting assumptions
+- CRLF
+- path separator assumptions
+- executable permission requirements
+- localhost assumptions
+- Docker socket assumptions
+
+Core CI commands must not depend on:
+wsl docker ...
+
+12. Node Runtime Strategy
+-------------------------
+Bitbucket CI must use Node.js 22.23.1.
+
+Preferred:
+- official Node Docker image pinned to Node 22.23.1
+- example: node:22.23.1-bookworm-slim
+
+Do not use floating tags.
+
+13. npm Strategy
+----------------
+Pipeline should use npm ci, not npm install.
+
+Audit:
+- package-lock reproducibility
+- npm version expectations
+- engine-strict behavior
+- whether Node image bundled npm is acceptable
+
+14. Cache Strategy
+------------------
+Audit Bitbucket Pipelines caching needs.
+
+Preferred:
+- npm cache
+
+Do NOT cache:
+- node_modules across unrelated builds unless clearly safe
+- dist as dependency cache
+- secrets
+- test DB state
+
+15. Pipeline Trigger Strategy
+-----------------------------
+Design recommended behavior for:
+A. Pull requests
+B. Main/default branch
+C. Feature branches
+D. Manual/custom pipeline
+
+Preferred initial direction:
+- fast PR quality
+- heavier DB + Docker validation on default branch or custom full pipeline
+
+Do NOT assume production deployment.
+
+16. MSSQL in Bitbucket Pipelines
+--------------------------------
+Determine best strategy for Prompt #003.
+
+Evaluate:
+- Bitbucket service container for MSSQL
+- Docker service + manually run MSSQL container
+- another supported simple approach
+
+Consider:
+- Microsoft SQL Server Linux image
+- env vars
+- startup time
+- readiness
+- hostname/port
+- resource requirements
+- compatibility with current test tooling
+
+Reuse current test scripts with minimal CI-specific behavior.
+
+17. Test DB CI Strategy
+-----------------------
+Current test DB:
+catechism_api_test
+
+In CI:
+- MSSQL is disposable
+- test DB is fresh
+- test guard remains active
+- dev DB must never be involved
+
+Determine required env vars:
+DB_HOST
+DB_PORT
+DB_NAME
+DB_USER
+DB_PASSWORD
+DB_ENCRYPT
+DB_TRUST_SERVER_CERTIFICATE
+
+18. Secrets Strategy
+--------------------
+Separate:
+A. safe constants
+B. secured secrets
+
+Expected secret:
+- DB_PASSWORD
+
+Do not store actual secrets in pipeline YAML.
+
+19. Docker Build Gate Strategy
+------------------------------
+Current production build:
+docker build --target production -t catechism-api:prod .
+
+Determine when CI should run this:
+- PR
+- default branch
+- custom/full pipeline
+
+Do NOT push image yet.
+
+20. Docker-in-Bitbucket Constraints
+-----------------------------------
+Audit whether Bitbucket Docker service is needed for:
+- Docker image build
+- MSSQL
+- both
+
+Do not assume local docker-compose runs unchanged inside CI.
+
+21. Artifact / Coverage Strategy
+--------------------------------
+Evaluate whether CI should retain:
+- coverage
+- dist
+- test reports
+
+Avoid unnecessary large artifacts.
+
+Do not introduce arbitrary coverage thresholds unless already defined.
+
+22. Failure / Step Strategy
+---------------------------
+Design fast feedback order, considering existing npm run quality.
+
+Evaluate:
+- one step
+- multiple steps
+- minimal parallelism
+
+Keep first version simple and maintainable.
+
+23. Future Deployment Extension Points
+--------------------------------------
+Plan only for future:
+- staging
+- image push
+- deployment
+- manual promotion
+- production migrations
+
+Do NOT implement.
+
+24. Bitbucket Pipeline File Strategy
+------------------------------------
+Prepare exact design for Prompt #002.
+
+Specify:
+- image
+- caches
+- definitions
+- PR pipeline
+- default branch pipeline
+- custom pipeline if useful
+- step names
+- exact command order
+
+Do NOT write final YAML yet unless unavoidable.
+
+25. Security Audit
+------------------
+Future pipeline must avoid:
+- echoing secrets
+- dumping env
+- committing .env
+- using production DB
+- automatic production migrations
+- registry login
+- deployment credentials
+
+26. Existing Local Workflow Preservation
+----------------------------------------
+Do not break:
+wsl docker compose ...
+
+CI-specific changes must remain portable and minimal.
+
+27. Potential Supporting Changes
+--------------------------------
+If audit discovers a SMALL issue required before Prompt #002, you MAY fix it.
+
+Examples:
+- package script not Linux portable
+- quality script broken under npm ci
+- .gitignore missing CI artifact
+
+If changed:
+- keep small
+- validate
+- document
+
+Do NOT create bitbucket-pipelines.yml yet unless required.
+
+28. Validation
+--------------
+Run at minimum:
+node --version
+npm --version
+npm ci
+npm run quality
+npm run test:cov
+npm audit --audit-level=moderate
+
+If MSSQL is available, optionally run:
+npm run quality:full
+
+Use read-only Git commands only.
+
+29. Required Report
+-------------------
+Create:
+docs/CI_001_BITBUCKET_PIPELINE_AUDIT_AND_CONVENTIONS_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Repository / Git Baseline
+3. Current CI-Relevant Architecture
+4. Existing npm Script Classification
+5. npm ci Validation
+6. quality Validation
+7. quality:full Requirements
+8. Linux Portability Audit
+9. Node Runtime Recommendation
+10. npm / Lockfile Strategy
+11. Cache Strategy
+12. Trigger Strategy
+13. Proposed Step Structure
+14. MSSQL CI Strategy
+15. Test Database CI Strategy
+16. Environment Variables
+17. Docker Build Gate Strategy
+18. Docker Service / Bitbucket Constraints
+19. Coverage / Artifact Strategy
+20. Failure / Fast Feedback Strategy
+21. Resource / Timeout Considerations
+22. Future Staging / Deployment Extension Points
+23. Security Review
+24. Files Changed
+25. Commands Executed
+26. Validation Results
+27. Known Issues / Assumptions
+28. Recommended Prompt #002 Implementation Plan
+29. Out-of-Scope Confirmation
+30. Commit Message Recommendation
+
+If code/config/permanent docs changed:
+print exactly one:
+git commit -m "<message>"
+
+If only docs/ report changed:
+state:
+No code/config changes; no commit message required.
+
+30. Final Response
+------------------
+When complete, respond concisely with:
+- CI #001 status
+- whether repository is ready for CI #002
+- report path:
+  docs/CI_001_BITBUCKET_PIPELINE_AUDIT_AND_CONVENTIONS_REPORT.md
+- blocker if any
+
+If code/config/permanent documentation changed:
+also print exactly one recommended:
+git commit -m "<message>"
+
+Cursor must NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to CI #002 automatically.

@@ -1,0 +1,983 @@
+CURSOR PROMPT — CLASS/PEOPLE/ENROLLMENT #003/7
+CLASS SERVICE + API + RBAC FOUNDATIONS
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- Parish/Academic Year/Catechism Level
+- CLASS #001 Domain Audit + Bounded Context Design
+- CLASS #002 Schema + Entities + Migrations
+
+Current:
+- CLASS/PEOPLE/ENROLLMENT #003 / 7 — Class Service + API + RBAC Foundations
+
+Remaining:
+- #004 Student + Guardian relationship services/APIs
+- #005 Catechist assignment + Enrollment history services/APIs
+- #006 Scoped authorization hardening + cross-domain integration
+- #007 Final audit + seed/Postman + FE contract readiness
+
+Frontend remains a separate ReactJS repository/source and communicates with BE only through HTTP API.
+Do NOT modify FE in this prompt.
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/CLASS_001_DOMAIN_AUDIT_AND_BOUNDARY_DESIGN_REPORT.md
+   docs/CLASS_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/class/
+   src/modules/parish/
+   src/modules/academic-structure/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/seeds/
+   test/
+   README.md
+   package.json
+6. Inspect Git status using read-only commands.
+
+3. Architecture Rules
+---------------------
+Strictly preserve:
+
+ClassModule owns:
+- classes
+- class_catechist_assignments
+
+At #003 we implement ONLY class behavior, not catechist assignments yet.
+
+ClassModule may depend on:
+- ParishModule public service
+- AcademicStructureModule public services
+- AuthModule / AccessControlModule only for controller/guard wiring
+
+Business service may depend on:
+- own Class repository
+- ParishService
+- AcademicYearService
+- CatechismLevelService
+
+Business service MUST NOT depend on:
+- controllers
+- JwtAuthGuard
+- PermissionGuard
+- User repositories/entities
+- EnrollmentModule
+- StudentModule
+
+No cross-module entity/repository access.
+
+4. Primary Objective
+--------------------
+Implement:
+
+- ClassService
+- ClassSnapshot
+- ClassController
+- request/response DTOs
+- code/name validation
+- class lifecycle
+- class create/list/get/update/status
+- cross-module semantic validation
+- classes.read / classes.manage RBAC wiring
+- Swagger
+- unit tests
+- integration tests
+- DB-aware e2e tests
+
+Do NOT implement:
+- Student APIs
+- Guardian APIs
+- Catechist assignment APIs
+- Enrollment APIs
+- Scoped parish authorization beyond existing global RBAC
+- Domain seeds
+- FE changes
+
+5. ClassSnapshot
+----------------
+Create safe public contract:
+
+ClassSnapshot:
+- id
+- parishId
+- academicYearId
+- catechismLevelId
+- code
+- name
+- status
+- createdAt
+- updatedAt
+
+No entity exposure.
+
+Public service methods should return snapshots.
+
+6. ClassModule Public Export
+----------------------------
+Final ClassModule export:
+- ClassService only
+
+Do NOT export:
+- TypeOrmModule
+- ClassEntity
+- ClassCatechistAssignmentEntity
+- repositories
+
+7. Class Code Validation
+------------------------
+Normalize:
+- trim
+- lowercase
+
+Validate:
+- length 1..32
+- kebab-case style
+- lowercase letters
+- digits
+- hyphen
+- no spaces
+- no Vietnamese diacritics
+
+Example:
+khai-tam-a
+
+Do not auto-generate from name.
+
+8. Class Name Validation
+------------------------
+Name:
+- trim
+- required
+- max 128
+- Unicode/Vietnamese supported
+
+Do not over-normalize display text.
+
+9. Class Status Lifecycle
+-------------------------
+Enum:
+PLANNED
+ACTIVE
+COMPLETED
+CANCELLED
+
+Creation default:
+PLANNED
+
+Preferred transitions:
+
+PLANNED -> ACTIVE
+PLANNED -> CANCELLED
+ACTIVE -> COMPLETED
+ACTIVE -> CANCELLED
+
+Terminal:
+COMPLETED
+CANCELLED
+
+Disallow:
+COMPLETED -> *
+CANCELLED -> *
+ACTIVE -> PLANNED
+
+Document exact state machine.
+
+10. Structural Fields
+---------------------
+Structural:
+- parishId
+- academicYearId
+- catechismLevelId
+
+Class code/name are display/admin fields.
+
+Audit update policy.
+
+Preferred:
+- parishId is immutable after create
+- academicYearId is immutable after create
+- catechismLevelId is immutable after create
+
+Reason:
+Enrollment denormalizes parish/year keys and future history depends on stable class context.
+
+If level correction before activation is genuinely useful:
+you may allow catechismLevelId update only while PLANNED,
+but only if it does not complicate future invariants.
+
+Preferred safest rule:
+all three structural IDs immutable after create.
+
+11. Code / Name Update
+----------------------
+PATCH may update:
+- code
+- name
+
+Only while:
+PLANNED or ACTIVE
+
+For COMPLETED/CANCELLED:
+immutable.
+
+If ACTIVE code/name corrections remain allowed:
+document that they do not change historical scope.
+
+12. Create Class Flow
+---------------------
+Implement conceptually:
+
+createClass(parishId, input)
+
+Input:
+- academicYearId
+- catechismLevelId
+- code
+- name
+
+Flow:
+1. validate UUIDs
+2. ParishService.assertParishActive(parishId)
+3. validate academic year:
+   - exists
+   - belongs to parish
+   - status permits class creation
+4. validate catechism level:
+   - exists
+   - belongs to parish
+   - ACTIVE
+5. normalize code
+6. validate name
+7. create PLANNED class
+8. save
+9. map unique code conflict
+10. return snapshot
+
+13. Academic Year Policy for Class Creation
+-------------------------------------------
+Audit existing AcademicYearService public API.
+
+Do NOT query academic_years repository/table directly.
+
+Use public service/snapshot.
+
+Preferred class creation allowed when year status is:
+PLANNED or ACTIVE
+
+Reject CLOSED.
+
+Reason:
+classes may be prepared before year activation.
+
+14. Academic Year Policy for Class Activation
+---------------------------------------------
+When class moves to ACTIVE:
+
+Require:
+- parish ACTIVE
+- academic year ACTIVE
+- catechism level ACTIVE
+
+Do not activate class in PLANNED or CLOSED academic year.
+
+15. Catechism Level Policy
+--------------------------
+Creation:
+requires level ACTIVE.
+
+Activation:
+requires level ACTIVE.
+
+Existing class remains readable if level later becomes INACTIVE.
+
+16. Parish Policy
+-----------------
+Creation:
+requires ACTIVE parish.
+
+Activation:
+requires ACTIVE parish.
+
+Historical reads allowed for inactive parish.
+
+General code/name updates:
+Preferred:
+block mutation if parish inactive.
+
+Cancellation may need to be allowed even when parish inactive for administrative shutdown.
+Audit exact behavior and document.
+
+17. Cross-Module Validation Methods
+-----------------------------------
+Use existing public APIs only.
+
+If AcademicYearService / CatechismLevelService lack narrow helpers such as:
+- get snapshot
+- assert belongs to parish
+- assert active
+
+You MAY add narrowly scoped public methods inside the owning module.
+
+Do NOT export entities.
+
+Examples:
+findAcademicYearSnapshotById
+assertAcademicYearBelongsToParish
+assertCatechismLevelBelongsToParish
+
+Keep APIs narrow and reusable for future Enrollment/Class validation.
+
+18. Duplicate Class Code
+------------------------
+DB unique:
+(parish_id, academic_year_id, code)
+
+Map MSSQL duplicate to:
+ClassCodeAlreadyExistsError
+
+HTTP:
+409
+
+No SQL details.
+
+19. Get Class
+-------------
+Implement:
+getClassById(id)
+
+- validate UUID
+- missing -> ClassNotFoundError
+- return snapshot
+
+Also expose narrow public method:
+getClassSnapshotForEnrollment(classId)
+
+This will be used by EnrollmentModule later.
+
+It may be same safe snapshot method.
+
+20. Class Validation for Enrollment
+-----------------------------------
+Plan future public assertion:
+assertClassAcceptsEnrollment(classId)
+
+But do NOT implement enrollment behavior.
+
+It can be useful now if narrow:
+- class exists
+- status ACTIVE
+- returns snapshot
+
+If added, keep it generic enough for #005.
+
+21. List Classes
+----------------
+Implement:
+
+GET /api/v1/parishes/:parishId/classes
+
+Pagination:
+follow PROJECT_RULES convention exactly.
+
+Filters:
+- academicYearId
+- catechismLevelId
+- status
+- search
+
+Sort whitelist:
+- code
+- name
+- status
+- createdAt
+
+Default:
+name ASC or code ASC
+Choose and document.
+
+22. List Parish Validation
+--------------------------
+Historical class listing for inactive parish should be allowed.
+
+Therefore list endpoint should validate parish exists, but NOT necessarily active.
+
+Use safe ParishService read method, not assertParishActive.
+
+23. Cross-Parish Filter Safety
+------------------------------
+All list queries:
+WHERE class.parish_id = :parishId
+
+If academicYearId filter supplied:
+do not return class from other parish.
+
+No joins required.
+
+24. Update Class
+---------------
+PATCH /api/v1/classes/:id
+
+Allow:
+- code
+- name
+
+At least one field.
+
+Block:
+- structural ID mutation
+
+For terminal statuses:
+reject.
+
+Map duplicate code -> 409.
+
+25. Status Endpoint
+------------------
+PATCH /api/v1/classes/:id/status
+
+Body:
+{
+  status: ACTIVE | COMPLETED | CANCELLED
+}
+
+Do not allow arbitrary PLANNED rollback.
+
+Transition validation in service.
+
+26. Class Activation Checks
+---------------------------
+PLANNED -> ACTIVE:
+
+- parish ACTIVE
+- academic year ACTIVE
+- catechism level ACTIVE
+
+Use public services.
+
+27. Class Completion
+--------------------
+ACTIVE -> COMPLETED
+
+Do NOT yet enforce enrollment state closure because Enrollment behavior comes #005.
+
+Document deferred cross-domain rule:
+#006/#007 should audit whether ACTIVE enrollments must be completed before class completion or automatically transitioned.
+
+Do not create cyclic dependency Class -> Enrollment.
+
+This is important.
+
+28. Class Cancellation
+----------------------
+PLANNED -> CANCELLED
+ACTIVE -> CANCELLED
+
+Do NOT mutate enrollments in #003.
+
+Document:
+if cancelling ACTIVE class with active enrollments becomes possible after #005, orchestration policy must be audited in #006 without introducing cycle.
+
+29. Error Types
+---------------
+Create module-specific errors:
+
+InvalidClassIdError
+InvalidClassCodeError
+InvalidClassNameError
+ClassNotFoundError
+ClassCodeAlreadyExistsError
+InvalidClassStatusTransitionError
+ClassImmutableError
+AcademicYearDoesNotBelongToParishError or reuse upstream error appropriately
+CatechismLevelDoesNotBelongToParishError or reuse upstream error appropriately
+ClassAcademicYearNotOperationalError
+ClassCatechismLevelInactiveError
+
+Avoid duplicating upstream errors unnecessarily.
+
+Prefer mapping/propagating well-defined upstream domain errors when clean.
+
+30. HTTP Routes
+---------------
+Implement:
+
+POST   /api/v1/parishes/:parishId/classes
+GET    /api/v1/parishes/:parishId/classes
+GET    /api/v1/classes/:id
+PATCH  /api/v1/classes/:id
+PATCH  /api/v1/classes/:id/status
+
+No DELETE.
+
+31. HTTP Status
+---------------
+POST -> 201
+GET -> 200
+PATCH -> 200
+
+400:
+validation / invalid transition
+
+401:
+unauthenticated
+
+403:
+missing permission
+
+404:
+class/parish/year/level missing where appropriate
+
+409:
+duplicate/conflict
+
+Use existing global error envelope.
+
+32. RBAC Permissions
+--------------------
+Use:
+classes.read
+classes.manage
+
+These already exist as placeholders in auth seed according to CLASS #001.
+
+Audit current seed.
+
+If already present:
+wire only.
+
+If missing/incomplete:
+update sample/dev seed intentionally.
+
+GET:
+classes.read
+
+POST/PATCH/status:
+classes.manage
+
+No role-name checks.
+No SUPER_ADMIN bypass in business code.
+
+33. Sample Role Matrix
+----------------------
+Preserve/confirm:
+
+SUPER_ADMIN:
+read/manage
+
+PARISH_ADMIN:
+read/manage
+
+CATECHIST:
+read
+
+PARENT:
+likely read or none depending current seed
+
+Do NOT pretend this provides parish scope.
+
+The real scope hardening is #006.
+
+34. Scoped Authorization Deferral
+---------------------------------
+Important:
+
+At #003, permissions are still global capability checks.
+
+Do NOT implement:
+ParishScopeService
+ClassScopeService
+parish membership checks
+
+But add clear TODO/report note:
+before production multi-parish, #006 must enforce resource scope.
+
+35. DTOs
+--------
+Create:
+
+CreateClassRequestDto
+UpdateClassRequestDto
+UpdateClassStatusRequestDto
+ClassListQueryDto
+ClassResponseDto
+ClassListResponseDto
+
+Use class-validator.
+
+36. FE-Safe Response Contract
+-----------------------------
+ClassResponseDto:
+- UUID strings
+- enum uppercase
+- timestamps ISO datetime strings
+- scalar IDs
+- no nested TypeORM objects
+
+List envelope MUST match existing PROJECT_RULES convention.
+
+IMPORTANT:
+Read actual current rule/report and preserve it exactly.
+Do not invent `{data, meta}` if existing APIs use `{items, page, limit, total, totalPages}`.
+
+37. Swagger
+-----------
+Document:
+- all routes
+- bearer auth
+- enums
+- pagination/filter query
+- response DTOs
+- class lifecycle notes if useful
+
+Suitable for future OpenAPI-generated React client.
+
+38. Repository Boundary
+-----------------------
+ClassService injects:
+Repository<ClassEntity>
+
+It must NOT inject:
+ClassCatechistAssignment repository in #003 unless absolutely needed (it should not be).
+
+Keep assignment behavior untouched.
+
+39. Query Security
+------------------
+- parameterized search
+- escape LIKE wildcards consistently with Parish APIs
+- whitelist sort fields
+
+40. Unit Tests
+--------------
+Test:
+
+code normalization/validation
+name validation
+create default PLANNED
+parish validation
+year belongs to parish
+level belongs to parish
+year CLOSED rejected
+inactive level rejected
+duplicate mapping
+get/not found
+list filters
+update code/name
+structural IDs not mutable
+status state machine
+activation checks
+terminal immutability
+safe snapshot
+
+41. Integration Tests
+---------------------
+Against catechism_api_test:
+
+- create class in PLANNED year
+- create class in ACTIVE year
+- reject CLOSED year
+- reject mismatched parish/year
+- reject mismatched parish/level
+- duplicate same parish/year code -> conflict
+- same code different year allowed
+- update code/name
+- activate only with ACTIVE year/parish/level
+- complete/cancel lifecycle
+- list filters/pagination
+- Vietnamese name
+
+Use Parish/Academic public services where practical.
+
+42. DB-Aware E2E
+----------------
+Test HTTP:
+
+A. unauthenticated -> 401
+
+B. no classes.read -> 403
+
+C. classes.read:
+GET list/detail -> 200
+
+D. read-only:
+POST/PATCH -> 403
+
+E. classes.manage:
+POST -> 201
+PATCH -> 200
+status -> 200
+
+F. duplicate -> 409
+
+G. invalid DTO -> 400
+
+H. missing class -> 404
+
+I. mismatched academicYear/parish -> correct client-safe error
+
+J. class activation prerequisites enforced
+
+43. Existing Regression
+-----------------------
+All previous:
+- Auth/RBAC
+- Parish
+- AcademicStructure
+- schema/integration
+must continue passing.
+
+44. No Student Behavior
+-----------------------
+STRICTLY do NOT implement:
+StudentService
+student controllers
+guardian service
+guardian endpoints
+
+45. No Catechist Assignment Behavior
+------------------------------------
+Do NOT implement:
+assignment service/controller
+
+46. No Enrollment Behavior
+--------------------------
+Do NOT implement:
+EnrollmentService
+enrollment endpoints
+transfer operation
+
+47. No Parish Membership Behavior
+---------------------------------
+Do NOT implement:
+ParishMembershipService
+scope checks
+
+48. No New Schema Unless Genuine Bug
+------------------------------------
+Do NOT alter CLASS #002 migration.
+
+If schema defect discovered:
+create a new corrective migration.
+
+Do not rewrite committed migration.
+
+49. No FE Changes
+-----------------
+Do not touch React repo.
+
+50. Security Review
+-------------------
+Audit:
+- auth all routes
+- permission split
+- no entity leakage
+- no SQL error leakage
+- no cross-module repository
+- no false claim of scoped authorization
+- no child PII added
+
+51. Microservice Extraction Review
+----------------------------------
+Final ClassModule:
+
+Owns:
+classes
+class_catechist_assignments
+
+At #003 public API:
+ClassService
+
+Future consumers:
+EnrollmentModule
+AttendanceModule
+ExamModule
+
+They receive ClassSnapshot only.
+
+Future Class Service calls:
+Parish Service
+Academic Structure Service
+
+No shared entity model.
+
+52. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:class-api .
+
+53. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(class): add class management API"
+
+Cursor must NOT execute it.
+
+54. Required Report
+-------------------
+Create:
+
+docs/CLASS_003_CLASS_SERVICE_API_RBAC_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #002
+3. Rules applied
+4. Files created
+5. Files modified
+6. ClassModule architecture
+7. Public exports
+8. ClassSnapshot
+9. Code validation
+10. Name validation
+11. Structural field immutability
+12. Class lifecycle state machine
+13. Create flow
+14. Parish validation
+15. Academic year validation
+16. Catechism level validation
+17. Activation prerequisites
+18. Completion/cancellation policy
+19. Duplicate handling
+20. Get flow
+21. List/pagination/filter
+22. Update flow
+23. Status endpoint
+24. HTTP routes
+25. DTOs
+26. HTTP/error mapping
+27. RBAC permissions
+28. Scoped authorization deferral
+29. Swagger/OpenAPI readiness
+30. Repository boundary
+31. Cross-module dependency audit
+32. Unit tests
+33. Integration tests
+34. DB-aware e2e
+35. Existing regression
+36. Security review
+37. Docker validation
+38. Microservice extraction review
+39. Commands executed
+40. Validation results
+
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- create class
+- list class
+- get class
+- update class
+- lifecycle
+- duplicate 409
+- auth 401
+- permission 403
+- mismatched parish/year rejected
+- mismatched parish/level rejected
+- structural IDs immutable
+- terminal classes immutable
+- no persistence export
+- safe snapshot
+- no scoped-auth false claim
+- prior regression
+
+41. Known issues/deferred
+42. Out-of-scope confirmation
+43. CLASS #004 readiness
+44. Prompt count status
+45. Commit recommendation
+
+55. CLASS #004 Readiness
+------------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+CLASS/PEOPLE/ENROLLMENT #004 — Student + Guardian Relationship Services + APIs
+
+#004 should implement:
+- StudentService
+- Student API
+- optional userId validation via UsersModule public API
+- guardian linking/history
+- one active primary guardian invariant
+- students.read/manage
+- student-guardians.read/manage
+- tests
+
+No Enrollment/Catechist behavior yet.
+
+56. Prompt Count
+----------------
+State:
+#003/7 complete
+approximately 4 prompts remain
+
+57. Final Response
+------------------
+Respond concisely:
+
+- CLASS/PEOPLE/ENROLLMENT #003 status
+- Class API PASS/FAIL
+- lifecycle PASS/FAIL
+- cross-module validation PASS/FAIL
+- module boundary PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- report:
+  docs/CLASS_003_CLASS_SERVICE_API_RBAC_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(class): add class management API"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

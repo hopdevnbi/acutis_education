@@ -1,0 +1,1122 @@
+CURSOR PROMPT — AUTH/RBAC #005/9
+REFRESH TOKEN + AUTH SESSION + LOGOUT / REVOCATION
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit: COMPLETE
+- AUTH/RBAC #002 — Schema + Entities + Migrations: COMPLETE
+- AUTH/RBAC #002B — Schema Boundary Hardening: COMPLETE
+- AUTH/RBAC #003 — User Account + Password Foundation: COMPLETE
+- AUTH/RBAC #004 — Login + Access JWT: COMPLETE
+
+Current:
+- AUTH/RBAC #005 / 9 — Refresh Token + Session + Logout
+
+Remaining:
+- #006 Role + Permission + RBAC Guards
+- #007 Security Hardening + Auth/RBAC Integration Tests
+- #008 Sample Seed Data + Postman Verification
+- #009 Final Auth/RBAC Audit + Module Boundary Review
+
+This prompt implements refresh/session lifecycle only.
+
+DO NOT implement RBAC/permissions yet.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+5. Read:
+   docs/AUTH_002B_SCHEMA_BOUNDARY_HARDENING_REPORT.md
+6. Read:
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+7. Read:
+   docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+8. Inspect:
+   src/modules/auth/
+   src/modules/users/
+   src/modules/access-control/
+   src/config/
+   test/
+   package.json
+   bitbucket-pipelines.yml
+9. Inspect current Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Implement secure refresh-token/session lifecycle:
+
+- create auth session on successful login
+- issue refresh token
+- store ONLY hashed refresh token
+- rotate refresh token on refresh
+- revoke old token/session state
+- detect refresh token reuse where practical
+- logout current session
+- revoke current session
+- bind access token to session id if justified
+- preserve modular boundaries
+- add full unit/integration/e2e tests
+
+Target endpoints:
+
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+GET  /api/v1/auth/me
+
+Do NOT add roles/permissions to this flow.
+
+4. Module Ownership
+-------------------
+AuthModule owns:
+
+- auth_sessions table
+- refresh token generation
+- refresh token hashing
+- refresh token validation
+- refresh rotation
+- session revocation
+- logout
+- access token issuing
+
+UsersModule owns:
+
+- users table
+- account credential verification
+- account status
+
+AccessControlModule remains untouched in this prompt.
+
+AuthModule MUST NOT:
+- inject UserEntity repository
+- import UserEntity
+- manipulate users table directly
+
+Use UserAccountService public contract only.
+
+5. Existing auth_sessions Schema
+--------------------------------
+Current schema already contains:
+
+id
+user_id
+refresh_token_hash
+token_family_id
+expires_at
+revoked_at
+created_at
+
+Before coding:
+audit whether this schema is sufficient for secure rotation/reuse handling.
+
+Do NOT add columns unless a real security requirement requires them.
+
+If schema change is necessary:
+- justify it
+- create explicit migration
+- keep module ownership clear
+
+Preferred:
+reuse existing schema if possible.
+
+6. Refresh Token Format
+-----------------------
+Do NOT use refresh JWT by default unless there is a concrete reason.
+
+Preferred design:
+opaque cryptographically random refresh token.
+
+Generate using Node crypto:
+- secure random bytes
+- URL-safe encoding
+
+Example conceptual entropy:
+>= 256 bits
+
+Do not use:
+- Math.random
+- UUID alone
+- predictable identifiers
+
+7. Refresh Token Storage
+------------------------
+NEVER store raw refresh token.
+
+Store only a cryptographic digest.
+
+Preferred:
+HMAC-SHA-256 using a dedicated server secret
+
+or:
+SHA-256 if token entropy is sufficiently high.
+
+Evaluate tradeoff.
+
+Preferred stronger architecture:
+HMAC-SHA-256 with dedicated secret:
+JWT_REFRESH_HASH_SECRET
+
+Do not reuse JWT access signing secret unless strongly justified.
+
+8. Refresh Configuration
+------------------------
+Add validated config as needed.
+
+Likely variables:
+
+JWT_REFRESH_EXPIRES_IN=7d
+JWT_REFRESH_HASH_SECRET=<strong secret>
+
+If refresh token transport uses cookie:
+AUTH_REFRESH_COOKIE_NAME
+may be constant rather than env unless needed.
+
+Secret requirements:
+- minimum strong length
+- no weak placeholder
+- no committed real secret
+
+Update:
+- env validation
+- .env.example
+- .env.test.example
+- test setup
+- CI variables only if needed
+
+9. Refresh Token Transport Decision
+-----------------------------------
+AUTH #001 left this open.
+
+Frontend is ReactJS, separate repository.
+
+Choose transport carefully.
+
+Preferred browser-oriented design:
+HttpOnly cookie
+
+Security characteristics:
+- HttpOnly
+- Secure in production
+- SameSite appropriate
+- Path limited to auth refresh endpoints if practical
+
+But local HTTP development must still work.
+
+Evaluate:
+A. HttpOnly cookie
+B. response-body refresh token
+
+Preferred:
+HttpOnly cookie for browser clients if implementation remains practical.
+
+If cookie is chosen:
+- access token still returned in JSON
+- refresh token not exposed to JS
+- refresh endpoint reads cookie
+- logout clears cookie
+
+Document CORS/credential implications for future frontend.
+
+Do NOT implement CORS changes unless required now.
+
+10. Cookie Security
+-------------------
+If cookie transport chosen:
+
+Production:
+- httpOnly: true
+- secure: true
+- sameSite: 'strict' or 'lax' based on expected FE topology
+- bounded maxAge
+- scoped path if compatible
+
+Development:
+- secure may need false on localhost HTTP
+
+Do not use SameSite=None without Secure.
+
+Do not log cookie values.
+
+11. Login Flow Change
+---------------------
+Current #004 login issues access token only.
+
+Update login flow:
+
+1. verify credentials via UserAccountService
+2. create AuthSession
+3. generate refresh token
+4. hash refresh token
+5. persist hash + family id + expiry
+6. issue access JWT
+7. return access-token response
+8. deliver refresh token via chosen transport
+
+No role/permission lookup.
+
+12. Session ID in Access JWT
+----------------------------
+Now that sessions exist, revisit `sid`.
+
+Preferred:
+include:
+sid = auth session id
+
+JWT claims become:
+- sub
+- sid
+- iat
+- exp
+
+Benefits:
+- logout/current-session identity
+- future session-aware hardening
+- clear linkage
+
+Do not include:
+roles
+permissions
+refresh token
+email
+
+Document decision.
+
+13. Access Token Service
+------------------------
+Update AccessTokenService safely for optional/required `sid`.
+
+After #005, preferred:
+sid required for newly issued access tokens.
+
+Ensure JwtAuthGuard validates:
+- sub valid UUID
+- sid valid UUID
+
+Authenticated context may become:
+
+{
+  userId: string,
+  sessionId: string
+}
+
+14. Existing Access Tokens
+--------------------------
+During development there may be old tokens without sid.
+
+Do not support legacy tokens indefinitely.
+
+Preferred:
+after #005, tokens without sid are invalid.
+
+This is acceptable in local development.
+
+Document behavior.
+
+15. Auth Session Service
+------------------------
+Create an internal AuthModule service.
+
+Preferred name:
+AuthSessionService
+
+Responsibilities:
+- create session
+- issue refresh token
+- hash token
+- rotate token
+- validate token
+- revoke session
+- detect reuse
+- cleanup-aware lookup
+
+Repository<AuthSessionEntity> stays private.
+
+Do NOT export repository.
+
+16. Session Creation
+--------------------
+createSession(userId)
+
+Should:
+- generate session UUID through entity initializer
+- generate token family UUID
+- create raw refresh token
+- hash it
+- calculate expiresAt
+- persist session
+- return:
+  session id
+  raw refresh token
+  expiry
+
+Raw token exists only transiently.
+
+17. Refresh Request
+------------------
+Implement:
+
+POST /api/v1/auth/refresh
+
+Depending on transport:
+
+Cookie:
+- no body required
+- read refresh cookie
+
+Body:
+- DTO with refreshToken
+
+Preferred:
+cookie if chosen.
+
+Public route:
+refresh endpoint must NOT require current access JWT.
+
+The refresh token itself authenticates the session.
+
+18. Refresh Flow
+----------------
+Required flow:
+
+1. obtain raw refresh token
+2. compute hash
+3. locate matching active session
+4. reject if:
+   - missing
+   - not found
+   - expired
+   - revoked
+5. verify associated account still ACTIVE through UserAccountService public API
+6. rotate refresh token
+7. persist new hash
+8. issue new access JWT with same session id
+9. return new access token
+10. deliver new refresh token through chosen transport
+
+All failures:
+generic 401/Unauthorized response.
+
+19. Lookup Strategy
+-------------------
+Do not load all sessions and compare hashes.
+
+Preferred:
+deterministic keyed HMAC digest allows indexed equality lookup if schema supports uniqueness/index.
+
+Current schema may not have index on refresh_token_hash.
+
+Audit whether an index is justified.
+
+If yes:
+create migration with explicit index.
+
+Potential:
+IX_auth_sessions_refresh_token_hash
+
+Prefer unique index if one hash must identify exactly one active/recorded token.
+
+Document security/DB tradeoff.
+
+20. Reuse Detection
+-------------------
+AUTH #001 requires token family/reuse detection.
+
+Current single-row session model has:
+- token_family_id
+- refresh_token_hash
+- revoked_at
+
+A naive rotation overwrites old hash and loses evidence of previous token.
+
+Audit carefully.
+
+Possible strategies:
+
+A. One row per rotating refresh token
+- same token_family_id
+- previous row revoked on rotation
+- new row inserted
+- reuse of revoked token can be detected
+
+B. One session row and separate token history
+- requires new table
+
+C. Store previous token hash
+- requires new column, limited history
+
+Preferred modular/simple secure design:
+One auth_sessions row per refresh-token instance within a token family.
+
+If choosing this:
+- each refresh generates a NEW session row/id or token-instance row?
+But access-token `sid` semantics must remain clear.
+
+Alternative:
+treat `id` as token instance and `token_family_id` as logical browser session family.
+
+Then:
+- login: one active auth_sessions row
+- refresh: revoke current row + insert new row with same family id
+- new access JWT uses new row id as sid
+- old refresh token maps to revoked row
+- reuse of revoked token triggers family revocation
+
+This is a strong option.
+
+Audit and choose explicitly.
+
+21. Token Family Revocation
+---------------------------
+If reuse of an already-revoked refresh token is detected:
+
+Revoke all active rows with same token_family_id.
+
+Then reject request.
+
+This limits replay damage.
+
+No user-global logout required yet.
+
+22. Logout
+----------
+Implement:
+
+POST /api/v1/auth/logout
+
+Preferred:
+requires valid access JWT.
+
+Flow:
+- obtain authenticated sessionId
+- revoke that session/token family as appropriate
+- clear refresh cookie
+- return 204 or simple success
+
+Decide:
+logout current token instance
+or
+logout current family/session.
+
+Preferred:
+revoke the whole token family for current browser/login session.
+
+Do not revoke all user sessions unless explicitly requested.
+
+23. Refresh Cookie Clear
+------------------------
+If using cookie:
+logout must clear cookie with matching:
+- name
+- path
+- sameSite
+- secure semantics
+
+Use centralized cookie option helper.
+
+Do not duplicate options.
+
+24. /auth/me
+------------
+Keep existing:
+GET /api/v1/auth/me
+
+JwtAuthGuard now produces:
+userId + sessionId
+
+Response can remain:
+{id, email}
+
+No need to expose sessionId publicly unless useful.
+
+25. User Account Status on Refresh
+---------------------------------
+Refresh must check account state.
+
+Use UserAccountService safe method.
+
+If:
+INACTIVE
+LOCKED
+missing
+
+Then:
+- reject refresh
+- revoke family/session if appropriate
+
+Do not expose exact account status.
+
+26. Account Status on Access JWT Request
+----------------------------------------
+Do not add DB lookup on every protected access-token request yet.
+
+Access JWT remains short-lived.
+
+Document limitation for #007 hardening review.
+
+27. Expired Session
+-------------------
+Expired refresh session:
+- reject 401
+- may mark revoked/leave expired row unchanged
+- do not extend silently
+
+28. Session Cleanup
+-------------------
+Do NOT implement background cleanup scheduler in #005.
+
+Document future cleanup strategy:
+- periodic delete/archive of expired/revoked session rows
+
+No cron/queue now.
+
+29. Transaction Safety
+----------------------
+Rotation/reuse logic may require transactions.
+
+Use TypeORM transaction where necessary.
+
+Important:
+refresh rotation must avoid two concurrent refresh requests both succeeding.
+
+Audit concurrency behavior.
+
+Preferred:
+transaction + conditional update/locking strategy supported by MSSQL.
+
+At minimum, ensure only one rotation wins.
+
+Do not leave obvious refresh-race vulnerability.
+
+30. Concurrent Refresh Protection
+---------------------------------
+Test two refresh attempts using same token.
+
+Expected:
+- one succeeds
+- second fails
+- reuse triggers family revocation according to chosen design
+
+If exact concurrency test is brittle:
+test sequential replay at minimum, and document concurrent limitation.
+
+But attempt robust implementation.
+
+31. Session Repository Boundary
+-------------------------------
+AuthSession repository remains private to AuthModule.
+
+AuthModule public exports should NOT expose:
+- Repository<AuthSessionEntity>
+- AuthSessionEntity
+- AuthSessionService unless future modules truly need it
+
+JwtAuthGuard remains public.
+
+32. DTOs
+--------
+Refresh request DTO:
+depends on transport.
+
+Cookie transport:
+no refresh token DTO needed.
+
+Logout:
+no body required.
+
+Keep DTO surface minimal.
+
+33. HTTP Statuses
+-----------------
+Recommended:
+
+POST /auth/login -> 200
+POST /auth/refresh -> 200
+POST /auth/logout -> 204
+GET /auth/me -> 200
+
+Unauthorized -> 401 generic.
+
+Use existing global error contract.
+
+34. Swagger
+-----------
+Update Swagger docs.
+
+If refresh token cookie:
+document cookie-based refresh behavior clearly.
+
+Do not expose actual secret examples.
+
+35. Cookie Parser Dependency
+----------------------------
+If cookie parsing is needed, evaluate whether Express/Nest request cookies are available.
+
+If requiring:
+cookie-parser
+
+add only if necessary.
+
+Alternatively parse Cookie header through a small safe helper.
+
+Prefer well-maintained standard middleware if it simplifies correctness.
+
+Document dependency.
+
+36. CSRF Consideration
+----------------------
+If refresh token uses cookie:
+CSRF must be considered.
+
+Because:
+- refresh/logout mutate auth state
+- access token remains Authorization header
+
+Evaluate whether SameSite=Lax/Strict sufficiently mitigates current topology.
+
+Do NOT build a full CSRF subsystem unless needed.
+
+Document remaining assumption for #007 hardening.
+
+37. Refresh Token HMAC Secret
+-----------------------------
+If using keyed HMAC:
+
+JWT_REFRESH_HASH_SECRET
+
+must:
+- be separate from access JWT secret
+- min 32 chars/bytes
+- rejected weak placeholders
+- never logged
+
+Add tests.
+
+38. Duration Config
+-------------------
+Add:
+JWT_REFRESH_EXPIRES_IN
+
+Suggested default:
+7d
+
+Parse through existing duration utility.
+
+Avoid duplicate duration parser.
+
+39. Environment Updates
+-----------------------
+Update:
+- env.validation.ts
+- env.validation.spec.ts
+- auth config
+- .env.example
+- .env.test.example
+- test/setup-env.ts
+- DB test environment
+- Bitbucket DB-aware step vars if runtime config requires them
+
+Fast DB-free quality tests must still have test values available through test setup.
+
+Do not put real secrets in tracked files.
+
+40. Bitbucket CI
+----------------
+If DB-aware e2e now initializes AuthModule and requires refresh config:
+ensure CI Database Tests step has safe test-only variables.
+
+Use symbolic/configured values as appropriate.
+
+Do not introduce secured production secrets just for test constants unless necessary.
+
+If pipeline tracks test secret literals:
+they must be clearly test-only, not production credentials.
+
+Prefer repository secured variables for real runtime secrets.
+
+41. Session Entity Changes
+--------------------------
+If chosen rotation model requires no new columns:
+keep entity unchanged.
+
+If adding indexes only:
+use migration.
+
+If schema changes:
+must create explicit migration and test fresh DB.
+
+Never use synchronize.
+
+42. Access JWT Validation
+-------------------------
+Update guard tests:
+- sid required
+- malformed sid -> 401
+- token without sid -> 401
+- valid sub+sid -> accepted
+
+No DB session lookup per request unless explicitly justified.
+
+43. Unit Tests
+--------------
+At minimum:
+
+Refresh token generator:
+- sufficient entropy / shape
+- unique tokens
+
+Refresh token hash:
+- deterministic same token
+- different tokens produce different hash
+- secret required
+
+AuthSessionService:
+- creates session
+- stores hash, never raw token
+- expires correctly
+- refresh rotates
+- revoked token rejected
+- expired token rejected
+- replay/reuse behavior
+- family revocation behavior
+- logout revocation
+
+AuthService:
+- login creates session
+- login access JWT includes sid
+- refresh returns new access token
+- generic failures
+- inactive/locked user rejected on refresh
+
+44. Integration Tests
+---------------------
+Against `catechism_api_test`:
+
+A. Login:
+- session row created
+- stored hash != raw refresh token
+- family id populated
+- access token has sub + sid
+
+B. Refresh:
+- succeeds once
+- rotates token
+- old token row revoked
+- new token active
+- family id retained
+
+C. Replay:
+- old refresh token replay -> 401
+- family revoked
+- latest refresh token then rejected
+
+D. Expired:
+- rejected
+
+E. Revoked:
+- rejected
+
+F. Logout:
+- current family revoked
+- subsequent refresh rejected
+
+G. Account inactive/locked before refresh:
+- refresh rejected
+
+45. DB-Aware E2E
+----------------
+Test actual HTTP flow.
+
+If cookie transport:
+use supertest agent or explicit cookie header handling.
+
+Required sequence:
+
+1. create test user
+2. POST /auth/login
+3. capture access token + refresh cookie
+4. GET /auth/me -> success
+5. POST /auth/refresh -> new access token + rotated cookie
+6. old refresh cookie replay -> 401
+7. verify family revocation behavior
+8. fresh login
+9. logout
+10. refresh after logout -> 401
+
+Test generic errors.
+
+46. No Raw Refresh Leakage
+--------------------------
+Search:
+- response bodies
+- logs
+- DB
+- test snapshots
+
+If cookie transport:
+raw refresh token may appear only in Set-Cookie header to client and transient test variable.
+
+Never log it.
+
+47. Module Boundary Audit
+-------------------------
+Expected final boundary:
+
+UsersModule:
+- exports UserAccountService only
+
+AuthModule:
+- exports JwtAuthGuard only (unless a small public auth contract is justified)
+- owns session repository/services
+- imports UsersModule
+
+AccessControlModule:
+- unchanged
+
+No TypeOrmModule exports.
+No entity exports.
+No repository exports.
+No cycle.
+
+48. Microservice Extraction Review
+----------------------------------
+Document future Auth service extraction:
+
+Owned:
+- auth_sessions
+- login
+- refresh
+- logout
+- token issuance
+
+External dependency:
+- User credential/account-state API
+
+No direct users persistence.
+
+49. Security Review
+-------------------
+Explicitly audit:
+- refresh tokens random and high entropy
+- raw refresh token never persisted
+- hash secret separate from JWT secret
+- replay detection
+- family revocation
+- expiration
+- logout
+- generic 401
+- cookie flags
+- no IP/user-agent collection
+- no roles/permissions
+- no production secret committed
+
+50. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci or npm install as needed
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+If migration added:
+- reset test DB
+- migrate from zero
+- rerun migration show
+
+Docker:
+production build must PASS.
+
+51. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(auth): add refresh session and logout flow"
+
+Cursor must NOT execute it.
+
+52. Required Report
+-------------------
+Create:
+
+docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From AUTH #004
+
+3. Architecture / Module Boundary Audit
+
+4. Refresh Token Transport Decision
+
+5. Cookie Security Decision
+
+6. Dependencies Added
+
+7. Configuration Added
+
+8. Files Created
+
+9. Files Modified
+
+10. Session Data Model Assessment
+
+11. Migration Changes
+If none, say none.
+
+12. Refresh Token Generation
+
+13. Refresh Token Hash Strategy
+
+14. Session Creation Flow
+
+15. Login Flow Changes
+
+16. Access JWT sid Decision
+
+17. Refresh Flow
+
+18. Rotation Model
+
+19. Token Family / Reuse Detection
+
+20. Concurrent Refresh Handling
+
+21. Logout / Revocation Flow
+
+22. Account Status on Refresh
+
+23. Cookie / CSRF Considerations
+
+24. Swagger Changes
+
+25. Repository Boundary
+
+26. Unit Tests
+
+27. Integration Tests
+
+28. DB-Aware HTTP E2E Flow
+
+29. Existing Test Regression
+
+30. CI Compatibility
+
+31. Security / Secret Review
+
+32. Module Boundary Audit After Implementation
+
+33. Future Microservice Extraction Review
+
+34. Commands Executed
+
+35. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- DB integration
+- DB auth e2e
+- quality:full
+- production Docker build
+- login creates session
+- refresh rotation
+- replay detection
+- family revocation
+- logout revocation
+- no raw refresh token persistence
+- JWT sid validation
+- no persistence export
+- no RBAC implementation
+
+36. Known Issues / Deferred Items
+Include:
+- cleanup of old session rows
+- rate limiting
+- per-request account/session revocation
+- CSRF if applicable
+- RBAC
+
+37. Out-of-Scope Confirmation
+
+38. AUTH #006 Readiness
+
+Recommend:
+AUTH/RBAC #006 — Role + Permission + RBAC Guards
+
+It should implement:
+- AccessControlService
+- role/permission assignment services
+- effective permission resolution
+- @RequirePermissions()
+- PermissionGuard
+- protected endpoint authorization tests
+- no sample seed data yet (#008)
+
+39. Commit Message Recommendation
+
+Print exactly ONE:
+
+git commit -m "feat(auth): add refresh session and logout flow"
+
+Cursor MUST NOT execute it.
+
+53. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #005 status
+- refresh/session PASS/FAIL
+- replay/logout PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(auth): add refresh session and logout flow"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to AUTH #006 automatically.

@@ -1,0 +1,1067 @@
+CURSOR PROMPT — AUTH/RBAC #009/9
+FINAL AUTH/RBAC AUDIT + MODULE BOUNDARY REVIEW
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit
+- AUTH/RBAC #002 — Schema + Entities + Migrations
+- AUTH/RBAC #002B — Schema Boundary Hardening
+- AUTH/RBAC #003 — User Account + Password Foundation
+- AUTH/RBAC #004 — Login + Access JWT
+- AUTH/RBAC #005 — Refresh Token + Session + Logout
+- AUTH/RBAC #006 — Role + Permission + RBAC Guards
+- AUTH/RBAC #007 — Security Hardening + Integration Audit
+- AUTH/RBAC #008 — Sample Seed Data + Postman Verification
+
+Current:
+- AUTH/RBAC #009 / 9 — FINAL AUDIT + MODULE BOUNDARY REVIEW
+
+This is the FINAL prompt for this phase.
+
+Do NOT begin the next business module.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read ALL AUTH reports:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+   docs/AUTH_002_AUTH_FOUNDATION_SCHEMA_REPORT.md
+   docs/AUTH_002B_SCHEMA_BOUNDARY_HARDENING_REPORT.md
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+   docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+   docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+   docs/AUTH_006_ROLE_PERMISSION_RBAC_REPORT.md
+   docs/AUTH_007_SECURITY_HARDENING_INTEGRATION_REPORT.md
+   docs/AUTH_008_SAMPLE_SEED_AND_POSTMAN_REPORT.md
+5. Inspect:
+   src/modules/users/
+   src/modules/auth/
+   src/modules/access-control/
+   src/database/migrations/
+   src/database/seeds/
+   src/dev/
+   src/config/
+   src/bootstrap/
+   test/
+   scripts/
+   package.json
+   README.md
+   bitbucket-pipelines.yml
+6. Inspect Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Perform an independent final audit of the ENTIRE Auth/User/Role/Permission phase.
+
+Review:
+
+- module boundaries
+- dependency direction
+- data ownership
+- schema/migrations
+- UUID strategy
+- UserModule service contracts
+- password hashing
+- login
+- access JWT
+- refresh sessions
+- replay protection
+- logout/revocation
+- RBAC services
+- PermissionGuard
+- security hardening
+- rate limiting
+- logging/secret safety
+- dev-only seed workflow
+- Postman verification assets
+- test coverage
+- Docker/CI compatibility
+- future microservice extraction readiness
+
+Then:
+
+- fix only genuine issues
+- remove accidental technical debt
+- re-run complete validation
+- declare phase COMPLETE or NOT COMPLETE
+
+4. Audit Severity
+-----------------
+Classify findings as:
+
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+- INFO / NO ACTION
+
+For each:
+- finding
+- impact
+- fix/defer decision
+- evidence/test
+
+Do not hide deferred issues.
+
+5. Completion Standard
+----------------------
+AUTH/RBAC phase may be declared COMPLETE only if:
+
+- no unresolved BLOCKER
+- no unresolved HIGH
+- modular boundaries are clean
+- auth security flow works
+- RBAC allow/deny works
+- refresh rotation/replay/logout works
+- local seed workflow is safe
+- no production bootstrap credentials
+- full quality/database/e2e gates pass
+- production Docker build passes
+- no accidental dev/test endpoint is exposed in production
+- future extraction boundaries are documented
+
+6. Module Ownership Audit
+-------------------------
+Reconfirm exact ownership:
+
+UsersModule owns:
+- users
+- password hash
+- account lifecycle
+- credential verification
+
+AuthModule owns:
+- login
+- access tokens
+- auth_sessions
+- refresh
+- logout
+- token verification guard
+
+AccessControlModule owns:
+- roles
+- permissions
+- user_roles
+- role_permissions
+- permission evaluation
+
+No module may directly mutate another module's tables.
+
+7. Dependency Direction Audit
+-----------------------------
+Expected:
+
+AuthModule -> UsersModule
+AuthModule may consume auth config/JWT infrastructure
+
+AccessControlModule -> no UsersModule dependency unless explicitly justified
+
+Feature modules -> AuthModule / AccessControlModule public contracts later
+
+UsersModule MUST NOT depend on AuthModule.
+
+No cycles.
+
+No `forwardRef()` unless extraordinary and documented.
+
+8. Public Export Audit
+----------------------
+Preferred final public exports:
+
+UsersModule:
+- UserAccountService
+
+AuthModule:
+- JwtAuthGuard
+- only framework export truly required for guard DI, if justified
+
+AccessControlModule:
+- AccessControlService
+- PermissionGuard
+
+Audit whether `JwtModule` export is actually necessary.
+
+AUTH #007 left:
+AuthModule exports:
+- JwtAuthGuard
+- JwtModule
+
+Verify if JwtModule can remain private while JwtAuthGuard resolves correctly when AuthModule itself is imported.
+
+If JwtModule export is unnecessary:
+remove it.
+
+Goal:
+minimize public surface.
+
+No exports of:
+- TypeOrmModule
+- entities
+- repositories
+- PasswordHashService
+- AccessTokenService
+- AuthSessionService
+- RefreshTokenService
+
+9. Cross-Module ORM Audit
+-------------------------
+Search for:
+- UserEntity imports outside UsersModule persistence/tests
+- AuthSessionEntity imports outside AuthModule persistence/tests
+- RoleEntity/PermissionEntity imports outside AccessControlModule persistence/tests
+
+Test files may inspect metadata when justified.
+
+Production application code should not cross-import ORM entities across bounded contexts.
+
+10. UUID Strategy Audit
+-----------------------
+Confirm:
+- application-generated UUID v4
+- no DB UUID defaults remain
+- no NEWID()
+- no NEWSEQUENTIALID()
+in final schema for Auth/RBAC PKs
+
+Migration history must remain safe.
+
+Do not rewrite committed migrations.
+
+11. Migration Chain Audit
+-------------------------
+Review:
+- create auth foundation
+- remove UUID DB defaults
+- refresh hash index
+
+Validate:
+- fresh DB from zero
+- second migration run no pending
+- down methods safe/reversible
+- no `synchronize=true`
+
+Run migration show.
+
+12. User Account Security Audit
+-------------------------------
+Review:
+- email normalize trim/lowercase
+- global unique email phase-1
+- password min/max policy
+- Argon2id
+- no plaintext
+- dummy verify for unknown account
+- generic invalid credential response
+- ACTIVE / INACTIVE / LOCKED behavior
+- rehash on successful login
+- safe snapshots only
+
+No UserEntity as public contract.
+
+13. Duplicate Email Audit
+-------------------------
+Verify:
+- DB uniqueness
+- duplicate race mapped cleanly
+- raw SQL error not exposed through HTTP
+
+14. JWT Config Audit
+--------------------
+Verify:
+- JWT_ACCESS_SECRET required
+- min length
+- weak placeholders rejected
+- access TTL validated
+- HS256 explicitly verified
+- no roles/permissions in JWT
+- token contains:
+  sub
+  sid
+  iat
+  exp
+
+No email/profile data unless justified.
+
+15. JWT Guard Audit
+-------------------
+Verify:
+- Bearer Authorization only
+- missing token -> 401
+- malformed token -> 401
+- wrong signature -> 401
+- expired -> 401
+- invalid sub -> 401
+- invalid sid -> 401
+- no algorithm confusion
+
+16. Session / Refresh Architecture Audit
+---------------------------------------
+Verify:
+
+- opaque random 256-bit+ token
+- raw refresh token never DB persisted
+- HMAC-SHA-256 hash
+- separate hash secret
+- one row per refresh-token instance
+- token family
+- unique hash index
+- rotation
+- revoked replay detection
+- family revocation
+- logout family revocation
+
+17. Refresh Concurrency Audit
+-----------------------------
+Re-check pessimistic lock/transaction behavior.
+
+Ensure two uses of same refresh token cannot both create independent valid chains.
+
+At minimum:
+- test sequential replay
+- inspect transaction semantics carefully
+
+If a real concurrency bug is found:
+fix it.
+
+18. Access JWT Revocation Tradeoff
+----------------------------------
+AUTH #007 accepted:
+access JWT may remain valid until expiry after logout/session revocation.
+
+Final audit must explicitly decide whether this remains acceptable.
+
+Consider:
+- access TTL ~15 min
+- admin/catechist roles
+- DB hit cost if checking session every request
+- future scale/cache
+
+If no new evidence:
+do not add per-request session DB lookup just for perfection.
+
+Document accepted residual risk.
+
+19. Cookie Security Audit
+-------------------------
+Verify:
+- HttpOnly
+- Secure in production
+- SameSite
+- Path
+- maxAge
+- clear cookie uses matching options
+- no Domain unless needed
+- refresh token absent from JSON
+
+20. CSRF / CORS Final Review
+----------------------------
+Do not implement a full CSRF subsystem without deployment topology.
+
+But final report must state:
+- current mitigation
+- frontend `credentials: include`
+- no wildcard origin + credentials
+- future CSRF/origin hardening trigger
+
+No insecure CORS change.
+
+21. Rate Limiting Audit
+-----------------------
+Verify:
+- login throttle
+- refresh throttle
+- config validation
+- test values
+- 429 test
+- no sensitive rate-limit keys/logs
+
+Document:
+in-memory/IP-based limiter is not distributed across replicas.
+
+No Redis introduced now.
+
+22. Auth Response Cache Audit
+-----------------------------
+Verify:
+login + refresh:
+- Cache-Control: no-store
+- Pragma: no-cache if currently implemented
+
+No access token caching.
+
+23. Logging / Redaction Audit
+-----------------------------
+Search for:
+- Authorization
+- Cookie
+- Set-Cookie
+- password
+- passwordHash
+- refreshToken
+- accessToken
+- JWT_ACCESS_SECRET
+- JWT_REFRESH_HASH_SECRET
+
+Confirm logger redaction covers:
+- request headers
+- sensitive fields
+
+No secret/token logs.
+
+24. RBAC Model Audit
+--------------------
+Reconfirm:
+User -> Roles -> Permissions
+
+No direct user-permission grants.
+
+No role hierarchy.
+
+No hard-coded SUPER_ADMIN bypass.
+
+Permissions stay data-driven.
+
+25. RBAC Service Audit
+----------------------
+Review:
+- createRole
+- createPermission
+- assignment/remove idempotency
+- effective permission dedup
+- one joined query
+- no N+1
+- stable code normalization
+- duplicate error mapping
+
+26. PermissionGuard Audit
+-------------------------
+Verify:
+- Auth first
+- no auth context -> 401
+- missing permission -> 403
+- ALL semantics
+- no metadata -> allow authenticated route
+- permission changes reflected immediately
+- role removal reflected immediately
+- no JWT permission trust
+
+27. Tenant Scope Audit
+----------------------
+Current RBAC is global.
+
+Explicitly confirm:
+- no parish_id
+- no class scope
+
+This is accepted phase boundary.
+
+Future domain modules may require scoped authorization redesign.
+
+Document as future design trigger, not bug.
+
+28. Seed Workflow Audit
+-----------------------
+Review:
+- manual only
+- never app startup
+- never migration
+- never CI default
+- production rejected
+- DB allow-list
+- idempotent
+- strong local-only credentials
+- no auth_sessions seed
+- UserAccountService used
+- AccessControlService used
+- no repository bypass
+
+29. Local Seed Password Audit
+-----------------------------
+Current sample password may exist in gitignored docs / seed constants.
+
+Verify:
+- clearly local/dev only
+- not reused for production
+- not in tracked README if avoidable
+- no default production account
+
+No production bootstrap.
+
+30. Dev-Only RBAC Endpoint Audit — IMPORTANT
+--------------------------------------------
+AUTH #008 added:
+
+GET /api/v1/dev/rbac/read
+GET /api/v1/dev/rbac/manage
+
+registered when NODE_ENV !== production.
+
+This must be reviewed carefully.
+
+Question:
+Should these endpoints remain in application source?
+
+Preferred final architecture:
+avoid carrying test/demo API endpoints in normal application runtime if not necessary.
+
+Evaluate options:
+
+A. Keep dev-only endpoints
+Pros:
+- useful Postman demonstration
+Cons:
+- extra runtime surface
+- future accidental environment misconfiguration risk
+
+B. Move to dedicated test/demo module invoked only by explicit local demo mode
+e.g. AUTH_RBAC_DEMO_ENABLED=true and NODE_ENV != production
+
+C. Remove from normal app and rely on test harness only
+But then Postman cannot manually demonstrate RBAC.
+
+Preferred:
+If retaining manual Postman RBAC demo is valuable, require an EXPLICIT opt-in flag in addition to non-production:
+
+AUTH_RBAC_DEMO_ENABLED=true
+
+Rules:
+- default false
+- production always false/rejected
+- module registered only when:
+  NODE_ENV !== production
+  AND AUTH_RBAC_DEMO_ENABLED === true
+
+This is safer than automatically enabling on every non-production runtime.
+
+Strongly consider implementing this hardening.
+
+31. Demo Endpoint Config
+------------------------
+If explicit demo flag is implemented:
+
+Add env validation:
+AUTH_RBAC_DEMO_ENABLED=false default
+
+Do not require it in production.
+
+README local demo instructions:
+set true only while testing Postman.
+
+Test:
+- false -> endpoint not registered
+- true in dev/test -> available
+- production + true -> either forced disabled or validation rejects; choose safe behavior
+
+Preferred:
+production must never register demo module.
+
+32. Postman Collection Audit
+----------------------------
+Review collection JSON:
+
+- valid schema
+- correct URLs
+- accessToken update
+- cookie jar refresh
+- logout
+- negative cases
+- RBAC allow/deny
+- no live JWT
+- no JWT secrets
+- no refresh hash secret
+
+If demo flag required:
+document that environment startup requirement.
+
+33. Postman Environment Audit
+-----------------------------
+No:
+- JWT secrets
+- refresh secrets
+- live token
+
+Local sample account credentials are acceptable if clearly dev-only.
+
+34. README Audit
+----------------
+README should accurately document:
+
+- migrations
+- seed
+- optional demo endpoint flag if used
+- app startup
+- Postman import
+- no production usage
+
+Do not expose production-like credentials.
+
+35. Test Architecture Audit
+---------------------------
+Review all test files.
+
+Ensure:
+- DB-free e2e remains DB-free
+- DB-aware auth/RBAC tests use catechism_api_test
+- no dev DB mutation from tests
+- no test order coupling
+- seed tests isolated
+- no giant brittle exact table-count assumptions
+
+36. Full Auth/RBAC E2E Matrix
+-----------------------------
+Final audit must verify:
+
+Account:
+- ACTIVE valid
+- INACTIVE denied
+- LOCKED denied
+
+Login:
+- success
+- wrong password
+- unknown email
+- malformed request
+- rate limit
+
+JWT:
+- valid
+- missing
+- malformed
+- expired
+- wrong signature
+
+Refresh:
+- success
+- rotation
+- replay
+- family revocation
+- expired/revoked
+- inactive account
+
+Logout:
+- 204
+- refresh afterward 401
+
+RBAC:
+- no role -> 403
+- allow
+- deny
+- permission add same JWT -> allow
+- permission remove same JWT -> deny
+- role remove same JWT -> deny
+- multiple roles union/dedup
+
+Seed:
+- first run
+- second run
+- production reject
+- DB safety
+
+37. Docker Validation — REQUIRED
+--------------------------------
+AUTH #008 did NOT re-run production Docker build.
+
+This final prompt MUST run:
+
+docker build --target production -t catechism-api:auth-final .
+
+Use WSL Docker equivalent if required.
+
+If local Docker is unavailable:
+make a best effort using existing WSL setup.
+
+Do NOT declare phase COMPLETE unless production Docker build is validated, unless there is an external environment failure clearly unrelated to source and previous build evidence is strong.
+
+Prefer actual PASS.
+
+38. CI Compatibility Audit
+--------------------------
+Review Bitbucket pipeline environment variables required by Auth.
+
+Ensure DB step has all required test config:
+- JWT access
+- refresh hash
+- throttle config if required
+
+Do not add seeds to CI.
+
+No deployment.
+
+39. Dependency Audit
+--------------------
+Review runtime deps added:
+
+- argon2
+- @nestjs/jwt
+- cookie-parser
+- @nestjs/throttler
+
+Confirm:
+- correct dependency/devDependency placement
+- no redundant auth packages
+- npm audit 0 moderate+
+
+40. Schema / Index Audit
+------------------------
+Review MSSQL indexes:
+- users email unique
+- roles code unique
+- permissions code unique
+- user_roles pair
+- role_permissions pair
+- auth_sessions user_id
+- token_family_id
+- refresh_token_hash unique
+
+No speculative indexes.
+
+41. Performance Audit
+---------------------
+Known:
+PermissionGuard queries DB each protected request.
+
+Accept for current scale.
+
+Document future cache boundary:
+AccessControlService internal cache/Redis later.
+
+Do not add cache now.
+
+42. Future Microservice Extraction Review
+-----------------------------------------
+For each module document:
+
+Users / Identity service:
+- owned data
+- public operations
+- dependencies
+
+Auth service:
+- owned sessions
+- token operations
+- Users API dependency
+
+Policy/RBAC service:
+- roles/permissions/assignments
+- userId scalar references
+
+Identify what changes when extracting:
+- SQL FK removal
+- RPC/HTTP clients
+- transaction boundaries
+
+No ORM entity should cross service boundary.
+
+43. Production Safety Audit
+---------------------------
+Search for accidental:
+- sample password
+- local test email
+- demo endpoints
+- seed invocation
+- `NODE_ENV !== production` only logic
+- debug logs
+- test secrets
+
+Ensure no sample/demo functionality becomes enabled by default in production.
+
+44. Allowed Fixes
+-----------------
+Allowed:
+- module export cleanup
+- dev demo endpoint gating/removal
+- config validation
+- security bug fixes
+- test hardening
+- README/Postman corrections
+- logging redaction gaps
+- migration/index correction if truly necessary
+
+Not allowed:
+- next domain modules
+- tenant/parish model
+- admin CRUD
+- user registration
+- password reset
+- MFA
+- OAuth
+- Redis
+- deployment
+
+45. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Seed:
+- test seed first run
+- second idempotent run
+- production guard
+- DB allow-list
+
+Postman:
+- parse collection
+- parse environment
+- validate no secrets/live tokens
+
+Docker:
+- production target build REQUIRED
+
+46. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked code/config changes exist:
+print exactly ONE recommended command:
+
+git commit -m "fix(auth): finalize auth RBAC boundaries"
+
+Cursor MUST NOT execute it.
+
+If no tracked changes:
+state:
+No code/config changes; no commit message required.
+
+47. Required Report
+-------------------
+Create:
+
+docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Before Final Audit
+
+3. Audit Method
+
+4. Findings Summary
+Table:
+- ID
+- Severity
+- Area
+- Finding
+- Action
+
+5. Module Ownership Audit
+
+6. Dependency Direction Audit
+
+7. Public Export Audit
+
+8. Cross-Module ORM Audit
+
+9. UUID / Migration Audit
+
+10. User Account Security Audit
+
+11. Password / Argon2 Audit
+
+12. JWT Config Audit
+
+13. JwtAuthGuard Audit
+
+14. Refresh / Session Audit
+
+15. Replay / Concurrency Audit
+
+16. Access JWT Revocation Tradeoff
+
+17. Cookie Security Audit
+
+18. CSRF / CORS Review
+
+19. Rate Limiting Audit
+
+20. Cache-Control Audit
+
+21. Logging / Redaction Audit
+
+22. RBAC Model Audit
+
+23. AccessControlService Audit
+
+24. PermissionGuard Audit
+
+25. Tenant Scope Deferred Decision
+
+26. Seed Workflow Audit
+
+27. Demo Endpoint Audit
+Explicitly state:
+- kept
+- gated by explicit flag
+- moved
+- removed
+and why.
+
+28. Postman Collection Audit
+
+29. README Audit
+
+30. Dependency Audit
+
+31. Schema / Index Audit
+
+32. Test Architecture Audit
+
+33. Full Auth/RBAC E2E Matrix
+Table with PASS/FAIL for all critical flows.
+
+34. Docker Production Build
+
+35. CI Compatibility
+
+36. Files Created
+
+37. Files Modified
+
+38. Changes Implemented
+
+39. Security Review
+
+40. Module Boundary Matrix
+For Users/Auth/AccessControl:
+- owned tables
+- exported contracts
+- inbound dependencies
+- outbound dependencies
+
+41. Future Microservice Extraction Map
+
+42. Remaining Risks
+Severity + accepted/deferred.
+
+43. Out-of-Scope Confirmation
+
+44. Commands Executed
+
+45. Validation Results
+Explicit PASS/FAIL:
+- npm ci
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB auth/rbac e2e
+- quality:full
+- seed first run
+- seed second run
+- production seed rejection
+- Postman JSON
+- Docker production build
+- module export boundaries
+- no cross-module repositories
+- no raw refresh persistence
+- login
+- refresh
+- replay
+- logout
+- RBAC allow
+- RBAC deny
+- permission removal
+- role removal
+- no production demo exposure
+
+46. Completion Decision
+
+State exactly ONE:
+
+A.
+AUTH / USER / ROLE / PERMISSION PHASE COMPLETE
+
+or
+
+B.
+AUTH / USER / ROLE / PERMISSION PHASE NOT COMPLETE
+
+If B:
+list blockers.
+
+Do NOT declare COMPLETE with unresolved BLOCKER/HIGH.
+
+47. Next Phase Recommendation
+
+ONLY if COMPLETE:
+
+Recommend the next roadmap phase based on master plan.
+
+Do NOT implement it.
+
+Expected likely next major backend phase:
+Parish / Academic Year / Catechism Level foundation
+or whichever master roadmap sequence specifies.
+
+State only recommendation.
+
+48. Commit Message Recommendation
+
+If tracked changes exist:
+print exactly ONE:
+
+git commit -m "fix(auth): finalize auth RBAC boundaries"
+
+Cursor MUST NOT execute it.
+
+48. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #009 status
+- phase COMPLETE / NOT COMPLETE
+- unresolved BLOCKER/HIGH count
+- Docker validation PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "fix(auth): finalize auth RBAC boundaries"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to next phase automatically.

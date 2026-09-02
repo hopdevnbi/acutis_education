@@ -1,0 +1,946 @@
+CURSOR PROMPT — PARISH/ACADEMIC STRUCTURE #005/5
+FINAL INTEGRATION HARDENING + DOMAIN SEED + API CONTRACT AUDIT
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- PARISH #001 Domain Audit
+- PARISH #002 Schema + Entities + Migrations
+- PARISH #003 Parish Service + API + RBAC
+- PARISH #004 Academic Year + Catechism Level Services + API + RBAC
+
+Current:
+- PARISH/ACADEMIC #005 / 5 — FINAL AUDIT / HARDENING
+
+This is the FINAL prompt of this backend phase.
+
+Do NOT start the next backend business module automatically.
+
+Frontend architecture:
+- ReactJS is a separate independent repository/source
+- FE calls BE over HTTP API only
+- FE/BE have independent Docker and CI/CD
+- do not modify FE in this prompt
+
+2. Mandatory Reading
+--------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md completely.
+2. Read AGENTS.md completely.
+3. Read all `.cursor/rules/*.mdc`.
+4. Read:
+   docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+   docs/PARISH_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/PARISH_003_PARISH_SERVICE_API_RBAC_REPORT.md
+   docs/PARISH_004_ACADEMIC_STRUCTURE_SERVICES_API_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+5. Inspect:
+   src/modules/parish/
+   src/modules/academic-structure/
+   src/database/migrations/
+   src/database/seeds/
+   src/modules/access-control/
+   src/modules/auth/
+   test/
+   package.json
+   README.md
+   bitbucket-pipelines.yml
+6. Inspect Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Perform an independent final audit of the complete:
+
+- ParishModule
+- AcademicStructureModule
+- Parish HTTP API
+- Academic Year API
+- Catechism Level API
+- RBAC integration
+- local/dev permission seed integration
+- persistence constraints
+- module boundaries
+- FE-facing API contracts
+
+Then:
+
+- fix genuine issues only
+- add safe local/dev domain sample seed if useful
+- add/update Postman/cURL verification if useful
+- run COMPLETE quality/database/Docker validation
+- declare phase COMPLETE or NOT COMPLETE
+
+4. Completion Standard
+----------------------
+The phase may be declared COMPLETE only if:
+
+- unresolved BLOCKER = 0
+- unresolved HIGH = 0
+- module ownership/boundaries clean
+- migrations pass from fresh DB
+- Parish API passes
+- Academic Year API passes
+- Catechism Level API passes
+- RBAC allow/deny passes
+- one ACTIVE academic year invariant is adequately safe
+- date serialization contract is FE-safe
+- local/dev seeds are production-safe
+- full `quality:full` passes in one clean run
+- production Docker build passes
+
+5. Audit Severity
+-----------------
+Classify findings:
+
+BLOCKER
+HIGH
+MEDIUM
+LOW
+INFO / NO ACTION
+
+For every finding:
+- area
+- observed behavior
+- impact
+- action/defer decision
+- verification
+
+6. Module Ownership Audit
+-------------------------
+Expected:
+
+ParishModule owns:
+- parishes
+
+AcademicStructureModule owns:
+- academic_years
+- catechism_levels
+
+No production application module may mutate another module's tables directly.
+
+7. Public Export Audit
+----------------------
+Expected:
+
+ParishModule:
+- ParishService
+
+AcademicStructureModule:
+- AcademicYearService
+- CatechismLevelService
+
+No:
+- TypeOrmModule exports
+- entity exports
+- repository exports
+
+Auth and AccessControl dependencies are delivery/security wiring only.
+
+8. Cross-Module Persistence Audit
+---------------------------------
+Confirm:
+
+AcademicStructure production code:
+- does not import ParishEntity
+- does not inject Parish repository
+- uses ParishService public contract
+
+Entities:
+- scalar parishId
+- no cross-module @ManyToOne
+
+No ORM entities cross public boundaries.
+
+9. Parish API Final Audit
+-------------------------
+Review:
+
+POST /api/v1/parishes
+GET /api/v1/parishes
+GET /api/v1/parishes/:id
+PATCH /api/v1/parishes/:id
+PATCH /api/v1/parishes/:id/status
+
+Verify:
+- validation
+- pagination
+- search
+- sort whitelist
+- 401
+- 403
+- 404
+- 409
+- Vietnamese names
+- no DELETE
+
+10. Academic Year API Final Audit
+---------------------------------
+Review:
+
+POST /api/v1/parishes/:parishId/academic-years
+GET /api/v1/parishes/:parishId/academic-years
+GET /api/v1/academic-years/:id
+PATCH /api/v1/academic-years/:id
+PATCH /api/v1/academic-years/:id/status
+
+Verify:
+- create PLANNED
+- start < end
+- status lifecycle
+- CLOSED immutability
+- one ACTIVE per parish
+- duplicate handling
+- inactive parish behavior
+- read/list behavior
+
+11. Catechism Level API Final Audit
+-----------------------------------
+Review:
+
+POST /api/v1/parishes/:parishId/catechism-levels
+GET /api/v1/parishes/:parishId/catechism-levels
+GET /api/v1/catechism-levels/:id
+PATCH /api/v1/catechism-levels/:id
+PATCH /api/v1/catechism-levels/:id/status
+
+Verify:
+- code normalization
+- Unicode name
+- sortOrder >= 0
+- deterministic ordering
+- duplicate per parish
+- status rules
+- inactive parish behavior
+
+12. One ACTIVE Academic Year — CRITICAL
+---------------------------------------
+PARISH #004 reports:
+
+"At most one ACTIVE academic year per parish"
+implemented with:
+transaction + pessimistic lock
+
+Independently inspect the real implementation.
+
+Do not trust report wording alone.
+
+Verify:
+- what row/table is locked
+- whether two PLANNED rows for same parish can concurrently activate
+- whether the lock serializes competing activation attempts for the same parish
+- whether transaction isolation is sufficient in MSSQL
+- whether the existence check is inside transaction
+- whether save/update is inside same transaction
+
+If race remains possible:
+classify severity.
+
+Preferred:
+fix robustly now.
+
+Possible robust approaches:
+
+A. transaction + lock on a stable parish-keyed row
+B. database filtered unique index for ACTIVE status
+C. SERIALIZABLE transaction/range locking
+
+Choose the simplest reliable MSSQL-compatible approach.
+
+If a new migration is needed:
+add a NEW migration only.
+Do not edit committed migration #002.
+
+13. Concurrent Activation Test
+------------------------------
+If technically practical, add a DB integration test that attempts two concurrent activations for the same parish.
+
+Expected:
+- exactly one succeeds
+- one fails with domain conflict
+- DB ends with exactly one ACTIVE year
+
+Avoid flaky timing sleeps.
+
+If true concurrency test is not reliable in test environment:
+perform strongest deterministic transaction/invariant test available and document limitation.
+
+14. Date Serialization — CRITICAL FE Contract
+---------------------------------------------
+PARISH #004 notes possible TypeORM/JS DATE timezone behavior.
+
+Audit actual HTTP JSON output.
+
+For:
+startDate
+endDate
+
+FE contract must be exactly:
+YYYY-MM-DD
+
+Example:
+"2026-09-01"
+
+Do NOT expose:
+ISO datetime with timezone
+"2026-08-31T17:00:00.000Z"
+or values that can shift dates by locale.
+
+If current API can produce JS Date objects:
+fix mapper/snapshot handling so DATE stays date-only string.
+
+Add e2e assertion on exact response values.
+
+This is important before frontend work starts.
+
+15. Date Input Contract
+-----------------------
+Confirm requests accept only valid ISO date:
+YYYY-MM-DD
+
+Reject:
+- datetime strings
+- impossible dates
+- malformed values
+
+Use deterministic date-only parser.
+
+16. Parish Inactive Behavior Matrix
+-----------------------------------
+Audit and document exact behavior.
+
+Expected candidates:
+
+Parish inactive:
+- read parish: allowed
+- list historical academic years: allowed
+- read academic year: allowed
+- list/read levels: allowed
+- create new year: blocked
+- activate planned year: blocked
+- edit operational year: likely blocked
+- create level: blocked
+- activate level: blocked
+- deactivate level: allowed if current design chose so
+
+Make behavior internally consistent.
+
+If current service semantics are inconsistent:
+fix.
+
+17. Academic Year Lifecycle Matrix
+----------------------------------
+Document exact transitions.
+
+Preferred:
+PLANNED -> ACTIVE
+ACTIVE -> CLOSED
+
+Disallowed:
+ACTIVE -> PLANNED
+CLOSED -> ACTIVE
+CLOSED -> PLANNED
+PLANNED -> CLOSED unless explicitly supported
+
+PARISH #004 says PLANNED→ACTIVE→CLOSED only.
+
+Verify tests match.
+
+18. Historical Immutability
+---------------------------
+Verify CLOSED AcademicYear:
+- no date mutation
+- no name mutation
+- no reopen
+
+This protects future classes/results.
+
+19. Catechism Level Historical Policy
+-------------------------------------
+Level deactivation:
+- keeps row
+- no hard delete
+- historical classes later can reference inactive level
+
+Reactivation:
+- requires active parish
+
+Confirm.
+
+20. RBAC Audit
+--------------
+Permissions:
+
+parishes.read/manage
+academic-years.read/manage
+catechism-levels.read/manage
+
+Verify:
+- no role checks in business code
+- no SUPER_ADMIN bypass
+- all routes authenticated
+- read/manage split correct
+
+Current global scope remains accepted.
+
+21. Parish Scope Future Trigger
+-------------------------------
+Do NOT implement scoped RBAC now.
+
+But final report must explicitly state:
+
+Current permissions are global.
+
+Before multi-parish operational APIs become production-ready for parish admins/catechists, introduce resource-scope/membership checks.
+
+Stable parishId must remain the scope key.
+
+22. Local/Dev Domain Seed — Evaluate
+------------------------------------
+Now that services exist, add a safe explicit local/dev domain seed if useful.
+
+Preferred command:
+npm run seed:parish-academic
+
+Seed ONLY local/dev demo data:
+- one clearly synthetic parish
+- one PLANNED or ACTIVE academic year
+- 3–4 clearly synthetic catechism levels
+
+Do not use real parish names if avoidable.
+
+Example concept:
+"Demo Parish"
+code:
+demo-parish
+
+Academic year:
+"2026-2027"
+
+Levels:
+level-1
+level-2
+level-3
+
+Human names may be generic Vietnamese demo names if desired, but clearly mark them sample/demo.
+
+23. Domain Seed Safety
+----------------------
+If seed is added:
+
+- manual command only
+- never app startup
+- never migration
+- never CI default
+- reject NODE_ENV=production
+- DB allow-list:
+  catechism_api
+  catechism_api_test
+- idempotent
+- no destructive reset
+- use ParishService
+- use AcademicYearService
+- use CatechismLevelService
+
+Do NOT inject repositories directly.
+
+24. Seed Idempotency
+--------------------
+Second run:
+- reuse existing parish by code
+- reuse year by parish/name
+- reuse levels by parish/code
+- do not duplicate
+- do not unexpectedly overwrite operational values
+
+If an existing demo academic year is already CLOSED/ACTIVE:
+do not force state changes unless explicitly intended.
+
+25. Seed Module Boundary
+------------------------
+Seed orchestrator is allowed to compose public services.
+
+It must NOT:
+- import entities to write
+- access repositories across modules
+- create DB rows via raw SQL
+
+26. Postman / cURL Verification
+-------------------------------
+Update or add domain verification documentation.
+
+Preferred:
+docs/postman/Acutis-Education-Parish-Academic.postman_collection.json
+
+It may reuse the existing local auth environment.
+
+Flow:
+
+1. login admin
+2. create/list parish
+3. create academic year
+4. activate academic year
+5. create catechism levels
+6. list levels
+7. try invalid second ACTIVE year -> expected conflict
+8. deactivate parish
+9. verify prohibited mutations
+10. historical reads still work
+
+If maintaining a second collection is unnecessary:
+extend existing collection cleanly.
+
+Do not over-couple Postman files to implementation details.
+
+27. Postman Security
+--------------------
+No:
+- live access token hardcoded
+- JWT secrets
+- refresh hash secret
+
+Use environment variables and login script.
+
+28. FE API Contract Audit
+-------------------------
+This is the final BE contract checkpoint before FE starts.
+
+Audit consistency:
+
+All list responses:
+{
+  items,
+  page,
+  limit,
+  total,
+  totalPages
+}
+
+Enums:
+- stable uppercase values
+- Swagger describes them
+
+Dates:
+- date-only YYYY-MM-DD
+
+IDs:
+- UUID strings
+
+Errors:
+- global error envelope consistent
+
+Pagination:
+- page 1-based
+- limit max 100
+- sort ASC/DESC
+- whitelisted sortBy
+
+29. FE Contract Stability Decision
+----------------------------------
+Final report must state exactly:
+
+FE PARISH/ACADEMIC CONTRACT READY: YES
+
+or
+
+FE PARISH/ACADEMIC CONTRACT READY: NO
+
+If NO:
+list blockers.
+
+Do not declare YES if date serialization or response shapes remain unstable.
+
+30. Swagger Contract Review
+---------------------------
+Verify Swagger contains:
+- parish routes
+- academic-year routes
+- catechism-level routes
+- request/response DTOs
+- enums
+- pagination query parameters
+- bearer auth
+
+No fake token examples.
+
+31. Future OpenAPI Client Readiness
+-----------------------------------
+Because FE is a separate React repo:
+API should be suitable for future OpenAPI-generated TypeScript client/types.
+
+Do not add generator now.
+
+Audit:
+- stable operation metadata
+- no entity responses
+- DTO schemas complete
+
+32. Full Test Matrix
+--------------------
+Run/verify:
+
+Parish:
+- create
+- duplicate
+- list
+- get
+- update
+- deactivate/reactivate
+- 401
+- 403
+
+Academic year:
+- create
+- date validation
+- duplicate
+- activate
+- second active conflict
+- close
+- invalid transition
+- closed immutability
+- inactive parish mutation block
+- date response exact YYYY-MM-DD
+
+Catechism level:
+- create
+- duplicate
+- list order
+- update
+- deactivate
+- reactivate
+- inactive parish rules
+
+RBAC:
+- read vs manage
+
+Seed:
+- first run
+- second run
+- production rejection
+
+33. Fresh Migration Validation
+------------------------------
+Run fresh catechism_api_test reset and full migration chain.
+
+Do NOT mutate dev DB for automated tests.
+
+34. `quality:full` — REQUIRED
+-----------------------------
+PARISH #004 did not run `quality:full` successfully in one clean invocation due DB_NAME shell override.
+
+This prompt MUST fix the environment invocation and run:
+
+npm run quality:full
+
+as one clean PASS.
+
+Do not declare phase COMPLETE without this.
+
+If shell currently exports DB_NAME=catechism_api:
+unset/override safely only for test command.
+
+Do NOT weaken DB safety guards.
+
+35. Docker Validation — REQUIRED
+--------------------------------
+Run:
+
+wsl docker build --target production -t catechism-api:parish-academic-final .
+
+Must PASS.
+
+36. Bitbucket CI Review
+-----------------------
+Check current CI remains compatible.
+
+No domain seed in pipeline.
+
+No new required secret.
+
+No deployment.
+
+37. Existing Auth Regression
+----------------------------
+All Auth/RBAC flows remain PASS.
+
+No seed changes should break auth seed idempotency.
+
+38. Dependency Audit
+--------------------
+No new npm library should be required.
+
+If one was added:
+justify.
+
+Run npm audit moderate+.
+
+39. Module Boundary Tests
+-------------------------
+Ensure final boundary specs assert:
+
+ParishModule exports only ParishService
+
+AcademicStructureModule exports only:
+AcademicYearService
+CatechismLevelService
+
+No persistence exports.
+
+40. Cross-Module Import Search
+------------------------------
+Search production code for:
+
+ParishEntity outside ParishModule
+AcademicYearEntity outside AcademicStructureModule
+CatechismLevelEntity outside AcademicStructureModule
+
+Allow:
+database metadata tests/migrations where appropriate.
+
+No production violations.
+
+41. Microservice Extraction Audit
+---------------------------------
+Final mapping:
+
+Parish Service:
+- parishes
+
+Academic Structure Service:
+- academic_years
+- catechism_levels
+
+Future Class Service:
+- consumes scalar parishId/academicYearId/catechismLevelId
+- uses public validation APIs
+
+Describe FK replacement after extraction.
+
+42. No Next Module
+------------------
+Do NOT start:
+- Class
+- Student
+- Catechist
+- Parent
+- Enrollment
+or any other next phase.
+
+Only recommend it in report if this phase is COMPLETE.
+
+43. No FE Code
+--------------
+Do NOT modify FE repository/source.
+
+This prompt only certifies FE API readiness.
+
+44. Required Validation Commands
+--------------------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Seed if implemented:
+npm run seed:parish-academic
+second idempotent run in safe environment
+production rejection test
+
+Docker:
+wsl docker build --target production -t catechism-api:parish-academic-final .
+
+45. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "fix(parish): finalize academic structure phase"
+
+Cursor must NOT execute it.
+
+46. Required Report
+-------------------
+Create:
+
+docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State before final audit
+3. Rules applied
+4. Findings summary
+5. Module ownership audit
+6. Public export audit
+7. Cross-module persistence audit
+8. Parish API final audit
+9. Academic Year API final audit
+10. Catechism Level API final audit
+11. One ACTIVE year concurrency audit
+12. Concurrent activation test/result
+13. Date serialization audit
+14. Exact FE date contract
+15. Parish inactive behavior matrix
+16. Academic year lifecycle matrix
+17. CLOSED immutability
+18. Catechism level lifecycle
+19. RBAC audit
+20. Parish scope future trigger
+21. Domain seed decision
+22. Seed architecture
+23. Seed safety/idempotency
+24. Seed sample data
+25. Postman/cURL verification
+26. FE API contract audit
+27. Swagger/OpenAPI readiness
+28. FE parallel-readiness decision
+29. Full E2E matrix
+30. Fresh migration result
+31. quality:full result
+32. Docker result
+33. CI compatibility
+34. Auth/RBAC regression
+35. Security review
+36. Module boundary matrix
+37. Future microservice extraction map
+38. Files created
+39. Files modified
+40. Commands executed
+41. Validation results
+Explicit PASS/FAIL:
+- npm ci
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker production build
+- Parish API
+- AcademicYear API
+- CatechismLevel API
+- one ACTIVE invariant
+- concurrent activation safety
+- exact YYYY-MM-DD response
+- inactive parish rules
+- RBAC
+- domain seed first run
+- domain seed idempotency
+- production seed rejection
+- Postman JSON
+- module boundaries
+- no cross-module repositories/entities
+- Auth regression
+
+42. Remaining risks
+Severity + accepted/deferred.
+
+43. Completion decision
+
+State exactly ONE:
+
+A.
+PARISH / ACADEMIC YEAR / CATECHISM LEVEL PHASE COMPLETE
+
+or
+
+B.
+PARISH / ACADEMIC YEAR / CATECHISM LEVEL PHASE NOT COMPLETE
+
+Do not declare COMPLETE with unresolved BLOCKER/HIGH.
+
+44. FE contract decision
+
+State exactly ONE:
+
+FE PARISH/ACADEMIC CONTRACT READY: YES
+
+or
+
+FE PARISH/ACADEMIC CONTRACT READY: NO
+
+45. Next Backend Phase Recommendation
+
+ONLY if COMPLETE:
+
+Recommend next master roadmap phase:
+
+Class + Student + Catechist + Parent + Enrollment
+
+Do NOT implement it.
+
+46. FE Parallel Recommendation
+
+If FE contract ready:
+state that FE React repository can begin the corresponding Parish/Academic screens in parallel with the next backend phase.
+
+Do NOT modify FE.
+
+47. Prompt Count Status
+
+State:
+#005/5 complete
+0 prompts remain in this phase
+if completion decision is COMPLETE.
+
+48. Commit Recommendation
+
+If tracked changes exist:
+print exactly ONE:
+
+git commit -m "fix(parish): finalize academic structure phase"
+
+Cursor MUST NOT execute it.
+
+47. Final Response
+------------------
+Respond concisely:
+
+- PARISH/ACADEMIC #005 status
+- phase COMPLETE / NOT COMPLETE
+- unresolved BLOCKER/HIGH count
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- FE contract ready YES/NO
+- report:
+  docs/PARISH_005_FINAL_INTEGRATION_HARDENING_REPORT.md
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "fix(parish): finalize academic structure phase"
+
+Do NOT run git add/commit/push.
+Do NOT start next backend phase.
+Do NOT modify FE.

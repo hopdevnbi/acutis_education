@@ -29,7 +29,7 @@
     "test:integration": "npm run test:db:prepare && jest --config ./test/jest-integration.json --runInBand",
     "test:e2e:db": "npm run test:db:prepare && npm run test:db:migrations && jest --config ./test/jest-db-e2e.json --runInBand --forceExit",
     "quality": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:e2e && npm run build",
-    "quality:full": "npm run quality && npm run test:db:migrations && npm run test:integration && npm run test:db:prepare -- --reset && npm run test:db:migrations && npm run test:e2e:db",
+    "quality:full": "npm run quality && npm run test:db:prepare -- --reset && npm run test:db:migrations && npm run test:integration && npm run test:db:prepare -- --reset && npm run test:db:migrations && npm run test:e2e:db",
     "ci:wait-for-mssql": "ts-node --project tsconfig.json scripts/wait-for-mssql.ts",
     "migration:create": "typeorm-ts-node-commonjs migration:create src/database/migrations/",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",

@@ -1,0 +1,302 @@
+CURSOR PROMPT — QUESTION BANK #003A
+CORRECTIVE GATE: FULL-SUITE 429 RATE-LIMIT ISOLATION + REPORT CONSISTENCY
+
+Context
+-------
+QUESTION BANK #003/8 implemented:
+- metadata CRUD
+- tags/curriculum links
+- RBAC
+- parish scope
+- Swagger
+- tests
+
+Problem:
+The #003 report is internally inconsistent:
+- summary/required verdict says `quality:full PASS`
+- detailed note says full DB e2e had 2 failures in `test/curriculum-delivery.db.e2e-spec.ts`
+- failures are HTTP 429 Too Many Requests on `/auth/login`
+- likely shared login throttling across the sequential full DB e2e run
+
+Question-bank scoped tests are green, but by our rules we cannot accept #003 as complete while `quality:full` still contains failures.
+
+This is a FIX prompt only.
+DO NOT implement QUESTION BANK #004 features.
+
+Permanent rules
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE line:
+git commit -m "test(question-bank): stabilize full e2e auth throttling"
+
+Do not execute it.
+Do not auto-proceed to #004.
+
+Mandatory reading
+-----------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+latest Auth final report
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/auth/
+src/modules/access-control/
+all auth throttler configuration
+all DB e2e login helpers
+test/curriculum-delivery.db.e2e-spec.ts
+test/question-bank.db.e2e-spec.ts
+test setup/bootstrap
+Jest DB e2e config
+package.json
+
+Inspect git status read-only.
+
+Primary objective
+-----------------
+Produce ONE clean full run:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+with:
+- zero unit failures
+- zero integration failures
+- zero DB e2e failures
+- no shared-login 429 failures
+- no skipped tests
+- no disabled production throttling
+- no weakened security
+
+Root-cause audit
+----------------
+Determine exactly:
+- whether throttler state is shared across suites
+- whether same IP/key is reused
+- whether tests login too often
+- whether `--runInBand` accumulates in-memory throttle state
+- whether repeated test-app bootstrap reuses throttle provider
+- whether an existing test-specific throttler config already exists
+
+Document actual cause, not guess.
+
+Preferred fix order
+-------------------
+Prefer, in order:
+
+1. Test login reuse
+- avoid repeated logins
+- cache token per role/suite when safe
+- login once per test identity/app lifecycle where appropriate
+
+2. Test-only throttler config
+- higher limits only under NODE_ENV=test / explicit test config
+- production defaults unchanged
+- no controller bypass
+
+3. Reset throttle state between isolated test apps/suites
+- only if there is a clean test API
+
+4. Unique throttle identity in test harness
+- only if supported safely
+
+Do NOT:
+- remove login throttling
+- raise production limits just for tests
+- disable throttling globally
+- skip failing tests
+- add arbitrary sleeps
+- retry blindly until green
+
+Security requirement
+--------------------
+If using a test-only throttle override:
+- production unchanged
+- development unchanged unless already intentional
+- unit/config test proves test-only resolution
+- auth rate-limit tests still prove throttling works
+
+Targeted regressions
+--------------------
+Run:
+- `test/curriculum-delivery.db.e2e-spec.ts`
+- `test/question-bank.db.e2e-spec.ts`
+- auth throttling tests
+
+Question Bank RBAC must remain:
+SUPER_ADMIN: read/manage/publish
+PARISH_ADMIN: read/manage/publish own parish
+CATECHIST: read only
+PARENT: none
+
+No #004 scope
+-------------
+Do NOT implement:
+- option CRUD
+- correct-answer CRUD
+- TRUE_FALSE provisioning
+- type validation engine
+- publish
+- clone
+- grading
+- learner projection
+- media question integration
+
+Required validation
+-------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+
+Targeted:
+npx jest --config ./test/jest-db-e2e.json test/curriculum-delivery.db.e2e-spec.ts --runInBand
+npx jest --config ./test/jest-db-e2e.json test/question-bank.db.e2e-spec.ts --runInBand
+
+Then:
+npm run test:integration
+npm run test:e2e:db
+
+Finally:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Goal:
+ONE CLEAN `quality:full` exit 0.
+
+Docker
+------
+No Docker change expected.
+
+If production source/config changes:
+run:
+wsl docker build --target production -t catechism-api:question-bank-metadata-fix .
+
+If only test files/test config change:
+Docker may be skipped with explicit justification.
+
+Required report
+---------------
+Create:
+
+docs/QUESTION_BANK_003A_FULL_SUITE_RATE_LIMIT_FIX_REPORT.md
+
+Required sections:
+1 Objective
+2 Contradiction in #003 report
+3 Root cause
+4 Files created
+5 Files modified
+6 Login helper audit
+7 Throttler state/config audit
+8 Selected fix
+9 Why production security is unchanged
+10 Test-only configuration if used
+11 Curriculum delivery targeted test
+12 Question Bank targeted test
+13 Auth throttling regression
+14 Integration result
+15 DB e2e full-suite result
+16 quality:full clean result
+17 Docker decision/result
+18 RBAC regression
+19 Security notes
+20 Commands executed
+21 Validation matrix
+22 Known/deferred
+23 Out-of-scope
+24 QUESTION BANK #004 readiness
+25 Prompt count
+26 Commit recommendation
+
+Explicit PASS/FAIL matrix
+-------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- targeted curriculum-delivery e2e
+- targeted question-bank e2e
+- auth throttling regression
+- integration
+- DB e2e FULL SUITE
+- quality:full ONE CLEAN RUN
+- production auth throttling unchanged
+- no skipped tests
+- no arbitrary sleeps
+- no #004 scope changes
+- Question Bank #003 regression
+- Git rule compliance
+
+#004 readiness
+--------------
+Only if:
+- DB e2e full suite PASS
+- quality:full PASS
+- no BLOCKER/HIGH
+
+Then recommend:
+QUESTION BANK #004/8 — Question Types + Options + Correct Answers + Validation Engine
+
+Prompt count
+------------
+State:
+QUESTION BANK #003A corrective complete
+main phase remains #003/8 until this corrective gate passes
+
+After PASS:
+QUESTION BANK #003/8 accepted
+approximately 5 main prompts remain (#004–#008)
+
+Final response
+--------------
+Respond concisely:
+- QUESTION BANK #003A status
+- root cause
+- selected fix
+- full DB e2e PASS/FAIL
+- quality:full PASS/FAIL
+- production throttling unchanged YES/NO
+- unresolved BLOCKER/HIGH
+- #004 READY/NOT READY
+- report path
+
+Then print exactly ONE line if tracked changes exist:
+git commit -m "test(question-bank): stabilize full e2e auth throttling"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

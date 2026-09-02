@@ -1,0 +1,988 @@
+CURSOR PROMPT — LEARNING PROGRESS #002/4
+PERSISTENCE + LESSON PROGRESS FOUNDATION
+
+1. Context
+----------
+Completed:
+- LEARNING PROGRESS #001/4 — Domain Audit + Model Design
+
+Current:
+LEARNING PROGRESS #002 / 4
+
+Remaining:
+#003 Aggregation APIs + Access Scope + Practice Composition + Lesson Write HTTP
+#004 Final Audit + Demo/Postman + quality:full + Docker + Phase Completion
+
+#001 final decisions:
+- Learning Progress bounded context READY
+- persistence required NOW
+- Learning Progress owns lesson progress only
+- Practice remains source of truth for Practice metrics
+- enrollmentId is learner aggregate root
+- canonicalLessonKey is stable lesson identity
+- no topic-level progress in MVP
+- no mastery score
+- no aggregate learning_progress table
+- no event bus in MVP
+- final prompt count = 4
+- BLOCKER/HIGH = 0
+
+This prompt implements the persistence/internal foundation only.
+
+Do NOT implement final aggregation HTTP APIs or Practice composition yet.
+Do NOT implement Exam.
+
+2. Conservative MVP Product Decisions — LOCK FOR #002
+-------------------------------------------------------
+Unless existing product requirements/code explicitly contradict them:
+
+A. Lesson progress is EXPLICIT.
+- Passive GET of curriculum tree/content does NOT mutate progress.
+- No view-duration tracking.
+- No hidden side effects in CurriculumDelivery.
+
+B. State transitions are MONOTONIC:
+NOT_STARTED -> IN_PROGRESS -> COMPLETED
+
+Allowed:
+NOT_STARTED -> IN_PROGRESS
+NOT_STARTED -> COMPLETED
+IN_PROGRESS -> COMPLETED
+
+Idempotent:
+IN_PROGRESS -> IN_PROGRESS
+COMPLETED -> COMPLETED
+
+Denied:
+COMPLETED -> IN_PROGRESS
+COMPLETED -> NOT_STARTED
+IN_PROGRESS -> NOT_STARTED
+
+Do NOT implement reopen/reset in MVP.
+
+If Cursor discovers a concrete existing requirement that conflicts with this policy:
+STOP implementation and document the conflict as BLOCKER/HIGH rather than silently changing behavior.
+
+3. Permanent Workflow / Git Rules
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001 report and current code first
+- stay within #002 scope
+- create detailed report in docs/
+- not auto-proceed to #003
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(learning-progress): add lesson progress foundation"
+
+Do not execute it.
+
+4. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LEARNING_PROGRESS_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/PRACTICE_005_PROGRESS_STATISTICS_CONTRACT_HARDENING_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/enrollment/
+src/modules/class/
+src/modules/student/
+src/modules/parish/
+src/modules/practice/
+src/modules/auth/
+src/modules/access-control/
+src/database/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+5. Primary Objective
+--------------------
+Implement:
+
+A. LearningProgressModule skeleton
+B. lesson_progress table
+C. LessonProgressEntity
+D. LessonProgressStatus enum
+E. migration
+F. internal LessonProgressService
+G. internal LearningProgressAccessService if useful
+H. curriculum/lesson semantic validation through public services
+I. monotonic state transition engine
+J. timestamps
+K. idempotent same-state transitions
+L. concurrency safety
+M. module-boundary tests
+N. unit/integration/DB tests
+O. quality:full + Docker
+
+Do NOT implement:
+- GET aggregate learning progress API
+- class aggregate progress API
+- Practice composition
+- final FE/Mobile contracts
+- Exam dimension implementation
+- block-level progress
+- topic progress
+- event bus
+- aggregate snapshot table
+- mastery score
+
+6. Module Architecture
+----------------------
+Create:
+
+src/modules/learning-progress/
+
+Expected:
+LearningProgressModule
+
+Internal providers:
+LessonProgressService
+LearningProgressAccessService if useful
+
+Public facade:
+LearningProgressService
+
+At #002, LearningProgressService may expose internal/public application methods needed by future #003, but NO HTTP controller is required.
+
+Export:
+LearningProgressService ONLY.
+
+Do NOT export:
+TypeOrmModule
+entities
+repositories
+LessonProgressService
+access service
+
+7. Module Dependencies
+----------------------
+Allowed:
+LearningProgress -> EnrollmentModule
+LearningProgress -> ClassModule
+LearningProgress -> StudentModule
+LearningProgress -> ParishModule
+LearningProgress -> CurriculumModule
+LearningProgress -> AccessControl/Auth as needed
+
+PracticeModule dependency is NOT required yet in #002 unless compile-time facade preparation clearly requires it.
+
+Strong preference:
+do not import PracticeModule until #003.
+
+No CurriculumDelivery internal import.
+No cross-module entity/repository imports.
+No forwardRef.
+No cycles.
+
+8. Owned Table
+--------------
+Create exactly ONE owned table:
+
+lesson_progress
+
+Do NOT create:
+learning_progress
+learning_progress_snapshots
+learning_activity_events
+topic_progress
+block_progress
+practice_progress
+exam_progress
+
+9. LessonProgressStatus
+-----------------------
+Enum:
+NOT_STARTED
+IN_PROGRESS
+COMPLETED
+
+Stable English DB/wire codes.
+
+Question:
+Should NOT_STARTED be persisted?
+
+Strong recommendation:
+NO row represents NOT_STARTED by default.
+
+Persisted rows should normally be:
+IN_PROGRESS
+COMPLETED
+
+However keep enum NOT_STARTED only if future DTO/service semantics benefit and current entity design remains coherent.
+
+Audit.
+
+Preferred persisted-state model:
+- missing row => NOT_STARTED
+- row status IN_PROGRESS or COMPLETED
+
+If using this:
+DB CHECK may limit stored status to IN_PROGRESS/COMPLETED.
+Public internal snapshot can still expose NOT_STARTED.
+
+Document final choice.
+
+10. lesson_progress Table
+-------------------------
+Recommended columns:
+
+id uniqueidentifier PK
+enrollment_id uniqueidentifier NOT NULL
+curriculum_id uniqueidentifier NOT NULL
+canonical_lesson_key uniqueidentifier NOT NULL
+assigned_curriculum_version_id uniqueidentifier NULL
+status varchar(32) NOT NULL
+started_at datetime2 NOT NULL
+completed_at datetime2 NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+Potential:
+completed_by_user_id?
+started_by_user_id?
+
+Audit actor attribution.
+
+Strong recommendation:
+add:
+started_by_user_id uniqueidentifier NOT NULL
+completed_by_user_id uniqueidentifier NULL
+
+Reason:
+Parent acts for learner today, future Student may self-act.
+Audit trail is important.
+
+No learner name/PII.
+
+11. Actor Fields
+----------------
+If actor fields added:
+
+started_by_user_id -> users
+completed_by_user_id -> users nullable
+
+SQL FK allowed.
+NO ORM relation.
+
+Do not infer actor as learner.
+
+12. Enrollment FK
+-----------------
+enrollment_id -> enrollments
+
+SQL FK allowed.
+
+NO ORM relation.
+
+Delete:
+NO ACTION / RESTRICT.
+
+Historical progress should not cascade-delete when enrollment lifecycle changes.
+
+13. Curriculum References
+-------------------------
+Store scalar:
+curriculum_id
+assigned_curriculum_version_id
+canonical_lesson_key
+
+Strong recommendation:
+NO SQL FK to Curriculum-owned tables.
+
+Reason:
+future service extraction and cross-domain ownership.
+
+Validate via CurriculumService at application layer.
+
+No ORM relation.
+
+14. Unique Identity
+-------------------
+Unique:
+(enrollment_id, curriculum_id, canonical_lesson_key)
+
+This ensures one conceptual lesson-progress row per enrollment/curriculum family.
+
+Completion carries across published curriculum versions sharing canonicalLessonKey.
+
+15. Version Snapshot
+--------------------
+assigned_curriculum_version_id captures the published assigned curriculum version at FIRST interaction.
+
+Once row exists:
+do NOT silently overwrite this value on later curriculum republish.
+
+Historical audit remains:
+"learner first interacted under version X".
+
+If future product wants lastSeenVersionId, add separately later.
+
+16. Carry-Forward Policy
+------------------------
+Within same:
+enrollmentId + curriculumId + canonicalLessonKey
+
+progress carries across curriculum version republish.
+
+New academic-year enrollment:
+new enrollmentId -> no automatic carry-forward.
+
+Transfer/new enrollment:
+new namespace.
+
+No cross-enrollment copy.
+
+17. startedAt
+-------------
+First transition from missing/NOT_STARTED to:
+IN_PROGRESS or COMPLETED
+
+sets startedAt = now.
+
+Never change startedAt later.
+
+18. completedAt
+---------------
+Set only on first transition to COMPLETED.
+
+Idempotent COMPLETED -> COMPLETED:
+do not change completedAt.
+
+19. Actor Timestamp Semantics
+-----------------------------
+startedByUserId set once.
+
+completedByUserId set on first completion.
+
+Idempotent repeat completion:
+do not replace completedByUserId.
+
+20. DB Status/Timestamp Constraints
+-----------------------------------
+If persisted statuses only IN_PROGRESS/COMPLETED:
+
+IN_PROGRESS:
+completed_at IS NULL
+completed_by_user_id IS NULL
+
+COMPLETED:
+completed_at IS NOT NULL
+completed_by_user_id IS NOT NULL
+
+started_at and started_by_user_id always non-null.
+
+CHECK status valid.
+
+21. UUID Strategy
+-----------------
+Application-generated UUID v4.
+
+No DB UUID defaults.
+
+Use existing project UUID utility/pattern.
+
+22. Entity
+----------
+Create LessonProgressEntity.
+
+No TypeORM relations.
+
+Scalar IDs only.
+
+23. Indexes
+-----------
+Required:
+unique(enrollment_id, curriculum_id, canonical_lesson_key)
+
+Useful:
+(enrollment_id, status)
+(enrollment_id, curriculum_id)
+(enrollment_id, updated_at)
+
+For future class batching:
+enrollment_id leading index sufficient.
+
+Do not over-index.
+
+24. Internal Snapshot Interface
+-------------------------------
+Define narrow interface:
+
+LessonProgressSnapshot {
+  id?
+  enrollmentId
+  curriculumId
+  canonicalLessonKey
+  assignedCurriculumVersionId
+  status
+  startedAt?
+  completedAt?
+}
+
+Do not expose actor IDs unless admin/audit contract explicitly needs them.
+
+Internal service may retain actor metadata separately.
+
+25. Internal Service API
+------------------------
+Potential:
+
+getLessonProgress({
+  enrollmentId,
+  curriculumId,
+  canonicalLessonKey
+})
+
+setLessonProgress({
+  enrollmentId,
+  canonicalLessonKey,
+  targetStatus,
+  actorUserId
+})
+
+listEnrollmentLessonProgress(...)
+
+Do not add HTTP controller yet.
+
+26. Curriculum Context Resolution
+---------------------------------
+setLessonProgress MUST derive/validate:
+
+1. enrollment exists
+2. enrollment ACTIVE
+3. class exists
+4. assigned published curriculum for class triple exists
+5. canonicalLessonKey exists in assigned curriculum tree
+6. curriculumId derived from assignment, not trusted from client
+7. assignedCurriculumVersionId derived from assignment
+
+Do not trust client-provided curriculumId/versionId.
+
+27. Canonical Lesson Validation
+-------------------------------
+Use CurriculumService public APIs only.
+
+If no narrow method exists, add one public method to CurriculumService:
+- assertCanonicalLessonKeyBelongsToVersion(...)
+or
+- findLessonByCanonicalKeyInVersion(...)
+
+Return snapshots/IDs, no entities.
+
+Do NOT import curriculum repositories/entities into LearningProgress.
+
+28. Active Enrollment Write Rule
+---------------------------------
+Writes only for ACTIVE enrollment.
+
+Historical TRANSFERRED/COMPLETED enrollment progress:
+readable later
+not writable.
+
+29. Access Service
+-----------------
+Create LearningProgressAccessService internal.
+
+For #002 write semantics:
+
+Linked Parent:
+allowed to start/complete linked ACTIVE enrollment lesson.
+
+SUPER_ADMIN:
+Do NOT automatically allow learner-action writes unless existing product policy explicitly allows support impersonation.
+
+Strong preference:
+same as Practice learner-action policy:
+Parent linked enrollment is current primary actor.
+SuperAdmin may read/admin later, but lesson progress write should not silently impersonate learner.
+
+Audit existing #001 statement that suggested super admin writes; reconcile with Practice security model.
+
+Conservative preference:
+learner-action write = linked Parent only in current MVP.
+Future Student self.
+Admin correction = separate future API.
+
+If this differs from #001 recommendation, explain why and test it.
+
+30. Catechist / Parish Admin
+----------------------------
+No lesson progress writes.
+
+Catechist:
+read aggregate later #003.
+
+Parish Admin:
+read aggregate later #003.
+
+No teacher/admin completion marking in MVP.
+
+31. Permission Codes
+--------------------
+Audit and decide:
+
+learning-progress.read
+learning-progress.manage
+
+Likely seed both in #002 or #003.
+
+If seeding now:
+SUPER_ADMIN read
+PARISH_ADMIN read
+CATECHIST read
+PARENT read + manage
+
+But remember relationship checks remain required.
+
+No STUDENT.
+
+If permission seeding is better bundled with #003 HTTP routes, defer and document.
+
+32. State Transition Engine
+---------------------------
+Implement pure utility/domain function:
+
+assertLessonProgressTransition(currentStatus, targetStatus)
+
+Rules:
+missing/NOT_STARTED -> IN_PROGRESS
+missing/NOT_STARTED -> COMPLETED
+IN_PROGRESS -> IN_PROGRESS idempotent
+IN_PROGRESS -> COMPLETED
+COMPLETED -> COMPLETED idempotent
+
+Deny:
+COMPLETED -> IN_PROGRESS
+any target NOT_STARTED if persistence API does not support reset
+
+33. NOT_STARTED Input
+---------------------
+Do NOT allow clients/internal mutation to explicitly set NOT_STARTED in MVP.
+
+NOT_STARTED is derived from absence.
+
+Thus future HTTP body should allow only:
+IN_PROGRESS
+COMPLETED
+
+34. Concurrency
+--------------
+Two simultaneous first writes for same lesson must not create duplicate rows.
+
+Use:
+- unique constraint final guard
+- transaction
+- lock existing row if found
+- on unique race reload existing and re-evaluate transition if safe
+
+Two concurrent:
+IN_PROGRESS and COMPLETED
+
+Final state should be COMPLETED, not regress.
+
+Design robustly.
+
+35. Transaction Boundary
+------------------------
+Curriculum/Enrollment validation can occur before DB transaction if read-only.
+
+Mutation transaction should:
+- load/lock existing progress row
+- insert/update
+- preserve timestamp/actor idempotency
+- commit
+
+If race on insert:
+reload and apply transition.
+
+36. Idempotency
+--------------
+No separate clientRequestId needed for simple PATCH-like state transition because operation is naturally idempotent by target status.
+
+Repeated:
+set IN_PROGRESS
+set COMPLETED
+
+returns same logical result.
+
+37. Read Missing State
+----------------------
+getLessonProgress for no row should return conceptual:
+status NOT_STARTED
+startedAt null
+completedAt null
+
+No need to insert row.
+
+38. listEnrollmentLessonProgress
+--------------------------------
+Return only persisted rows or conceptual full tree?
+
+For internal #002:
+return persisted rows only.
+
+#003 aggregate joins with Curriculum tree to derive assigned lessons + missing NOT_STARTED.
+
+39. No Passive Tracking
+-----------------------
+Audit CurriculumDelivery GET routes.
+
+Confirm no changes are added there.
+
+Do NOT call LessonProgressService from GET curriculum tree/content.
+
+40. No Block-Level Progress
+---------------------------
+Strictly no:
+blockProgress
+scroll state
+video percentage
+reading duration
+
+41. No Topic Progress
+---------------------
+No topic_progress table.
+
+No topic semantic key exists.
+
+42. No Practice Composition Yet
+-------------------------------
+Do not import/call PracticeService in #002.
+
+#003.
+
+43. No Exam
+-----------
+No exam interface fields in database.
+
+Only future docs/interfaces may mention extension.
+
+44. Security / Minors
+---------------------
+No child names.
+No content text.
+No Practice answers.
+No spiritual ranking.
+
+Actor IDs only for audit if selected.
+
+45. Multilingual
+----------------
+No translated labels.
+Status enum language-neutral.
+canonicalLessonKey language-neutral.
+
+46. Microservice Extraction
+---------------------------
+Learning Progress owns lesson_progress only.
+
+No cross-module ORM.
+
+Future extraction calls:
+Enrollment/Class API
+Curriculum API
+Practice API
+
+47. Migration Integration Tests
+-------------------------------
+Real MSSQL:
+
+- lesson_progress table created
+- UUID PK no DB default
+- enrollment FK enforced
+- actor user FKs if added
+- no curriculum FK
+- no ORM relations
+- unique enrollment/curriculum/lesson
+- status constraint
+- IN_PROGRESS timestamp consistency
+- COMPLETED timestamp consistency
+- indexes
+- Unicode not relevant except no corruption
+- no extra tables
+
+48. Unit Tests
+--------------
+Transition utility:
+- missing -> IN_PROGRESS
+- missing -> COMPLETED
+- IN_PROGRESS -> IN_PROGRESS idempotent
+- IN_PROGRESS -> COMPLETED
+- COMPLETED -> COMPLETED idempotent
+- COMPLETED -> IN_PROGRESS denied
+- NOT_STARTED target denied
+
+Service:
+- active enrollment valid
+- inactive enrollment denied
+- canonical lesson invalid
+- derives assigned curriculum/version
+- does not trust caller curriculum ID
+- first start timestamps
+- direct complete sets started+completed
+- repeated complete preserves timestamps
+- concurrent insert race safe conceptually
+- version republish same canonical key returns existing progress
+- new enrollment no carry-forward
+
+49. Integration Tests
+---------------------
+Real MSSQL:
+- create demo enrollment/curriculum assignment
+- set lesson IN_PROGRESS
+- set COMPLETED
+- repeat COMPLETED
+- verify one row
+- verify version snapshot preserved
+- publish/assign newer curriculum clone if test fixture supports and canonical key same
+- progress still same row
+- inactive enrollment write denied
+- no passive CurriculumDelivery GET writes
+
+50. Existing Regression
+-----------------------
+Must remain green:
+Curriculum
+CurriculumDelivery
+Enrollment/Class
+Practice
+Question Bank
+Auth
+
+51. quality:full
+----------------
+Because migration is added:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+52. Docker
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:learning-progress-foundation ."
+
+Use actual repo path.
+PASS required.
+
+53. Required Commands
+---------------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:learning-progress-foundation ."
+
+54. Required Report
+-------------------
+Create:
+
+docs/LEARNING_PROGRESS_002_PERSISTENCE_LESSON_PROGRESS_FOUNDATION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #001
+3 Product-policy decisions locked
+4 Rules applied
+5 Files created
+6 Files modified
+7 LearningProgressModule
+8 Public export
+9 Dependency graph
+10 Data ownership
+11 LessonProgressStatus
+12 NOT_STARTED persistence decision
+13 lesson_progress schema
+14 actor attribution decision
+15 enrollment FK
+16 curriculum FK decision
+17 unique identity
+18 assignedCurriculumVersion snapshot
+19 carry-forward policy
+20 new enrollment policy
+21 timestamps
+22 DB constraints
+23 indexes
+24 UUID strategy
+25 zero ORM relations
+26 snapshot/interface
+27 LessonProgressService
+28 Curriculum validation
+29 canonicalLessonKey validation
+30 enrollment ACTIVE rule
+31 LearningProgressAccessService
+32 Parent write policy
+33 Catechist/Admin write policy
+34 permission code decision
+35 transition engine
+36 idempotency
+37 concurrency/race handling
+38 transaction boundary
+39 missing row = NOT_STARTED
+40 list persisted rows
+41 passive GET no-tracking audit
+42 no block/topic progress
+43 no Practice composition yet
+44 security/minors
+45 multilingual readiness
+46 microservice extraction
+47 unit tests
+48 integration tests
+49 DB e2e/migration tests
+50 existing regression
+51 pristine quality:full
+52 Docker
+53 commands
+54 validation matrix
+55 known/deferred
+56 out-of-scope
+57 LEARNING PROGRESS #003 readiness
+58 prompt count
+59 commit recommendation
+
+55. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- LearningProgressService only export
+- exactly one owned table
+- no aggregate table
+- no event table
+- no topic/block table
+- UUID app-generated
+- zero ORM relations
+- enrollment FK
+- actor FK policy
+- no curriculum FK
+- unique enrollment/curriculum/canonicalLesson
+- assigned version snapshot
+- missing row = NOT_STARTED
+- explicit tracking only
+- no passive GET mutation
+- NOT_STARTED -> IN_PROGRESS
+- NOT_STARTED -> COMPLETED
+- IN_PROGRESS -> COMPLETED
+- same-state idempotency
+- COMPLETED -> IN_PROGRESS denied
+- timestamps stable
+- actor attribution stable
+- active enrollment write only
+- canonical lesson validation
+- curriculum assignment derived
+- version carry-forward
+- new enrollment fresh progress
+- concurrency safe
+- no Practice composition
+- no Exam
+- no mastery
+- prior regression
+- Git compliance
+
+56. #003 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+
+LEARNING PROGRESS #003/4 —
+AGGREGATION APIs + SCOPED ACCESS + PRACTICE COMPOSITION + LESSON PROGRESS HTTP
+
+#003 should implement:
+- lesson progress PATCH HTTP
+- enrollment learning-progress GET
+- class learning-progress GET
+- Parent/Catechist/Parish Admin scopes
+- Curriculum tree counts
+- PracticeService composition
+- lastLearningActivityAt
+- FE/Mobile contracts
+- OpenAPI
+- performance audit
+
+57. Prompt Count
+----------------
+State:
+LEARNING PROGRESS #002/4 complete
+approximately 2 prompts remain (#003–#004)
+
+58. Final Response
+------------------
+Respond concisely:
+
+- LEARNING PROGRESS #002 status
+- schema PASS/FAIL
+- transition model PASS/FAIL
+- lesson versioning PASS/FAIL
+- access/write policy
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly ONE line:
+
+git commit -m "feat(learning-progress): add lesson progress foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

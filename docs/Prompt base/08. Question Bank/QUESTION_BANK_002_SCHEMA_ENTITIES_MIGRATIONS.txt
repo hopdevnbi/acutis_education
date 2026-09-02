@@ -1,0 +1,888 @@
+CURSOR PROMPT — QUESTION BANK #002/8
+SCHEMA + ENTITIES + MIGRATIONS + MODULE BOUNDARIES
+
+1. Context
+----------
+Completed:
+- QUESTION BANK #001/8 — Domain Audit + Model/Versioning Design
+
+Current:
+QUESTION BANK #002 / 8
+
+Remaining after this:
+#003 Question root/version CRUD + tags/link metadata + RBAC
+#004 Question types + options + answer validation engine
+#005 Publish/clone/archive + immutable delivery/grading contracts
+#006 Curriculum/Media integration + scoped authorization + learner-safe projection
+#007 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+This prompt is persistence-only.
+
+Do NOT implement HTTP APIs, business services, RBAC seeds, publishing, grading, import/export, FE/Mobile code.
+
+2. Permanent Workflow / Git Rules — CRITICAL
+--------------------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+This prompt is IMPLEMENTATION of persistence only.
+
+Cursor MUST:
+- inspect #001 report and current code before changes
+- stay within schema/entities/module foundation
+- create a detailed report in docs/
+- not auto-proceed to #003
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(question-bank): add versioned question schema"
+
+Do not execute it.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/media/
+src/modules/parish/
+src/database/
+src/config/
+src/app.module.ts
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement only the persistence foundation for Question Bank:
+
+- QuestionBankModule skeleton
+- enums
+- entities
+- migrations
+- constraints
+- indexes
+- UUID strategy
+- metadata tests
+- migration integration tests
+- module-boundary tests
+- multilingual/version readiness
+
+No business service/controller behavior yet.
+
+5. Target Owned Tables
+----------------------
+QuestionBankModule owns:
+
+questions
+question_versions
+question_options
+question_correct_options
+question_tags
+question_tag_links
+question_curriculum_links
+
+No Practice/Exam tables.
+No learner answer tables.
+No translation tables.
+
+6. Module Skeleton
+------------------
+Create:
+src/modules/question-bank/question-bank.module.ts
+
+Register Question Bank entities via TypeOrmModule.forFeature.
+
+At #002:
+prefer no controllers
+prefer no business providers
+prefer no exports
+
+If a minimal placeholder QuestionBankService is absolutely needed for boundary test shape, justify it.
+Strong preference: skeleton only, no export yet.
+
+Do NOT export TypeOrmModule/entities/repositories.
+
+7. Enums
+--------
+Create enums:
+
+QuestionStatus:
+ACTIVE
+INACTIVE
+
+QuestionVersionStatus:
+DRAFT
+PUBLISHED
+ARCHIVED
+
+QuestionType:
+SINGLE_CHOICE
+MULTIPLE_CHOICE
+TRUE_FALSE
+
+QuestionDifficulty:
+EASY
+MEDIUM
+HARD
+
+QuestionTagStatus:
+ACTIVE
+INACTIVE
+
+Stable English wire/DB codes.
+
+8. questions Table
+------------------
+Columns:
+
+id uniqueidentifier PK
+parish_id uniqueidentifier NOT NULL
+code varchar(64) NULL
+status varchar(32) NOT NULL
+source_locale varchar(32) NOT NULL
+current_published_version_id uniqueidentifier NULL
+created_by_user_id uniqueidentifier NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+Rules:
+- application UUID v4
+- no DB UUID defaults
+- parish required
+- code optional
+- sourceLocale required
+- currentPublishedVersionId nullable
+
+9. Question Code Constraint
+---------------------------
+Filtered unique:
+(parish_id, code)
+WHERE code IS NOT NULL
+
+Do not normalize in DB.
+Application normalization comes #003.
+
+10. question_versions Table
+---------------------------
+Columns:
+
+id uniqueidentifier PK
+question_id uniqueidentifier NOT NULL
+version_number int NOT NULL
+status varchar(32) NOT NULL
+question_type varchar(32) NOT NULL
+prompt nvarchar(2000) NOT NULL
+instruction nvarchar(1000) NULL
+explanation nvarchar(2000) NULL
+prompt_media_json nvarchar(max) NULL
+explanation_media_json nvarchar(max) NULL
+answer_definition_json nvarchar(max) NULL
+difficulty varchar(16) NULL
+source_content_hash varchar(64) NULL
+created_by_user_id uniqueidentifier NULL
+published_by_user_id uniqueidentifier NULL
+published_at datetime2 NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+11. Version Constraints
+-----------------------
+Required:
+
+version_number > 0
+
+Unique:
+(question_id, version_number)
+
+Filtered unique:
+one DRAFT per question
+
+CHECK status allowed:
+DRAFT/PUBLISHED/ARCHIVED
+
+CHECK question_type allowed:
+SINGLE_CHOICE/MULTIPLE_CHOICE/TRUE_FALSE
+
+CHECK difficulty:
+NULL or EASY/MEDIUM/HARD
+
+CHECK source_content_hash:
+NULL or exactly 64 lowercase hex
+
+CHECK publish timestamp consistency:
+DRAFT -> published_at NULL
+PUBLISHED/ARCHIVED -> published_at NOT NULL
+
+If SQL Server filtered/check syntax has limitations, implement safely and document.
+
+12. Prompt Field
+---------------
+Schema may allow empty string technically, but `prompt` should be NOT NULL.
+
+Publish non-empty validation is business logic #005.
+
+Do not encode whitespace rules in DB.
+
+13. Media JSON Fields
+---------------------
+prompt_media_json
+explanation_media_json
+
+If non-null:
+DB CHECK `ISJSON(...) = 1`
+
+Do NOT validate strict JSON schema at DB layer.
+App validator later.
+
+14. answer_definition_json
+--------------------------
+Keep nullable.
+
+At MVP objective types:
+must remain null by service rule later.
+
+DB:
+if non-null, ISJSON=1.
+
+Do not add TEXT/NUMBER types now.
+
+15. sourceContentHash
+---------------------
+Nullable at #002.
+Service will compute later (#004/#005).
+
+Use varchar(64).
+
+16. question_options Table
+--------------------------
+Columns:
+
+id uniqueidentifier PK
+question_version_id uniqueidentifier NOT NULL
+code varchar(32) NULL
+text nvarchar(512) NULL
+media_asset_id uniqueidentifier NULL
+sort_order int NOT NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+Rules:
+- application UUID v4
+- no FK to media_assets
+- option belongs version
+- text/media both nullable individually
+
+17. Option Representation Constraint
+------------------------------------
+Add DB CHECK:
+text IS NOT NULL OR media_asset_id IS NOT NULL
+
+This prevents empty option representation.
+
+18. Option Sort Constraint
+-------------------------
+sort_order >= 0
+
+Unique:
+(question_version_id, sort_order)
+
+Filtered unique:
+(question_version_id, code)
+WHERE code IS NOT NULL
+
+19. Media FK Decision
+---------------------
+NO SQL FK to media_assets.
+
+Reason:
+Media module owns lifecycle and future microservice boundary.
+Validation via MediaAssetService later.
+
+Document explicitly.
+
+20. question_correct_options Table
+---------------------------------
+Columns:
+
+question_version_id uniqueidentifier NOT NULL
+option_id uniqueidentifier NOT NULL
+
+Primary/composite unique:
+(question_version_id, option_id)
+
+FK:
+question_version_id -> question_versions
+option_id -> question_options
+
+21. Correct Option Cross-Version Integrity
+------------------------------------------
+Important:
+A DB FK on option_id alone does not guarantee option belongs to same question_version_id.
+
+Audit options.
+
+Preferred robust DB design:
+make question_options have unique `(question_version_id, id)` and use composite FK:
+(question_version_id, option_id)
+→ question_options(question_version_id, id)
+
+If SQL Server/TypeORM migration supports cleanly, implement this.
+
+This prevents a correct-answer row referencing an option from another version.
+
+Do not defer this if easy.
+
+22. question_tags Table
+-----------------------
+Columns:
+
+id uniqueidentifier PK
+parish_id uniqueidentifier NOT NULL
+code varchar(64) NOT NULL
+name nvarchar(128) NOT NULL
+status varchar(32) NOT NULL
+created_at datetime2 NOT NULL
+updated_at datetime2 NOT NULL
+
+Unique:
+(parish_id, code)
+
+Indexes:
+(parish_id, status)
+
+23. question_tag_links Table
+----------------------------
+Columns:
+
+question_id uniqueidentifier NOT NULL
+tag_id uniqueidentifier NOT NULL
+
+Composite PK/unique:
+(question_id, tag_id)
+
+Question-root scoped tags.
+
+No version-scoped tags at MVP.
+
+24. question_curriculum_links Table
+----------------------------------
+Columns:
+
+id uniqueidentifier PK
+question_id uniqueidentifier NOT NULL
+parish_id uniqueidentifier NOT NULL
+curriculum_id uniqueidentifier NOT NULL
+canonical_lesson_key uniqueidentifier NULL
+authoring_curriculum_version_id uniqueidentifier NULL
+created_at datetime2 NOT NULL
+
+No lesson_id.
+No topic_id.
+
+25. Curriculum Link Integrity
+-----------------------------
+SQL FK allowed to:
+questions
+parishes
+curriculums
+curriculum_versions if authoring id retained
+
+But application must later validate:
+- link parish matches question parish
+- curriculum belongs same parish
+- canonicalLessonKey belongs curriculum lineage/context if supplied
+- authoring version belongs curriculum if supplied
+
+Do not create cross-module ORM relations.
+
+26. Link Uniqueness
+-------------------
+Audit and implement a useful uniqueness constraint.
+
+Likely:
+(question_id, curriculum_id, canonical_lesson_key)
+
+SQL Server NULL uniqueness semantics need care.
+
+Possible filtered indexes:
+- question+curriculum when canonical_lesson_key IS NULL
+- question+curriculum+canonical_lesson_key when NOT NULL
+
+Prevent duplicate semantic links.
+
+Document exact choice.
+
+27. Root/Version Circular FK
+---------------------------
+questions.current_published_version_id -> question_versions.id
+question_versions.question_id -> questions.id
+
+Migration must handle circular FK safely:
+1. create questions without currentPublished FK
+2. create question_versions
+3. add FK back to questions.current_published_version_id
+
+Use same safe pattern as Curriculum migration.
+
+28. FK Delete Strategy
+----------------------
+Use NO ACTION/RESTRICT for roots/cross-context FKs.
+
+Within version-owned child rows:
+question_options can cascade on question_version delete if project migration policy permits.
+
+question_correct_options should cascade with version/option deletion.
+
+But published versions are application-immutable; cascade mainly supports DRAFT delete.
+
+Question root deletion should NOT cascade published history automatically.
+
+Prefer no hard delete root.
+
+29. Entity Relations
+--------------------
+Permanent architecture preference:
+scalar IDs only.
+
+Do NOT add:
+@ManyToOne
+@OneToMany
+@JoinColumn
+cross-module entity imports
+
+Strong preference: zero ORM relations even within module, consistent with current architecture.
+
+Use repositories by entity and scalar IDs.
+
+30. UUID Strategy
+-----------------
+All PK UUIDs application-generated.
+
+Use existing `generateUuidV4()` pattern.
+
+No NEWID/NEWSEQUENTIALID DB defaults.
+
+31. Human-readable Unicode
+--------------------------
+Use nvarchar:
+prompt
+instruction
+explanation
+option text
+tag name
+
+Test Vietnamese + another language round trip.
+
+32. Locale
+----------
+source_locale varchar(32)
+
+No country enum relationship.
+No DB default.
+
+Application validation later (#003).
+
+33. Media JSON
+-------------
+Use nvarchar(max) and ISJSON checks.
+
+No raw HTML columns.
+
+34. Index Strategy
+-----------------
+At minimum:
+
+questions(parish_id, status)
+questions currentPublishedVersion pointer if useful
+
+question_versions(question_id, status)
+question_versions(question_type)
+question_versions(difficulty)
+
+question_options(question_version_id)
+question_correct_options(question_version_id)
+
+question_tags(parish_id, status)
+question_tag_links(tag_id)
+question_curriculum_links(question_id)
+question_curriculum_links(curriculum_id)
+question_curriculum_links(canonical_lesson_key)
+
+Do not add full-text index yet.
+
+35. Search Readiness
+--------------------
+Prompt full-text/search optimization deferred #007.
+Basic index strategy only.
+
+36. Entity Classes
+------------------
+Create entities:
+
+QuestionEntity
+QuestionVersionEntity
+QuestionOptionEntity
+QuestionCorrectOptionEntity
+QuestionTagEntity
+QuestionTagLinkEntity
+QuestionCurriculumLinkEntity
+
+Naming consistent with existing modules.
+
+37. Public Snapshot Interfaces
+------------------------------
+Do NOT build rich DTOs yet.
+
+If useful for metadata tests:
+internal interfaces okay.
+
+No HTTP DTOs.
+
+38. AppModule
+------------
+Register QuestionBankModule.
+
+No HTTP routes.
+
+39. Module Boundary Test
+------------------------
+Update `module-boundaries.spec.ts`.
+
+At #002 expected:
+QuestionBankModule exports nothing.
+
+If a service export is added, justify strongly.
+Do not export persistence.
+
+40. Entity Metadata Tests
+-------------------------
+Create tests for:
+- table names
+- column types/nullable
+- no ORM relations
+- sourceLocale
+- sourceContentHash
+- media JSON fields
+- no Media FK
+- enums
+- option representation fields
+
+41. UUID Tests
+--------------
+Verify:
+- Question root UUID v4
+- Version UUID v4
+- Option UUID v4
+- Tag UUID v4
+- Curriculum link UUID v4
+- explicit ID preservation
+
+42. Migration Integration Tests
+-------------------------------
+Against MSSQL test DB:
+
+- all tables created
+- UUID columns have no DB defaults
+- one DRAFT unique
+- versionNumber unique/positive
+- status/type checks
+- source hash constraint
+- JSON ISJSON constraints
+- Unicode prompt/option/tag
+- option representation constraint
+- option sort unique/nonnegative
+- correct-answer cross-version rejection
+- tag uniqueness per parish
+- same tag code allowed other parish
+- question code unique per parish when non-null
+- curriculum link duplicate prevention
+- no media FK
+- circular currentPublished FK works
+
+43. Multilingual Tests
+----------------------
+Persist:
+Vietnamese
+French/accented or another Unicode example
+
+sourceLocale:
+vi-VN / fr-FR values persisted
+
+Do not implement translations.
+
+44. Exam Auditability Readiness
+-------------------------------
+Persistence must preserve:
+immutable version identity
+stable option IDs within version
+sourceContentHash field
+
+No Exam code.
+
+45. No Business Logic
+---------------------
+Do NOT implement:
+- create question use case
+- code normalization
+- locale validator
+- publish
+- clone
+- grading
+- Media validation
+- Curriculum validation
+- RBAC
+- controllers
+
+46. No Tag Service
+------------------
+Schema only.
+
+47. No Translation Tables
+-------------------------
+Do NOT implement localization rows/jobs/provider.
+
+48. No Practice/Exam
+--------------------
+Strictly out of scope.
+
+49. Existing Regression
+-----------------------
+Run current full non-DB quality.
+
+Then DB migration/integration.
+
+No regressions to Curriculum/Media.
+
+50. quality:full
+----------------
+Because persistence changes affect migrations:
+run pristine full quality.
+
+Order:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Must PASS or explain/root-cause.
+
+51. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-schema .
+
+PASS required.
+
+52. Required Commands
+---------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:question-bank-schema .
+
+53. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+Final response may print exactly ONE line:
+
+git commit -m "feat(question-bank): add versioned question schema"
+
+Do not execute it.
+
+54. Required Report
+-------------------
+Create:
+
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #001
+3 Rules applied
+4 Files created
+5 Files modified
+6 QuestionBankModule skeleton
+7 Public exports
+8 Enums
+9 Questions entity/table
+10 QuestionVersions entity/table
+11 QuestionOptions entity/table
+12 QuestionCorrectOptions entity/table
+13 QuestionTags entity/table
+14 QuestionTagLinks entity/table
+15 QuestionCurriculumLinks entity/table
+16 UUID strategy
+17 Root/version circular FK
+18 FK strategy
+19 Delete/cascade strategy
+20 Question code uniqueness
+21 One DRAFT filtered unique
+22 Version constraints
+23 Question type/difficulty constraints
+24 JSON constraints
+25 sourceContentHash constraint
+26 Option representation constraint
+27 Option sort/code uniqueness
+28 Correct-answer cross-version integrity
+29 Tag uniqueness
+30 Curriculum link uniqueness
+31 No media FK
+32 Entity ORM-relation audit
+33 Unicode validation
+34 Locale persistence
+35 Index strategy
+36 Metadata tests
+37 UUID tests
+38 Migration integration tests
+39 Multilingual readiness
+40 Exam auditability readiness
+41 Existing regression
+42 quality:full
+43 Docker
+44 Microservice extraction readiness
+45 Commands
+46 Validation matrix
+47 Known/deferred
+48 Out-of-scope
+49 QUESTION BANK #003 readiness
+50 Prompt count
+51 Commit recommendation
+
+55. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- all 7 tables
+- no blob columns
+- UUID no DB defaults
+- one DRAFT
+- version number unique/positive
+- status checks
+- type checks
+- difficulty check
+- JSON ISJSON checks
+- sourceContentHash check
+- question code per parish uniqueness
+- option representation
+- option sort unique
+- option code filtered unique
+- correct-answer same-version integrity
+- tag uniqueness
+- curriculum link uniqueness
+- no media FK
+- no ORM relations
+- Unicode
+- sourceLocale
+- no HTTP API
+- no RBAC
+- no business services
+- no translation tables
+- prior regression
+- Git rule compliance
+
+56. #003 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+QUESTION BANK #003/8 — Question Root/Version CRUD + Tags/Curriculum Link Metadata + RBAC
+
+#003 should implement:
+- question root create/list/get/update/status
+- initial draft version creation/list/get
+- tag CRUD/linking
+- curriculum/lesson metadata links
+- parish scope
+- questions.read/manage/publish permissions
+- Swagger/tests
+
+Do NOT implement type-specific options/answers validation yet (#004).
+
+57. Prompt Count
+----------------
+State:
+QUESTION BANK #002/8 complete
+approximately 6 prompts remain (#003–#008)
+
+58. Final Response
+------------------
+Respond concisely:
+
+- QUESTION BANK #002 status
+- schema PASS/FAIL
+- migration PASS/FAIL
+- multilingual foundation PASS/FAIL
+- exam auditability foundation PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(question-bank): add versioned question schema"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT proceed to #003 automatically.

@@ -1,0 +1,1007 @@
+CURSOR PROMPT — AUTH/RBAC #007/9
+SECURITY HARDENING + FULL AUTH/RBAC INTEGRATION AUDIT
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit: COMPLETE
+- AUTH/RBAC #002 — Schema + Entities + Migrations: COMPLETE
+- AUTH/RBAC #002B — Schema Boundary Hardening: COMPLETE
+- AUTH/RBAC #003 — User Account + Password Foundation: COMPLETE
+- AUTH/RBAC #004 — Login + Access JWT: COMPLETE
+- AUTH/RBAC #005 — Refresh Token + Session + Logout: COMPLETE
+- AUTH/RBAC #006 — Role + Permission + RBAC Guards: COMPLETE
+
+Current:
+- AUTH/RBAC #007 / 9 — Security Hardening + Full Auth/RBAC Integration
+
+Remaining:
+- #008 Sample Seed Data + Postman Verification
+- #009 Final Auth/RBAC Audit + Module Boundary Review
+
+IMPORTANT:
+This prompt is a security hardening / integration prompt.
+Do not seed sample data yet.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read all reports:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+   docs/AUTH_002_AUTH_FOUNDATION_SCHEMA_REPORT.md
+   docs/AUTH_002B_SCHEMA_BOUNDARY_HARDENING_REPORT.md
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+   docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+   docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+   docs/AUTH_006_ROLE_PERMISSION_RBAC_REPORT.md
+5. Inspect:
+   src/modules/users/
+   src/modules/auth/
+   src/modules/access-control/
+   src/config/
+   src/http/
+   src/logging/
+   src/request-context/
+   test/
+   package.json
+   bitbucket-pipelines.yml
+6. Inspect Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Perform an independent security review of the complete Auth/RBAC implementation and fix genuine issues.
+
+Audit/harden:
+
+- login brute-force/rate limiting posture
+- credential enumeration resistance
+- Argon2 rehash behavior
+- access JWT validation
+- auth session / refresh-token lifecycle
+- refresh replay handling
+- logout/revocation behavior
+- access-token behavior after session revocation
+- CSRF exposure for refresh/logout cookie endpoints
+- cookie security
+- auth error consistency
+- permission authorization consistency
+- module exports/boundaries
+- logging/secret leakage
+- stale session cleanup policy
+- full authentication + authorization E2E matrix
+
+Classify findings:
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+- NO ACTION
+
+Audit first.
+Implement only justified fixes.
+
+4. CRITICAL Module Boundary Review
+----------------------------------
+AUTH #006 currently reports:
+
+AuthModule exports:
+- JwtAuthGuard
+- AccessTokenService
+
+The report says AccessTokenService was exported so JwtAuthGuard resolves when used on controllers outside AuthModule.
+
+This MUST be independently verified.
+
+In standard NestJS module DI, an exported provider such as JwtAuthGuard should normally be able to use its private dependencies resolved inside AuthModule.
+
+Therefore:
+
+- determine whether AccessTokenService truly needs to be public
+- if not necessary, remove it from AuthModule exports
+- keep AccessTokenService internal/private
+- future business modules should depend only on JwtAuthGuard, not token-signing internals
+
+Preferred final AuthModule public surface:
+- JwtAuthGuard only
+- possibly other intentionally public auth contracts later
+
+Do not preserve an internal export merely because a test harness was wired incorrectly.
+
+If test modules need auth:
+import AuthModule properly.
+
+Add/update architecture tests to prevent accidental export of AccessTokenService.
+
+5. Security Finding Method
+--------------------------
+Before edits, create a structured finding list.
+
+For each finding document:
+- severity
+- current behavior
+- realistic risk
+- proposed fix
+- whether fix is in scope
+- test needed
+
+Do not implement speculative security features without evidence.
+
+6. Login Rate Limiting / Brute Force Audit
+------------------------------------------
+Login currently has no rate limiting.
+
+This is a real security concern.
+
+Evaluate implementation choices:
+
+A. NestJS `@nestjs/throttler`
+B. AuthModule-specific rate limiter
+C. Infrastructure-level reverse-proxy/API gateway rate limiting only
+D. defer with explicit production blocker
+
+Consider:
+- local development
+- single instance today
+- future horizontal scaling
+- Redis not yet introduced
+- future microservice extraction
+
+Preferred architecture:
+If implementing application-level throttling now, make it clear that:
+- it is a baseline safeguard
+- distributed/global enforcement will later need shared storage or gateway-level limiting
+
+Do not invent a homegrown insecure limiter if a maintained Nest solution is cleaner.
+
+7. Rate Limiting Scope
+----------------------
+If rate limiting is implemented:
+
+Prioritize:
+- POST /auth/login
+- POST /auth/refresh
+
+Possibly logout is not necessary.
+
+Do NOT throttle:
+- health endpoint
+- every API route indiscriminately
+
+Use sensible limits.
+
+Do not choose extremely strict values that impair legitimate users.
+
+Document exact policy.
+
+8. Authentication Enumeration Safety
+-------------------------------------
+Re-audit:
+- unknown email
+- malformed email
+- wrong password
+- INACTIVE
+- LOCKED
+
+Requirements:
+- same HTTP 401 response
+- same public message
+- password dummy verification for unknown account remains
+- no email/account existence leaked through response
+
+Review timing behavior.
+
+Do not promise perfect constant-time behavior if not achievable.
+
+9. Argon2 Rehash
+----------------
+AUTH #003 deferred automatic rehash.
+
+Review:
+PasswordHashService.needsRehash()
+
+Preferred hardening:
+On successful credential verification:
+
+1. verify password
+2. if needsRehash(storedHash)
+3. generate new Argon2id hash
+4. persist new hash safely
+
+Requirements:
+- only after successful authentication
+- failure to rehash should not leak password
+- avoid making successful login fail unnecessarily due to noncritical rehash update, unless security policy says otherwise
+- no raw password logging
+
+Keep logic inside UsersModule.
+
+Test it.
+
+10. Access Token Validation
+---------------------------
+Audit AccessTokenService and JwtAuthGuard.
+
+Verify:
+- HS256 explicitly enforced
+- signature verified
+- exp verified
+- sub valid UUID v4/expected UUID
+- sid valid UUID
+- malformed token -> 401
+- tokens missing sid -> 401
+- algorithm confusion prevented
+- no `none` algorithm acceptance
+- no query/cookie access-token extraction
+
+Add negative tests if missing.
+
+11. Session Revocation vs Existing Access Tokens
+------------------------------------------------
+Current AUTH #005 design:
+- logout revokes refresh-token family
+- access JWT is short-lived
+- JwtAuthGuard does not query session DB on each request
+
+Therefore:
+a previously issued access token may remain usable until access-token expiry after logout/family revocation.
+
+This is an important design decision.
+
+Audit options:
+
+A. Keep stateless access token:
+- accept max ~15 minute revocation delay
+
+B. Add session-active lookup per protected request:
+- immediate revocation
+- DB query per request
+- stronger security but more coupling/load
+
+C. hybrid/cache later
+
+Choose intentionally.
+
+Given this platform can contain minors and administrative capabilities, evaluate whether immediate session revocation is worth the DB lookup.
+
+If implementing session validation:
+- DO NOT make JwtAuthGuard directly access AuthSession repository if it breaks boundaries
+- use a narrow AuthModule internal/public session validation service appropriately
+- avoid exposing persistence
+- no cross-module access
+
+If leaving stateless:
+document as accepted residual risk for phase 1 and revisit at final audit.
+
+12. Session Validation Semantics
+--------------------------------
+If access token session-active checking is introduced:
+
+A session referenced by sid should be accepted only if:
+- row exists
+- not revoked
+- not expired (if access session expiry relationship is meaningful)
+- belongs to sub user id
+
+But remember rotation:
+refresh revokes old auth_sessions row and creates new sid.
+
+This would immediately invalidate the OLD access JWT after refresh.
+
+That may be desirable, but it changes multi-tab behavior.
+
+Audit carefully.
+
+Do not implement without considering:
+- refresh rotates sid
+- concurrent browser tabs holding old access token
+- access JWT lifetime
+
+Document tradeoff.
+
+13. Refresh Replay Hardening
+----------------------------
+Re-audit current model:
+
+- opaque random token
+- HMAC digest
+- one row per token instance
+- pessimistic lock
+- revoked replay triggers family revocation
+
+Verify:
+- replay of old token -> 401
+- newest token becomes unusable after family revocation
+- concurrent refresh cannot leave two active valid branches
+- transaction boundaries are correct
+- family revocation survives thrown errors
+
+Add concurrency/sequential replay tests if missing.
+
+14. Refresh Hash Index
+----------------------
+Verify:
+UQ_auth_sessions_refresh_token_hash
+
+Ensure:
+- migration exists
+- uniqueness works
+- no raw token database index
+- lookup uses hash
+
+No schema change if correct.
+
+15. Cookie Security Review
+--------------------------
+Current refresh cookie:
+- HttpOnly
+- Secure production
+- SameSite=Lax
+- Path=/api/v1/auth
+
+Audit:
+- cookie name
+- path
+- maxAge
+- secure environment logic
+- clear-cookie matches original options
+- no Domain unless needed
+- no raw refresh token in JSON
+
+Ensure login/refresh/logout cookie handling is consistent.
+
+16. CSRF Review
+---------------
+Refresh/logout use cookie authentication.
+
+Current protection:
+SameSite=Lax.
+
+Audit actual risk for expected frontend/API topology.
+
+Consider:
+- React frontend may be on separate origin
+- same-site vs cross-site behavior
+- localhost development
+- future subdomain deployments
+- POST requests
+
+Possible hardening:
+- validate Origin header for cookie-auth state-changing routes
+- SameSite policy
+- later CSRF token
+
+Do NOT add a large CSRF framework unless necessary.
+
+If adding Origin validation:
+- make allowed frontend origins configuration-driven
+- do not break Postman/local API testing
+- distinguish browser requests vs non-browser clients carefully
+
+If architecture details are insufficient:
+document deferred decision clearly for frontend integration.
+
+17. CORS Interaction
+--------------------
+Do not randomly change CORS.
+
+But audit whether refresh cookie design requires:
+credentials: true
+
+If CORS is not yet configured because frontend phase has not begun:
+document exact future requirement.
+
+Do not add wildcard origin + credentials combination.
+
+18. Auth Error Consistency
+--------------------------
+Audit all auth endpoints:
+
+POST /auth/login
+POST /auth/refresh
+POST /auth/logout
+GET /auth/me
+
+Required:
+- invalid credentials/token/session -> consistent 401
+- permission failure -> 403
+- DTO validation -> 400
+- internal errors -> sanitized 500
+- requestId preserved by global error contract
+
+No database/crypto details in error messages.
+
+19. Logout Semantics
+--------------------
+Verify:
+- logout requires access JWT
+- revokes current family
+- clears cookie
+- idempotency policy defined
+
+If logout is called twice with already-revoked session:
+decide whether:
+- 204 idempotent
+or
+- 401
+
+Preferred user-friendly behavior:
+logout should be as close to idempotent as practical.
+
+But guard requiring a still-valid JWT may make repeated logout fail.
+
+Document intentionally.
+
+20. Session Cleanup Policy
+--------------------------
+Expired/revoked rows accumulate.
+
+Do NOT automatically add scheduler/cron unless project infrastructure is ready.
+
+But audit and define future cleanup strategy.
+
+Possible future:
+- explicit maintenance command
+- scheduled cleanup job
+- retention window
+
+No hard delete of active sessions.
+
+If a tiny internal cleanup service method is useful for tests, do not expose/schedule it yet.
+
+21. Password / Secret Logging Audit
+-----------------------------------
+Search code for:
+- password
+- passwordHash
+- accessToken
+- refreshToken
+- Authorization
+- JWT_ACCESS_SECRET
+- JWT_REFRESH_HASH_SECRET
+
+Ensure no sensitive value is logged.
+
+Review request logging/redaction:
+- Authorization header
+- Cookie header
+- Set-Cookie if logger captures response headers
+
+This is CRITICAL.
+
+Foundation logging already has redaction; verify refresh cookie names/headers are covered.
+
+If missing:
+fix logging redaction.
+
+22. Request Body Logging
+------------------------
+If request logger can log request body:
+ensure login.password is never logged.
+
+Do not rely only on controller discipline.
+
+Verify current logger behavior.
+
+23. PermissionGuard Security Audit
+----------------------------------
+Re-audit:
+
+- requires JwtAuthGuard first
+- missing auth context -> 401
+- missing permission -> 403
+- ALL permission semantics
+- no role bypass
+- no permission claim from client/JWT
+- effective permissions loaded server-side
+
+Add negative tests for malformed/no metadata if missing.
+
+24. Permission TOCTOU / Immediate Changes
+-----------------------------------------
+Existing E2E proves same JWT reflects new permission assignment.
+
+Also test:
+- permission removed -> same JWT loses access immediately
+- role removed -> same JWT loses access immediately
+
+This is important.
+
+25. Invalid / Deleted RBAC Rows
+-------------------------------
+No delete role/permission service yet.
+
+Do not add CRUD deletion.
+
+Test assignment/removal semantics only.
+
+26. User Account Status after Login
+-----------------------------------
+Current:
+- refresh rechecks ACTIVE
+- access JWT may remain valid until expiry
+
+Audit consistency with session revocation decision.
+
+If user becomes LOCKED/INACTIVE:
+- refresh must fail
+- new login must fail
+- existing access JWT behavior must be documented
+
+Do not create account-status DB lookup in PermissionGuard.
+
+27. Security Headers
+--------------------
+Audit whether auth responses need explicit:
+Cache-Control: no-store
+
+For responses containing access tokens:
+POST /auth/login
+POST /auth/refresh
+
+Preferred:
+Cache-Control: no-store
+Pragma: no-cache if useful for legacy intermediaries
+
+Add only if not already handled globally.
+
+This is a justified auth hardening.
+
+28. Token Response Leakage
+--------------------------
+Ensure Swagger/examples/tests do not include real tokens/secrets.
+
+No snapshot should write token content to committed files.
+
+29. JWT Secret Rotation
+-----------------------
+AUTH #004 deferred secret rotation.
+
+Do NOT build key-ring infrastructure now.
+
+Document phase-1 operational limitation:
+changing JWT_ACCESS_SECRET invalidates all access tokens.
+
+Refresh sessions remain, so clients can refresh after access secret rotation if refresh hash secret unchanged.
+
+If JWT_REFRESH_HASH_SECRET changes:
+all existing refresh tokens become unusable.
+
+Document clearly.
+
+30. Rate Limiting Tests
+-----------------------
+If limiter implemented:
+test:
+
+- below threshold succeeds/reaches credential validation
+- threshold exceeded -> 429
+- reset/window behavior if deterministic
+- login and refresh policies distinct if applicable
+- no password/token leaked in rate-limit key/log
+
+Avoid brittle real-time sleeps.
+
+31. Argon2 Rehash Tests
+-----------------------
+If implemented:
+- old/weaker compatible hash verifies
+- needsRehash true
+- successful verification replaces stored hash
+- new hash verifies
+- invalid password does not rehash
+
+32. Full Auth/RBAC E2E Matrix
+-----------------------------
+Create/extend DB-aware E2E covering:
+
+Account:
+- create ACTIVE
+- INACTIVE login denied
+- LOCKED login denied
+
+Login:
+- valid -> access + refresh cookie
+- wrong password -> 401
+- unknown email -> 401
+- malformed DTO -> 400
+
+Access:
+- /auth/me with valid token -> 200
+- missing token -> 401
+- malformed token -> 401
+- expired token -> 401
+- wrong signature -> 401
+
+Refresh:
+- valid -> rotates
+- old token replay -> 401
+- family revocation
+- expired session -> 401
+- inactive account -> 401
+
+Logout:
+- valid -> 204
+- refresh after logout -> 401
+
+RBAC:
+- no role -> 403
+- permission allow -> 200
+- missing permission -> 403
+- permission assigned after JWT -> access immediately
+- permission removed after JWT -> deny immediately
+- second role union works
+- duplicate permission deduped
+
+33. Security Regression Tests
+-----------------------------
+Add focused tests for any fixed security issue.
+
+Do not create one giant 1000-line test file.
+
+Group:
+- authentication
+- session
+- RBAC
+- security hardening
+
+34. Database Isolation
+----------------------
+All DB-aware tests:
+catechism_api_test only.
+
+Use existing safety guards.
+
+No dev DB for test matrix.
+
+35. Rate Limiter Data / Microservice Readiness
+----------------------------------------------
+If using local-memory throttling:
+document explicitly:
+
+- not globally consistent across horizontally scaled instances
+- production scale should move enforcement to gateway/shared store
+
+Do not pretend local in-memory rate limiting is a complete distributed solution.
+
+36. Module Export Hardening
+---------------------------
+Final expected exports should be audited.
+
+Preferred:
+
+UsersModule:
+- UserAccountService
+
+AuthModule:
+- JwtAuthGuard
+
+AccessControlModule:
+- AccessControlService
+- PermissionGuard
+
+If anything else is exported:
+justify.
+
+No persistence infrastructure.
+
+No AccessTokenService export unless demonstrably necessary.
+
+37. Microservice Extraction Audit
+---------------------------------
+Reconfirm:
+
+Users/Identity:
+- credentials/account state
+
+Auth:
+- login, tokens, auth_sessions
+
+AccessControl:
+- roles/permissions/assignments
+
+No service has direct persistence access to another bounded context.
+
+38. No Sample Seed Data
+-----------------------
+STRICTLY no AUTH #008 work yet.
+
+Do NOT create:
+- SUPER_ADMIN row
+- PARISH_ADMIN row
+- sample users
+- sample passwords
+- Postman collection
+
+#008 handles this.
+
+39. No Admin APIs
+-----------------
+Do not add management endpoints.
+
+No:
+POST /roles
+POST /permissions
+POST /users
+
+40. No Tenant Scope
+-------------------
+Do not add parish_id or scoped assignments.
+
+Tenant/parish scope is later domain architecture.
+
+41. CI Compatibility
+--------------------
+Any new tests must fit existing CI layers.
+
+If rate limiter/config introduces env vars:
+update CI test env safely.
+
+No real secrets.
+
+42. Docker Validation
+---------------------
+Run production Docker build.
+
+No Dockerfile changes unless a concrete issue appears.
+
+43. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci or npm install as appropriate
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+production target build.
+
+44. Completion Criteria
+-----------------------
+AUTH #007 is complete only if:
+
+- no unresolved BLOCKER/HIGH security finding
+- auth errors consistent
+- secrets/logging safe
+- replay/revocation tests pass
+- permission removal takes effect immediately
+- module boundary remains clean
+- full DB-aware Auth/RBAC flow passes
+- no sample seeds added
+
+45. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "fix(auth): harden authentication and authorization"
+
+Cursor must NOT execute it.
+
+46. Required Report
+-------------------
+Create:
+
+docs/AUTH_007_SECURITY_HARDENING_INTEGRATION_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From AUTH #006
+
+3. Security Audit Method
+
+4. Findings Summary
+Table:
+- ID
+- Severity
+- Area
+- Finding
+- Action
+
+5. AuthModule Export Audit
+Specifically review AccessTokenService export.
+
+6. Login / Brute Force Review
+
+7. Rate Limiting Decision
+If implemented:
+- library
+- limits
+- scope
+- scale limitation
+If deferred:
+- exact reason
+- risk classification
+
+8. Enumeration / Timing Review
+
+9. Argon2 Rehash Review
+
+10. Access JWT Security Audit
+
+11. Session Revocation vs Access Token Decision
+
+12. Refresh Rotation / Replay Audit
+
+13. Cookie Security Audit
+
+14. CSRF Review
+
+15. CORS / Frontend Integration Note
+
+16. Auth Error Consistency
+
+17. Logout Semantics
+
+18. Session Cleanup Policy
+
+19. Logging / Secret Redaction Audit
+
+20. Request Body / Header Redaction
+
+21. Cache-Control / Token Response Hardening
+
+22. RBAC Guard Security Audit
+
+23. Immediate Permission Removal Test
+
+24. Role Removal Test
+
+25. Account Status Behavior Matrix
+
+26. Files Created
+
+27. Files Modified
+
+28. Dependencies Added/Changed
+
+29. Security Fixes Implemented
+For each:
+- issue
+- fix
+- reason
+- test
+
+30. Full Auth/RBAC E2E Matrix
+
+31. Unit Tests
+
+32. Integration Tests
+
+33. Existing Test Regression
+
+34. CI Compatibility
+
+35. Docker Validation
+
+36. Module Boundary Audit After Hardening
+
+37. Future Microservice Extraction Review
+
+38. Remaining Risks
+List severity.
+
+39. Deferred Security Work
+Examples:
+- distributed rate limiting
+- CSRF token if required by future deployment topology
+- session cleanup scheduler
+- JWT key rotation
+- MFA
+- audit log
+
+40. Commands Executed
+
+41. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB auth/rbac e2e
+- quality:full
+- Docker production build
+- login matrix
+- JWT invalid/expired/wrong signature
+- refresh rotation
+- replay family revocation
+- logout
+- permission add immediate
+- permission remove immediate
+- role remove immediate
+- secret/log redaction
+- module exports
+- no seed data
+
+42. Known Issues / Assumptions
+
+43. Out-of-Scope Confirmation
+
+44. AUTH #008 Readiness
+
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+AUTH/RBAC #008 — Sample Seed Data + Postman Verification
+
+#008 should:
+- create explicit local/dev seed command
+- seed sample roles
+- seed sample permissions
+- seed safe local test users
+- assign roles/permissions
+- be idempotent
+- never auto-run in production
+- provide Postman/cURL verification flow:
+  login
+  me
+  protected allow/deny
+  refresh
+  logout
+- no real production credentials
+
+45. Commit Message Recommendation
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "fix(auth): harden authentication and authorization"
+
+Cursor MUST NOT execute it.
+
+47. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #007 status
+- security hardening PASS/FAIL
+- unresolved BLOCKER/HIGH count
+- full Auth/RBAC E2E PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_007_SECURITY_HARDENING_INTEGRATION_REPORT.md
+
+Then print exactly ONE commit command if tracked changes exist:
+
+git commit -m "fix(auth): harden authentication and authorization"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to AUTH #008 automatically.

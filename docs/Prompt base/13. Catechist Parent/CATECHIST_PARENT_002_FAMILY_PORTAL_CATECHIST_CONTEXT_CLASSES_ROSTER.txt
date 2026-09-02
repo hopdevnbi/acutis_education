@@ -1,0 +1,695 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #002/5
+FAMILY PORTAL MODULE FOUNDATION + CATECHIST CONTEXT / ASSIGNED CLASSES / ROSTER READ MODELS
+
+CONTEXT
+-------
+Completed:
+- #001/5 Domain audit + orchestration design
+- #001A Baseline integration cleanup corrective — PASS
+
+Baseline after #001A:
+- full integration PASS: 42 suites / 236 tests
+- DB e2e PASS: 124 tests
+- pristine quality:full PASS
+- npm audit PASS
+- Docker production PASS
+- BLOCKER 0
+- HIGH 0
+
+Current:
+CATECHIST + PARENT SUPPORTING APIs #002 / 5
+
+Remaining:
+#003 Parent context + children + enrollment progress
+#004 RBAC/security/performance/contract hardening
+#005 Demo seed + Postman + final gate
+
+FINAL ARCHITECTURE
+------------------
+Module: `family-portal`
+
+Purpose:
+stateless orchestration/read-model facade.
+
+Rules:
+- ZERO business tables
+- NO entities/migrations/repositories
+- public APIs only across module boundaries
+- GET-only MVP
+- no duplicate domain calculations
+- no forwardRef
+- no direct entity/repository imports
+
+This prompt implements Catechist APIs ONLY.
+
+PERMANENT GIT RULES
+-------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest git add.
+
+If tracked changes exist, print exactly one manual commit command:
+git commit -m "feat(family-portal): add catechist portal read models"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read fully:
+PROJECT_RULES.md
+AGENTS.md
+all .cursor/rules/*.mdc
+
+Read:
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Inspect:
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/practice/
+src/modules/learning-progress/
+src/modules/exam/
+src/modules/auth/
+src/modules/access-control/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+test/
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+
+1. FamilyPortalModule
+2. FamilyPortalService facade
+3. Catechist scope/access coordinator
+4. GET /api/v1/me/catechist/context
+5. GET /api/v1/me/catechist/classes
+6. GET /api/v1/me/catechist/classes/:classId/roster
+7. Exam batch enrollment-summary public API
+8. Class batch snapshots public API if required
+9. Enrollment active-count batch API if required
+10. DTO/mappers/OpenAPI/errors
+11. unit + integration + DB e2e
+12. N+1 budget validation
+13. module-boundary tests
+14. pristine quality:full
+15. Docker production build
+
+Do NOT implement Parent APIs yet.
+
+MODULE STRUCTURE
+----------------
+Create:
+src/modules/family-portal/
+
+Suggested:
+family-portal.module.ts
+family-portal.service.ts
+
+controllers/
+  family-portal-catechist.controller.ts
+
+services/
+  catechist-portal.service.ts
+  family-portal-access.service.ts
+
+dto/
+mappers/
+interfaces/
+errors/
+
+Keep it minimal.
+
+DEPENDENCIES
+------------
+FamilyPortal may import public modules:
+- ClassModule
+- EnrollmentModule
+- StudentModule
+- LearningProgressModule
+- ExamModule
+- AuthModule
+- AccessControlModule
+
+PracticeModule should not be imported directly if LearningProgressService already composes Practice.
+
+No TypeOrmModule.
+No foreign repos/entities.
+
+PUBLIC EXPORT
+-------------
+Export:
+FamilyPortalService only.
+
+No other service/entity/repository exports.
+
+RBAC
+----
+Do NOT add `family-portal.read`.
+
+Reuse existing domain read permissions.
+
+Permission is NOT scope.
+
+Scope must come from:
+- active Catechist↔Class assignment
+- ClassScopeService/ClassCatechistAssignmentService
+
+Do not let SUPER_ADMIN/PARISH_ADMIN/PARENT/STUDENT impersonate `/me/catechist/*`.
+
+ACTOR SEMANTICS
+---------------
+Audit exact existing role/assignment behavior.
+
+Preferred:
+- actual Catechist actor with zero active assignments => empty context/classes
+- non-Catechist actor => 403
+
+If existing conventions strongly favor 403 for no assignment, document and use consistently.
+
+No admin fallback.
+
+CATECHIST CONTEXT
+-----------------
+GET /api/v1/me/catechist/context
+
+Response:
+{
+  actorUserId: string;
+  assignedClassCount: number;
+  parishIds: string[];
+}
+
+Rules:
+- JWT actor only
+- active assigned classes only
+- distinct deterministic parishIds
+- lightweight; no roster/progress/exam calls
+
+CATECHIST CLASSES
+-----------------
+GET /api/v1/me/catechist/classes?page=&limit=
+
+Return:
+{
+  page,
+  limit,
+  total,
+  items: [{
+    classId,
+    className,
+    classCode,
+    classStatus,
+    parishId,
+    academicYearId,
+    catechismLevelId,
+    activeEnrollmentCount
+  }]
+}
+
+No roster/progress/results here.
+
+Max page size:
+50 unless shared project convention is lower.
+
+CLASS BATCH API
+---------------
+Avoid N calls to getClassById.
+
+If needed, add inside ClassModule:
+
+getClassSnapshotsByIds(classIds: readonly string[])
+
+Requirements:
+- narrow snapshot
+- dedupe
+- empty input => empty result
+- no entity leakage
+- no FamilyPortal DTO inside ClassModule
+- one bounded query
+
+ENROLLMENT COUNT BATCH
+----------------------
+Do not query active enrollment count once per class.
+
+If needed, add public owning-module API such as:
+
+countActiveEnrollmentsByClassIds(classIds: readonly string[])
+
+Place it in EnrollmentService or EnrollmentQueryService according to current ownership.
+
+Return a narrow map/list.
+One bounded query.
+
+ROSTER
+------
+GET /api/v1/me/catechist/classes/:classId/roster
+
+Query:
+page
+limit
+optional curriculumId
+optional canonicalLessonKey
+
+Authorization BEFORE composition:
+- actor must be assigned to class
+- class must be readable by Catechist
+
+Use public scope services only.
+
+ROSTER COMPOSITION
+------------------
+Primary:
+LearningProgressService.getClassLearningProgress(...)
+
+Reuse its:
+- pagination
+- learning metrics
+- practice metrics
+- class summary
+
+Do NOT recalculate Learning Progress or Practice.
+
+EXAM BATCH API
+--------------
+Add to ExamService:
+
+getEnrollmentExamSummariesByEnrollmentIds(
+  enrollmentIds: readonly string[]
+)
+
+Return narrow summary per enrollment:
+{
+  assignmentsAvailable,
+  attemptsCompleted,
+  latestScorePercent
+}
+
+Requirements:
+- batch/constant query count
+- empty => empty
+- dedupe IDs
+- same semantics as existing getEnrollmentExamSummary
+- no answer/review/correctness data
+- no FamilyPortal DTO inside ExamModule
+
+Prefer both single and batch methods to share one internal implementation.
+
+EXAM SUMMARY SEMANTICS
+----------------------
+Preserve existing semantics exactly.
+
+No exam data:
+{
+  assignmentsAvailable: 0,
+  attemptsCompleted: 0,
+  latestScorePercent: null
+}
+
+Do not invent new meaning.
+
+STUDENT ENRICHMENT
+------------------
+Use StudentService.getStudentSnapshotsByIds if LearningProgress rows lack display name.
+
+Per roster item:
+- studentId
+- enrollmentId
+- displayName
+- enrollmentStatus
+- learning
+- practice
+- exam
+- lastLearningActivityAt
+
+Exclude:
+- DOB
+- address
+- phone
+- email
+- guardian PII
+- sibling links
+- raw Practice answers
+- raw Exam answers
+- notes
+
+ROSTER RESPONSE
+---------------
+Target shape:
+
+{
+  class: {
+    classId,
+    className,
+    classCode,
+    parishId,
+    academicYearId,
+    catechismLevelId
+  },
+  summary: <existing compact class learning/practice summary>,
+  page,
+  limit,
+  total,
+  items: [...]
+}
+
+Do not expose internal owning-module DTOs directly.
+Map to FamilyPortal DTOs.
+
+NO CLASS EXAM AGGREGATE YET
+---------------------------
+Do not add class-level exam aggregate header unless it already exists cheaply.
+
+MVP only needs per-enrollment exam summary on roster rows.
+
+CROSS-PARISH
+------------
+Catechist may see assigned classes across multiple parishes.
+Only assigned classes.
+No parish-wide escalation.
+
+ACTIVE ASSIGNMENTS
+------------------
+Audit whether listAssignedClassIds includes historical/inactive assignments.
+
+Family Portal should use active/current assignment semantics only.
+
+If owning service needs a filter/additive method, add it there.
+Do not inspect foreign repositories.
+
+ERRORS
+------
+Use stable errors, e.g.:
+ActorNotCatechistError
+CatechistClassAccessDeniedError
+
+403 for actor/scope denial.
+404 only where existing domain convention permits safe not-found.
+
+No raw DB errors.
+
+DTO VALIDATION
+--------------
+Validate:
+classId UUID
+page/limit
+curriculumId optional UUID
+canonicalLessonKey via existing LP validation contract
+
+OPENAPI
+-------
+Document all three routes:
+- auth
+- permissions
+- relationship scope semantics
+- pagination
+- response DTOs
+- 400/401/403/404
+
+NO PARENT API
+-------------
+Do NOT add:
+GET /me/parent/context
+GET /me/parent/children
+GET /me/parent/enrollments/:id/progress
+
+Those are #003.
+
+OUT OF SCOPE
+------------
+Do NOT implement:
+- attendance
+- schedule/calendar
+- prayer
+- notifications
+- class materials
+- recent activity feed
+
+UNIT TESTS
+----------
+Cover:
+- context mapper
+- class mapper
+- roster mapper
+- actor denial
+- unassigned class denial
+- batch joins
+- missing exam summary default
+- pagination
+- no PII
+- stable/deduped ordering
+
+BATCH API TESTS
+---------------
+Class batch:
+- multiple IDs
+- empty
+- duplicates
+- missing IDs behavior
+
+Enrollment count batch if added:
+- active only
+- zero
+- duplicate IDs
+
+Exam batch:
+- multiple enrollments
+- empty
+- duplicates
+- no attempts
+- multiple attempts
+- latest score
+- parity with single summary method
+
+INTEGRATION TESTS
+-----------------
+Real MSSQL:
+- Catechist context
+- assigned classes
+- enrollment counts
+- roster with Learning/Practice/Exam
+- no-exam learner
+- multiple assigned classes
+- unassigned class denial
+- non-Catechist denial
+
+DB E2E
+------
+HTTP:
+- Catechist login
+- context 200
+- classes 200
+- assigned roster 200
+- unassigned class 403
+- Parent denied
+- Student denied
+- ParishAdmin/SuperAdmin no impersonation
+- unauthenticated 401
+- bad UUID/pagination 400
+- no PII
+- no raw Exam answers
+
+N+1 BUDGET
+----------
+Mandatory target:
+<= 5 orchestration-level service calls per roster page.
+
+Expected:
+1 scope/class access
+1 getClassLearningProgress
+1 Exam batch summary
+1 Student batch if required
+1 class snapshot if required
+
+Never call getEnrollmentExamSummary in a loop.
+
+Add tests/spies sufficient to prove single batch call.
+
+MODULE BOUNDARY
+---------------
+Update module-boundaries.spec.ts.
+
+Require:
+- FamilyPortalModule has no TypeOrmModule
+- no entity/repository registration
+- no forwardRef
+- exports FamilyPortalService only
+- existing domain modules do not import FamilyPortalModule
+- graph acyclic
+
+REGRESSION
+----------
+Keep green:
+Auth/RBAC
+Class
+Enrollment
+Student
+Practice
+Learning Progress
+Exam
+Localization
+
+QUALITY
+-------
+Run:
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+FULL DB VALIDATION
+------------------
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+PRISTINE QUALITY:FULL
+---------------------
+Reset again:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:family-portal-catechist ."
+
+PASS required.
+
+REQUIRED REPORT
+---------------
+Create:
+
+docs/CATECHIST_PARENT_002_FAMILY_PORTAL_CATECHIST_CONTEXT_CLASSES_ROSTER_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited #001/#001A
+3 Files created
+4 Files modified
+5 FamilyPortalModule
+6 Public export
+7 Zero-table verification
+8 Dependency graph
+9 RBAC strategy
+10 Actor semantics
+11 Catechist scope
+12 Context endpoint
+13 Context DTO
+14 Class batch API
+15 Enrollment count batch
+16 Classes endpoint
+17 Pagination strategy
+18 Class-list query cost
+19 Roster endpoint
+20 Roster authorization
+21 LearningProgress composition
+22 Exam batch public API
+23 Exam summary semantics
+24 Student enrichment
+25 Roster DTO
+26 Data minimization
+27 Cross-parish behavior
+28 Error contract
+29 OpenAPI
+30 N+1 budget
+31 Query efficiency
+32 Unit tests
+33 Integration tests
+34 DB e2e
+35 Module boundaries
+36 Regression
+37 pristine quality:full
+38 Docker
+39 npm audit
+40 Commands
+41 Validation matrix
+42 Risks/deferred
+43 BLOCKER/HIGH/MEDIUM/LOW
+44 #003 readiness
+45 Prompt count
+46 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+FAMILY PORTAL MODULE FOUNDATION READY: YES/NO
+ZERO BUSINESS TABLES PRESERVED: YES/NO
+CATECHIST ACTOR SCOPE SAFE: YES/NO
+CATECHIST CONTEXT API READY: YES/NO
+CATECHIST CLASSES API READY: YES/NO
+CATECHIST ROSTER API READY: YES/NO
+EXAM BATCH SUMMARY API READY: YES/NO
+CLASS/ENROLLMENT BATCH STRATEGY READY: YES/NO
+N+1 BUDGET READY: YES/NO
+DATA MINIMIZATION READY: YES/NO
+MODULE BOUNDARY READY: YES/NO
+PRISTINE QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#003 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- Catechist scope safe
+- N+1 solved
+- no PII leak
+- module boundary clean
+- integration/DB e2e PASS
+- pristine quality:full PASS
+- Docker PASS
+
+Then recommend:
+
+CATECHIST + PARENT SUPPORTING APIs #003/5 —
+PARENT CONTEXT + LINKED CHILDREN + ENROLLMENT PROGRESS READ MODELS
+
+Do not auto-proceed.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #002 status
+- module foundation
+- tables
+- Catechist context/classes/roster
+- batching
+- N+1
+- security/PII
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #003 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(family-portal): add catechist portal read models"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

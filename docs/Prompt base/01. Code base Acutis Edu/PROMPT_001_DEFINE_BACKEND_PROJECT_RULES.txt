@@ -1,0 +1,93 @@
+CURSOR PROMPT #001 — DEFINE BACKEND PROJECT RULES & REPOSITORY HYGIENE
+
+Context
+-------
+We are starting a long-term parish catechism platform from scratch.
+
+Backend technical baseline:
+- NestJS
+- TypeScript
+- Node.js v22.23.1
+- MSSQL
+- Docker / Docker Compose for local development
+- Bitbucket Pipelines for CI/CD later
+- Backend and frontend are separate repositories
+- This prompt is BACKEND ONLY.
+
+IMPORTANT:
+Do NOT start implementing NestJS business code, authentication, database entities, Docker services, Swagger, migrations, or catechism modules in this prompt.
+
+The only goal of this first prompt is to establish mandatory backend engineering rules and repository hygiene before implementation begins.
+
+Task
+----
+1. At the repository root, create:
+
+   PROJECT_RULES.md
+
+2. Use the provided PROJECT_RULES.md content as the authoritative baseline.
+   Preserve its intent and strictness.
+   You may only make tiny wording/formatting adjustments if needed for Markdown correctness.
+   Do NOT weaken or remove engineering, security, testing, privacy, Docker, CI/CD, TypeScript, lint, Prettier, or Cursor workflow rules.
+
+3. Ensure the root `.gitignore` exists.
+
+4. Add:
+
+   docs/
+
+   to `.gitignore`.
+
+5. `docs/` is intentionally ignored because every future Cursor task will generate local audit/implementation/review handoff reports there.
+
+6. Do NOT put PROJECT_RULES.md inside docs/.
+   PROJECT_RULES.md must remain tracked by Git at repository root.
+
+7. Do not create speculative source folders or application modules in this task.
+
+8. If the repository is currently empty, keep it essentially empty except for the minimum files required by this task.
+
+Validation
+----------
+Before finishing:
+
+- Confirm PROJECT_RULES.md exists at repository root.
+- Confirm `.gitignore` contains `docs/`.
+- Confirm no business/application implementation was introduced.
+- Check `git diff` and verify changes are limited to the requested scope.
+
+Required Cursor report
+----------------------
+Create:
+
+docs/PROMPT_001_PROJECT_RULES_REPORT.md
+
+The report must contain:
+
+1. Objective
+2. Initial repository state
+3. Files created
+4. Files modified
+5. Summary of important rules established
+6. `.gitignore` changes
+7. Validation performed
+8. `git diff` summary
+9. Any issues or assumptions
+10. Recommended next step
+
+The recommended next step should be preparation for Backend Phase 0/1 architecture/bootstrap, but DO NOT implement it.
+
+Git
+---
+DO NOT commit any code or files in this prompt.
+
+Do not run `git add`, `git commit`, or push.
+
+Final response
+--------------
+When finished, give me only:
+- a concise summary
+- the path of the generated report
+- whether validation succeeded
+
+I will send the generated report back for review before we proceed to Prompt #002.

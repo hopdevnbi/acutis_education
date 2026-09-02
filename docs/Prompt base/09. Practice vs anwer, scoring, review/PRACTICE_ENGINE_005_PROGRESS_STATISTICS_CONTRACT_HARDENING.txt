@@ -1,0 +1,705 @@
+CURSOR PROMPT — PRACTICE ENGINE #005/6
+PROGRESS / STATISTICS + SCOPED PARENT / CATECHIST ACCESS + FE / MOBILE CONTRACT HARDENING
+
+CONTEXT
+-------
+Completed:
+- #001 Domain Audit + Flow Design
+- #002 Schema + Entities + Migrations
+- #003 Generation + Session Lifecycle + Question Selection + Contextual Media
+- #004 Answer + Grading + Retry + Feedback + Review-Wrong
+- #004A Full DB/E2E/Docker validation gate ACCEPTED
+
+Current: PRACTICE ENGINE #005/6
+Remaining after this: #006 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+Inherited guarantees:
+- PracticeService only export
+- enrollmentId is learner context
+- Parent linked child can create/read/submit
+- Catechist/Parish Admin cannot submit
+- exact questionVersionId pinning
+- persisted question/option order
+- answer history + retry/review-wrong stable
+- Question Bank owns grading/feedback
+- #004A quality:full PASS
+- #004A Docker PASS
+- BLOCKER/HIGH = 0
+
+IMPORTANT WORKING TREE NOTE
+---------------------------
+#004A report says validation fixes remain uncommitted.
+Preserve them. Do not revert them.
+Do not run git add/commit/push.
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports/code first
+- stay inside #005
+- create detailed docs report
+- not auto-proceed to #006
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked #005 changes exist, final response may print exactly:
+git commit -m "feat(practice): add scoped progress statistics"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/PRACTICE_003_GENERATION_SESSION_DELIVERY_REPORT.md
+docs/PRACTICE_004_ANSWER_GRADING_RETRY_REVIEW_REPORT.md
+docs/PRACTICE_004A_FULL_VALIDATION_GATE_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+PRIMARY OBJECTIVE
+-----------------
+Implement/harden:
+- enrollment Practice progress
+- first-attempt accuracy
+- final accuracy
+- STANDARD vs REVIEW_WRONG metrics
+- curriculum/lesson filters
+- Parent linked-child progress
+- Catechist assigned-class progress
+- Parish Admin scoped progress read
+- Super Admin read
+- class progress endpoint
+- no answer leakage
+- performance audit from raw Practice tables
+- FE/Mobile contract hardening
+- OpenAPI
+- tests + quality/full + Docker
+
+Do NOT implement:
+- Exam
+- STUDENT role
+- mastery score
+- leaderboards
+- teacher-assigned Practice
+- runtime translation
+- progress aggregate table unless profiling proves necessary
+
+SOURCE OF TRUTH
+---------------
+Use only:
+practice_sessions
+practice_session_questions
+practice_answer_attempts
+
+Strong default: NO aggregate progress table.
+
+Derive metrics with SQL/query builder.
+
+ENROLLMENT PROGRESS API
+-----------------------
+GET /api/v1/enrollments/:enrollmentId/practice/progress
+
+Permission: practice.read
+
+Optional query:
+curriculumId
+canonicalLessonKey
+from
+to
+
+Return factual metrics only.
+
+Recommended shape:
+
+{
+  enrollmentId,
+  filters,
+  standard: {
+    sessionsCompleted,
+    inProgressSessions,
+    abandonedSessions,
+    questionsAttempted,
+    firstAttemptCorrect,
+    finalCorrect,
+    firstAttemptAccuracy,
+    finalAccuracy
+  },
+  review: {
+    sessionsCompleted,
+    questionsAttempted,
+    finalCorrect,
+    finalAccuracy,
+    uniqueQuestionVersionsReviewed
+  },
+  lastPracticedAt
+}
+
+No masteryScore.
+No raw selected answers.
+No correctOptionIds.
+No explanations.
+
+METRIC SEMANTICS
+----------------
+sessionsCompleted:
+STANDARD + COMPLETED only.
+
+review.sessionsCompleted:
+REVIEW_WRONG + COMPLETED only.
+
+questionsAttempted:
+distinct session questions in COMPLETED STANDARD sessions with >=1 attempt.
+Retries do NOT increment question count.
+
+firstAttemptCorrect:
+attemptNumber=1 and isCorrect=true, per completed STANDARD session question.
+
+firstAttemptAccuracy:
+firstAttemptCorrect / completed STANDARD question count.
+
+finalCorrect:
+final/latest terminal outcome correct in COMPLETED STANDARD sessions.
+
+finalAccuracy:
+finalCorrect / total questions in COMPLETED STANDARD sessions.
+
+If denominator 0:
+follow existing API convention; if none exists, return 0 and document.
+
+IN-PROGRESS / ABANDONED
+-----------------------
+Do not include in official accuracy denominators.
+
+Expose counts separately if useful:
+inProgressSessions
+abandonedSessions
+
+REVIEW METRICS
+--------------
+Keep separate from STANDARD.
+
+review.questionsAttempted:
+session-question occurrences in completed REVIEW_WRONG sessions.
+
+review.finalCorrect:
+final correct in completed REVIEW_WRONG sessions.
+
+review.finalAccuracy:
+finalCorrect / review questions attempted.
+
+uniqueQuestionVersionsReviewed:
+COUNT DISTINCT questionVersionId across completed REVIEW_WRONG sessions.
+
+Chained reviews may repeat a version; distinct metric must not double-count.
+
+LAST PRACTICED
+--------------
+Prefer MAX(practice_answer_attempts.submittedAt).
+Nullable if no attempts.
+
+CURRICULUM / LESSON FILTER
+--------------------------
+Use persisted practice_sessions.curriculumId and canonicalLessonKey.
+
+Do NOT reclassify historical sessions using current live Curriculum state.
+
+If canonicalLessonKey is provided, require curriculumId unless architecture already establishes global uniqueness contract.
+
+DATE FILTER
+-----------
+Use a single documented semantic.
+Strong recommendation: session.startedAt for all session categories, because it works for completed/in-progress/abandoned consistently.
+
+Validate from <= to.
+
+UTC timestamps only.
+
+PARENT ACCESS
+-------------
+Linked Parent:
+can read progress only for linked enrollment.
+
+Unlinked Parent:
+403.
+
+Historical progress may remain readable if guardian relationship still authorizes student/enrollment history per existing access service.
+
+Do not weaken relationship checks.
+
+CATECHIST ACCESS
+----------------
+Catechist:
+progress read only for enrollments in CURRENT assigned classes.
+
+Use public ClassCatechistAssignment/Class scope APIs.
+
+No raw learner session GET is granted by this feature.
+
+No answer submission.
+
+PARISH ADMIN
+------------
+Can read progress for enrollments in own parish.
+Cannot submit answers.
+
+SUPER ADMIN
+-----------
+Can read globally.
+
+CLASS PROGRESS API
+------------------
+Implement:
+
+GET /api/v1/classes/:classId/practice/progress
+
+Permission: practice.read
+
+Allowed:
+- assigned CATECHIST
+- PARISH_ADMIN own parish
+- SUPER_ADMIN
+
+PARENT:
+403
+
+Response:
+classId
+summary
+learners page
+
+Summary should aggregate counts directly:
+SUM(correct)/SUM(denominator)
+Never average learner percentages.
+
+Suggested summary:
+learnersWithPractice
+sessionsCompleted
+questionsAttempted
+firstAttemptCorrect
+finalCorrect
+firstAttemptAccuracy
+finalAccuracy
+lastPracticedAt
+
+Learner rows:
+enrollmentId
+studentId if needed
+sessionsCompleted
+questionsAttempted
+firstAttemptAccuracy
+finalAccuracy
+lastPracticedAt
+
+Avoid learner name/profile duplication. FE can use authorized Student/Class API.
+
+CLASS ROSTER
+------------
+Include ACTIVE class enrollments by default, including zero-activity learners if feasible.
+
+Use Enrollment/Class public services only.
+Do NOT import Enrollment repositories/entities.
+
+Pagination:
+page default 1
+limit default 20
+max 100
+
+Summary must represent entire class, not current page.
+
+NO TAG/TYPE HISTORICAL BREAKDOWN
+--------------------------------
+Do NOT implement historical progress by Question Bank tags/type unless snapshotted.
+
+Reason:
+tags can change, question type lookup would add cross-service analytics dependency.
+
+Progress should ideally make ZERO Question Bank calls.
+
+PROGRESS SERVICE
+----------------
+Create internal PracticeProgressService.
+
+PracticeService facade delegates.
+
+PracticeModule still exports PracticeService only.
+
+QUERY ARCHITECTURE
+------------------
+Prefer SQL aggregation/window functions.
+
+Avoid loading every attempt into Node.
+
+For first/latest attempt:
+ROW_NUMBER() OVER (
+  PARTITION BY practice_session_question_id
+  ORDER BY attempt_number ASC/DESC
+)
+
+or equivalent clean QueryBuilder/raw parameterized SQL.
+
+No user-input SQL interpolation.
+
+NO N+1.
+
+PERFORMANCE
+-----------
+Create realistic fixture, e.g.:
+- 50 sessions
+- 10 questions/session
+- multiple attempts
+
+Audit:
+- DB round trips
+- query count
+- indexes
+- no N+1
+
+Only add a migration/index if concrete need.
+
+After profiling state:
+PRACTICE PROGRESS AGGREGATE TABLE REQUIRED NOW: YES/NO
+
+Expected default: NO.
+
+SECURITY / PRIVACY
+------------------
+Progress DTOs must not contain:
+selectedOptionIds
+correctOptionIds
+explanation
+question prompt
+full child profile
+actor audit internals
+
+Parent class progress denied.
+Catechist only assigned class.
+Parish Admin same parish.
+No child directory behavior.
+
+FE CONTRACT
+-----------
+Final verdict in report:
+FE PRACTICE CONTRACT READY: YES/NO
+
+FE must be able to:
+- generate
+- resume
+- render stable question/options
+- submit
+- retry
+- receive gated feedback
+- review wrong
+- abandon
+- view learner progress
+- view class progress where authorized
+- use contextual media
+- reconcile idempotent requests
+
+MOBILE CONTRACT
+---------------
+Final verdict:
+MOBILE PRACTICE CONTRACT READY: YES/NO
+
+Verify:
+- clientRequestId create
+- clientAnswerId submit
+- clientRequestId review
+- HTTP replay semantics
+- persisted order
+- GET authoritative resume
+- progress
+- contextual media
+- server authoritative scoring/state
+
+OPENAPI
+-------
+Audit all Practice endpoints:
+create
+GET
+abandon
+answer
+review-wrong
+contextual media
+enrollment progress
+class progress
+
+Document stable machine-readable errors and ratio semantics.
+
+README
+------
+Update Practice docs if project convention supports:
+- Parent proxy
+- lifecycle
+- retry/review
+- first vs final accuracy
+- STANDARD vs REVIEW metrics
+- Catechist/class scope
+- idempotency/offline
+- no mastery
+- Exam separation
+
+UNIT TESTS
+----------
+Enrollment progress:
+- no activity
+- one completed STANDARD
+- retries don't double count questions
+- first accuracy differs from final accuracy
+- in-progress excluded
+- abandoned excluded
+- review separate
+- chained review distinct question semantics
+- curriculum filter
+- lesson filter
+- date filter
+- lastPracticedAt
+
+Class:
+- assigned Catechist allowed
+- unassigned denied
+- Parent denied
+- Parish Admin own parish
+- cross-parish denied
+- Super Admin allowed
+- weighted accuracy
+- zero-activity enrollment handling
+- pagination
+
+Security:
+assert progress serialization contains none of:
+selectedOptionIds
+correctOptionIds
+explanation
+
+INTEGRATION TESTS
+-----------------
+Real MSSQL:
+- multiple enrollments
+- completed/in-progress/abandoned STANDARD
+- retries
+- REVIEW_WRONG and chained review
+- correct metrics
+- no retry double count
+- filters
+- class weighted metrics
+- zero activity learners
+- no N+1/Question Bank dependency
+
+DB E2E
+------
+- Parent linked enrollment progress 200
+- unlinked Parent 403
+- Parent class progress 403
+- assigned Catechist class progress 200
+- unassigned Catechist 403
+- Catechist enrollment progress in assigned class 200 if policy allows
+- Parish Admin own parish 200
+- cross-parish 403
+- Super Admin 200
+- validation errors
+- no answer leakage
+
+EXISTING REGRESSION
+-------------------
+Must remain green:
+#003 generation/delivery
+#004 answers/review
+Question Bank
+Enrollment/Class
+Curriculum
+Media
+Auth
+
+QUALITY
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+DOCKER
+------
+Run:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:practice-progress ."
+
+Use actual repo path.
+PASS required.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/PRACTICE_005_PROGRESS_STATISTICS_CONTRACT_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #004A
+3 Working tree / #004A fixes preserved
+4 Rules applied
+5 Files created
+6 Files modified
+7 Final module architecture
+8 PracticeProgressService
+9 Progress source-of-truth
+10 Aggregate-table decision
+11 Enrollment progress endpoint
+12 Progress DTO
+13 STANDARD metrics
+14 REVIEW_WRONG metrics
+15 questionsAttempted
+16 firstAttemptCorrect
+17 firstAttemptAccuracy
+18 finalCorrect
+19 finalAccuracy
+20 in-progress semantics
+21 abandoned semantics
+22 unique reviewed semantics
+23 lastPracticedAt
+24 Curriculum filter
+25 canonicalLessonKey filter
+26 Date filter
+27 Historical stability
+28 Parent scope
+29 Catechist scope
+30 Parish Admin scope
+31 Super Admin scope
+32 Class progress endpoint
+33 Class aggregation
+34 Class learner rows
+35 Zero-activity learners
+36 Pagination
+37 Privacy/data minimization
+38 Query architecture
+39 SQL/window functions
+40 N+1 audit
+41 Index audit
+42 Performance fixture/results
+43 Aggregate-table final verdict
+44 FE readiness
+45 Mobile readiness
+46 Offline/idempotency contract
+47 Error contract
+48 Swagger/OpenAPI
+49 Multilingual readiness
+50 Security/minors
+51 Microservice extraction
+52 Unit tests
+53 Integration tests
+54 DB e2e
+55 Existing regression
+56 pristine quality:full
+57 Docker
+58 README/docs
+59 Commands
+60 Validation matrix
+61 Known/deferred
+62 Out-of-scope
+63 PRACTICE #006 readiness
+64 Prompt count
+65 Commit recommendation
+
+EXPLICIT PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- PracticeService only export
+- no cross-module repo/entity
+- aggregate table decision justified
+- enrollment progress
+- class progress
+- sessionsCompleted
+- reviewSessionsCompleted
+- questionsAttempted no retry double-count
+- firstAttemptCorrect
+- firstAttemptAccuracy
+- finalCorrect
+- finalAccuracy
+- in-progress excluded
+- abandoned excluded
+- review metrics separate
+- unique reviewed metric
+- lastPracticedAt
+- curriculum filter
+- lesson filter
+- date filter
+- Parent linked allowed
+- unlinked Parent denied
+- Parent class denied
+- assigned Catechist allowed
+- unassigned Catechist denied
+- Parish Admin own parish
+- cross-parish denied
+- Super Admin allowed
+- class weighted accuracy
+- zero-activity learners
+- pagination
+- no selected answers in progress
+- no correct answers in progress
+- no explanation in progress
+- zero Question Bank calls in progress aggregation
+- no N+1
+- performance acceptable
+- FE Practice contract ready
+- Mobile Practice contract ready
+- OpenAPI complete
+- no mastery
+- no Exam
+- prior regression
+- Git compliance
+
+#006 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH:
+
+PRACTICE ENGINE #006/6 — FINAL AUDIT + DEMO SEED + POSTMAN + QUALITY/DOCKER + PHASE COMPLETION
+
+PROMPT COUNT
+------------
+State:
+PRACTICE ENGINE #005/6 complete
+approximately 1 prompt remains
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- PRACTICE #005 status
+- enrollment progress PASS/FAIL
+- class/Catechist progress PASS/FAIL
+- accuracy semantics PASS/FAIL
+- aggregate-table decision
+- FE readiness
+- Mobile readiness
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly:
+git commit -m "feat(practice): add scoped progress statistics"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #006 automatically.

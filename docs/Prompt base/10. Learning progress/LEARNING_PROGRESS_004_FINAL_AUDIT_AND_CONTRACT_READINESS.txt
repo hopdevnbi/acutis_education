@@ -1,0 +1,1090 @@
+CURSOR PROMPT — LEARNING PROGRESS #004/4
+FINAL AUDIT + DEMO/POSTMAN + QUALITY/DOCKER + PHASE COMPLETION GATE
+
+1. Context
+----------
+Completed:
+- LEARNING PROGRESS #001/4 — Domain Audit + Ownership + Model Design
+- LEARNING PROGRESS #002/4 — Persistence + Lesson Progress Foundation
+- LEARNING PROGRESS #003/4 — Aggregation APIs + Scoped Access + Practice Composition
+
+Current:
+LEARNING PROGRESS #004 / 4
+
+This is the FINAL completion gate for Learning Progress.
+
+Do NOT start Exam, Localization, Notifications, or any other major module automatically.
+
+2. Inherited Guarantees
+-----------------------
+Current Learning Progress state:
+
+- LearningProgressModule exports LearningProgressService only
+- owns exactly one table: lesson_progress
+- enrollmentId = learner aggregate root
+- canonicalLessonKey = lesson semantic identity
+- missing row = NOT_STARTED
+- persisted statuses = IN_PROGRESS / COMPLETED
+- explicit learner action only
+- no passive GET tracking
+- monotonic lifecycle
+- no reopen/reset
+- linked Parent only for learner-action write
+- Catechist/Parish Admin/Super Admin cannot mark learner lesson progress
+- assignedCurriculumVersionId captured on first interaction
+- progress carries forward across curriculum republish when canonicalLessonKey stays stable
+- new enrollment gets fresh progress namespace
+- enrollment aggregate GET implemented
+- class aggregate GET implemented
+- Practice composition implemented via PracticeService only
+- no Practice repo/entity access
+- no aggregate Learning Progress table
+- no topic/block progress
+- no mastery
+- no Exam implementation
+- FE contract READY
+- Mobile contract READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+3. Permanent Workflow / Git Rules
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+For this final prompt:
+1. Audit all #001–#003 work first
+2. Identify BLOCKER/HIGH/MEDIUM/LOW
+3. Fix only issues required for phase completion
+4. Add final demo seed/fixture strategy
+5. Add Postman
+6. Finalize README/OpenAPI
+7. Run full validation
+8. Declare COMPLETE only if all mandatory gates pass
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest git add.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(learning-progress): finalize learning progress foundation"
+
+Do not execute it.
+
+4. Mandatory Reading
+--------------------
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LEARNING_PROGRESS_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/LEARNING_PROGRESS_002_PERSISTENCE_LESSON_PROGRESS_FOUNDATION_REPORT.md
+docs/LEARNING_PROGRESS_003_AGGREGATION_SCOPED_API_REPORT.md
+
+Also read:
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/PRACTICE_005_PROGRESS_STATISTICS_CONTRACT_HARDENING_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/learning-progress/
+src/modules/practice/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/enrollment/
+src/modules/class/
+src/modules/student/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+docs/postman/
+README.md
+package.json
+Dockerfile
+docker-compose*.yml
+
+Inspect git status read-only.
+
+5. Primary Objective
+--------------------
+Close Learning Progress only if all critical gates pass.
+
+Required final outcomes:
+
+- bounded context clean
+- ownership clean
+- no cycles / no forwardRef
+- LearningProgressService sole export
+- exactly one owned table: lesson_progress
+- no aggregate table
+- no Practice repo/entity leakage
+- explicit lesson tracking stable
+- monotonic transitions stable
+- curriculum version/canonical lesson semantics stable
+- current lesson completion ratio correct
+- Practice composition stable
+- Parent/Catechist/Admin access correct
+- class aggregation correct
+- no answer leakage
+- no mastery/spiritual score
+- FE contract ready
+- Mobile contract ready
+- multilingual foundation ready
+- demo seed/fixture ready
+- Postman ready
+- README/OpenAPI ready
+- pristine quality:full clean
+- Docker production build PASS
+- BLOCKER/HIGH = 0
+
+6. Final Architecture Audit
+---------------------------
+Expected:
+
+LearningProgressModule
+├── LearningProgressController
+├── LearningProgressService              PUBLIC FACADE / sole export
+├── LearningProgressAggregationService   internal
+├── LessonProgressService                internal
+└── LearningProgressAccessService        internal
+
+Dependencies:
+LearningProgress -> Enrollment public API
+LearningProgress -> Class public API
+LearningProgress -> Student public API
+LearningProgress -> Parish public API
+LearningProgress -> Curriculum public API
+LearningProgress -> Practice public API
+LearningProgress -> Auth/AccessControl
+
+Forbidden:
+- Practice -> LearningProgress
+- Curriculum -> LearningProgress
+- cross-module entity/repository imports
+- forwardRef
+- cycles
+- direct QB repo/query from Learning Progress
+
+7. Final Data Ownership Audit
+-----------------------------
+Learning Progress owns exactly:
+
+lesson_progress
+
+Do NOT own:
+- Practice sessions/attempts/progress
+- Curriculum entities
+- Question Bank entities
+- Exam
+- aggregate snapshots
+- event log
+- block progress
+- topic progress
+- translation tables
+
+8. Lesson Progress State Final Audit
+------------------------------------
+Conceptual:
+NOT_STARTED
+
+Persisted:
+IN_PROGRESS
+COMPLETED
+
+Verify:
+missing row -> NOT_STARTED
+NOT_STARTED -> IN_PROGRESS
+NOT_STARTED -> COMPLETED
+IN_PROGRESS -> COMPLETED
+same-state idempotent
+COMPLETED -> IN_PROGRESS denied
+no reset
+no delete-to-reset
+no passive GET mutation
+
+9. Timestamp / Actor Audit
+--------------------------
+Verify:
+startedAt immutable
+startedByUserId immutable
+completedAt set once
+completedByUserId set once
+
+Idempotent replays preserve timestamps/actors.
+
+No actor IDs exposed in learner-facing aggregate DTOs.
+
+10. Learner / Actor Model
+-------------------------
+enrollmentId = learner context.
+
+Parent = current learner proxy actor.
+
+Do NOT introduce STUDENT role here.
+
+No admin/catechist impersonation writes.
+
+11. Curriculum Versioning Final Audit
+-------------------------------------
+Verify:
+
+- write derives current assigned published curriculum
+- assignedCurriculumVersionId captured on first write
+- canonicalLessonKey validated against assigned version
+- same canonical key carries progress across republish
+- removed lesson historical row preserved but excluded current denominator
+- added lesson increases denominator as NOT_STARTED
+- new enrollment starts fresh
+
+12. Current Completion Ratio
+----------------------------
+For active enrollment:
+
+lessonsAssigned = current assigned curriculum lesson count
+lessonsCompleted = completed current canonical lesson keys
+completionRatio = completed / assigned
+
+No weighted Practice influence.
+
+No universal overall score.
+
+13. Historical Enrollment Strategy
+----------------------------------
+Audit #003 implementation carefully.
+
+Expected:
+- ACTIVE enrollment -> current assigned curriculum version
+- historical/non-active with stored progress -> use assignedCurriculumVersionId snapshot if needed
+- no false precision when historical denominator cannot be reconstructed
+
+If current implementation returns a zeroed safe dimension for historical enrollment with no reconstructable denominator, document clearly.
+
+Do NOT invent historical completion values.
+
+14. Practice Composition Audit
+------------------------------
+Enrollment route:
+exactly one PracticeService.getEnrollmentProgress call.
+
+Class route:
+exactly one PracticeService.getClassProgress call.
+
+No per-learner Practice calls.
+
+No Practice repo/entity import.
+
+No Practice SQL duplication.
+
+15. Learning Progress Response Audit
+------------------------------------
+Enrollment response should expose:
+
+- enrollmentId
+- learning dimension
+- compact lesson states
+- Practice dimension
+- exam: null if current stable contract uses it
+- lastLearningActivityAt
+
+Must NOT expose:
+- selectedOptionIds
+- correctOptionIds
+- question prompts
+- option text
+- actor audit details
+- child profile details
+- mastery score
+
+16. Lesson State Array Audit
+----------------------------
+Enrollment route:
+all assigned lesson canonical keys represented.
+
+Missing row:
+NOT_STARTED.
+
+Persisted:
+IN_PROGRESS / COMPLETED.
+
+Deterministic ordering:
+prefer curriculum tree order.
+
+If current implementation uses another stable ordering, document it.
+
+17. Class Aggregate Audit
+-------------------------
+Class route:
+
+- active roster
+- full summary
+- paginated learner rows
+- weighted completion ratio
+- zero-activity learners included
+- one curriculum tree fetch
+- one Practice class call
+- batch lesson_progress query
+
+No nested full lesson-state array per learner.
+
+18. Weighted Ratio Audit
+------------------------
+Class completionRatio must be:
+
+SUM(completed lesson opportunities)
+/
+SUM(assigned lesson opportunities)
+
+Do NOT average learner percentages.
+
+19. Access Matrix Final
+-----------------------
+Lesson PATCH:
+PARENT linked enrollment -> allowed
+unlinked PARENT -> denied
+CATECHIST -> denied
+PARISH_ADMIN -> denied
+SUPER_ADMIN -> denied
+
+Enrollment GET:
+SUPER_ADMIN -> allowed
+PARISH_ADMIN same parish -> allowed
+CATECHIST assigned class -> allowed
+PARENT linked -> allowed
+unrelated -> denied
+
+Class GET:
+SUPER_ADMIN -> allowed
+PARISH_ADMIN same parish -> allowed
+CATECHIST assigned class -> allowed
+PARENT -> denied
+
+20. Permission Seeds
+--------------------
+Verify:
+learning-progress.read
+learning-progress.manage
+
+Role grants:
+SUPER_ADMIN read
+PARISH_ADMIN read
+CATECHIST read
+PARENT read + manage
+
+Permission alone does not bypass scope checks.
+
+21. Security / Minors Final Audit
+---------------------------------
+Verify:
+- no child directory
+- Parent class-wide read denied
+- Catechist assigned-class only
+- Parish Admin same parish only
+- no Practice answers
+- no Question Bank answers
+- no lesson content body
+- no spiritual/mastery ranking
+- no client-supplied progress truth
+- no raw SQL interpolation
+- no secret leakage
+
+22. lastLearningActivityAt
+-------------------------
+Enrollment:
+max(lesson activity, Practice.lastPracticedAt)
+
+Class:
+max(class lesson activity, Practice class lastPracticedAt)
+
+UTC.
+
+No hidden timezone conversion.
+
+23. Date Filter Final Decision
+------------------------------
+Reconfirm #003 intentional MVP decision:
+
+NO from/to on Learning Progress aggregate APIs.
+
+Reason:
+current lesson completion is state snapshot;
+Practice date-filtering is activity-window semantics;
+mixing them would be confusing.
+
+Document as intentional deferred analytics concern.
+
+24. Filter Audit
+----------------
+Supported:
+curriculumId?
+canonicalLessonKey?
+
+canonicalLessonKey requires curriculumId.
+
+Mismatch with assigned curriculum:
+422.
+
+No arbitrary tag/type filters.
+
+25. Aggregate Table Decision
+----------------------------
+Reconfirm:
+
+LEARNING PROGRESS AGGREGATE TABLE REQUIRED NOW: NO
+
+Unless #004 final performance audit finds concrete evidence otherwise.
+
+Do NOT add table merely for future speculation.
+
+26. N+1 / Performance Final Audit
+---------------------------------
+Confirm:
+
+Enrollment route:
+- bounded cross-module calls
+- one lesson progress query
+- one Practice aggregate call
+- one curriculum assignment/tree flow
+
+Class route:
+- one class/roster flow
+- one curriculum assignment/tree
+- one Practice class aggregate
+- one/bounded batch lesson-progress query
+- no per-learner cross-module calls
+
+Review >100 roster pagination-loop behavior.
+
+MEDIUM scalability concerns may remain, but must be documented.
+
+No blocker unless current query is structurally unbounded/incorrect.
+
+27. Microservice Extraction Audit
+---------------------------------
+Future Learning Progress Service owns:
+lesson_progress
+
+Consumes:
+Enrollment/Class API
+Curriculum API
+Practice API
+future Exam API
+
+No shared ORM.
+
+Current public extraction boundary:
+LearningProgressService + HTTP DTO contract.
+
+28. Future Exam Extension
+------------------------
+Current response may contain:
+exam: null
+
+Verify this is only contract reservation.
+
+No Exam dependency.
+
+Future Exam integration should be additive and separate.
+
+29. Multilingual Readiness
+--------------------------
+Final verdict:
+
+LEARNING PROGRESS MULTILINGUAL FOUNDATION READY: YES/NO
+
+Require:
+- language-neutral status codes
+- canonicalLessonKey language-neutral
+- no translated lesson titles stored
+- Practice metrics locale-neutral
+- no backend UI label translation
+- Unicode safe
+- no runtime translation
+
+30. FE Readiness Final
+----------------------
+Final verdict:
+
+FE LEARNING PROGRESS CONTRACT READY: YES/NO
+
+Must support:
+- mark lesson started/completed
+- show lesson states
+- show completion ratio
+- show Practice dimension
+- show last activity
+- Parent linked-child progress
+- Catechist/Parish Admin class progress
+- pagination
+- stable errors
+
+31. Mobile Readiness Final
+--------------------------
+Final verdict:
+
+MOBILE LEARNING PROGRESS CONTRACT READY: YES/NO
+
+Must support:
+- idempotent status PATCH
+- stable canonicalLessonKey
+- authoritative GET
+- locale-neutral statuses
+- safe Parent proxy scope
+- offline retry of same target-state PATCH
+
+32. Demo Learning Progress Seed / Fixture — REQUIRED
+----------------------------------------------------
+Create a DEV-ONLY idempotent Learning Progress demo seed or deterministic bootstrap strategy.
+
+Strong preference:
+reuse existing:
+- demo parish
+- class
+- enrollment
+- parent
+- curriculum
+- Practice demo data
+
+Create lesson progress states demonstrating:
+- one NOT_STARTED lesson via absence
+- one IN_PROGRESS lesson
+- one COMPLETED lesson
+- Practice dimension non-zero through existing Practice demo seed
+
+Do NOT create fake persisted NOT_STARTED row.
+
+33. Seed Safety
+--------------
+No production startup auto-seed.
+
+No real child data.
+No pastoral/sensitive notes.
+
+Use existing demo identities only.
+
+34. Seed Implementation
+-----------------------
+Prefer using LearningProgressService public application methods.
+
+Do not directly import Curriculum/Enrollment repos.
+
+If actor auth context makes service-seed awkward, use a narrow dev seed pattern already established in project and document it.
+
+35. Seed Idempotency
+--------------------
+Run twice:
+- no duplicate lesson_progress rows
+- same timestamps preserved for idempotent same-state writes where expected
+- no cross-parish records
+
+Integration test required.
+
+36. Postman Collection — REQUIRED
+---------------------------------
+Create:
+
+docs/postman/Acutis-Education-Learning-Progress.postman_collection.json
+
+Variables:
+baseUrl
+parentEmail
+parentPassword
+catechistEmail
+catechistPassword
+parishAdminEmail
+parishAdminPassword
+superAdminEmail
+superAdminPassword
+enrollmentId
+classId
+curriculumId
+canonicalLessonKeyInProgress
+canonicalLessonKeyCompleted
+
+No hardcoded real tokens/secrets.
+
+37. Postman Flow
+----------------
+Cover:
+
+1 Parent login
+2 GET enrollment learning progress
+3 PATCH lesson -> IN_PROGRESS
+4 GET and verify state
+5 PATCH same IN_PROGRESS idempotently
+6 PATCH -> COMPLETED
+7 GET and verify completed + ratio
+8 attempt COMPLETED -> IN_PROGRESS and assert 409
+9 verify Practice block
+10 Catechist login
+11 class progress assigned class 200
+12 Catechist lesson PATCH 403
+13 Parent class progress 403
+14 Parish Admin class progress same parish 200
+15 Parish Admin PATCH 403
+16 Super Admin GET 200
+17 Super Admin PATCH 403
+18 invalid canonicalLessonKey 422
+19 curriculum mismatch 422
+
+38. Postman Assertions
+----------------------
+Assert:
+status codes
+response schema basics
+NOT_STARTED synthesis
+idempotent same-state PATCH
+backward transition denied
+completionRatio 0..1
+Practice block present
+no selectedOptionIds
+no correctOptionIds
+Parent class denied
+Catechist assigned class allowed
+
+39. README Final Documentation
+------------------------------
+Ensure Learning Progress section documents:
+
+- bounded context purpose
+- ownership: lesson_progress only
+- learner = enrollment
+- explicit tracking
+- NOT_STARTED by absence
+- state machine
+- no reopen
+- Parent proxy model
+- curriculum canonical lesson semantics
+- version carry-forward
+- enrollment/class APIs
+- Practice composition
+- completion ratio semantics
+- weighted class ratio
+- access matrix
+- no mastery
+- no passive GET
+- Exam placeholder/additive future
+- FE/Mobile contract
+- multilingual readiness
+- known scalability limitation
+
+40. OpenAPI Final Audit
+-----------------------
+Audit:
+
+PATCH /api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress
+GET /api/v1/enrollments/:enrollmentId/learning-progress
+GET /api/v1/classes/:classId/learning-progress
+
+Ensure:
+- DTOs
+- enums
+- examples
+- 400/401/403/404/409/422
+- ratio semantics
+- pagination
+- NOT_STARTED synthesis
+- no passive tracking note
+- no mastery
+- Parent class denied
+
+41. Test Completeness Audit
+---------------------------
+Review all Learning Progress tests.
+
+Must cover:
+- transitions
+- idempotency
+- concurrency
+- active write restriction
+- curriculum validation
+- canonical key
+- version carry-forward
+- new enrollment fresh state
+- Parent write/read
+- Catechist/admin write denied
+- enrollment aggregate
+- class aggregate
+- weighted ratio
+- zero activity
+- Practice composition
+- no N+1
+- no answer leakage
+- historical behavior
+- no passive GET side effects
+
+Add only missing high-value tests.
+
+42. Demo Seed Integration Test
+------------------------------
+Required:
+- first run creates demo IN_PROGRESS/COMPLETED states
+- second run idempotent
+- no duplicate rows
+- aggregate GET matches expected lesson counts
+- Practice block still composes
+- no cross-parish data
+
+43. Existing Regression
+-----------------------
+Must remain green:
+
+Auth
+Parish/Academic
+Class/Enrollment
+Curriculum/LearningContent
+CurriculumDelivery
+Media
+Question Bank
+Practice
+Learning Progress
+
+44. quality:full
+----------------
+Run:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require:
+ONE CLEAN exit code 0.
+
+Do NOT declare phase complete if DB is unavailable.
+
+45. Docker Production Build
+---------------------------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:learning-progress-final ."
+
+Use actual repo path.
+
+PASS required.
+
+46. Optional Runtime Smoke
+--------------------------
+If practical:
+run production image and verify:
+- app boots
+- LearningProgress routes registered
+- DI works with Practice dependency
+- no startup/migration errors
+
+If not run, document why.
+
+47. npm audit
+-------------
+Run:
+npm audit --audit-level=moderate
+
+No unresolved HIGH security vulnerability for phase completion.
+
+48. Required Commands
+---------------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+npm run migration:show
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:learning-progress-final ."
+
+Run Learning Progress demo seed with actual project convention.
+
+49. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest git add.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(learning-progress): finalize learning progress foundation"
+
+Do not execute it.
+
+50. Required Final Report
+-------------------------
+Create:
+
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #001–#003
+3 Working tree audit
+4 Rules applied
+5 Final findings summary/severity
+6 Final dependency graph
+7 Module boundary
+8 Public export
+9 Data ownership
+10 Learner/actor model
+11 Lesson state model
+12 Explicit tracking/no passive GET
+13 Transition semantics
+14 Timestamp/actor idempotency
+15 Enrollment ACTIVE write rule
+16 Curriculum assignment derivation
+17 canonicalLessonKey identity
+18 assigned version snapshot
+19 Carry-forward behavior
+20 Removed/new lesson behavior
+21 New enrollment behavior
+22 Enrollment aggregate API
+23 Lesson-state synthesis
+24 Completion ratio
+25 Practice composition
+26 Exam extension decision
+27 lastLearningActivityAt
+28 Class aggregate API
+29 Weighted class ratio
+30 Zero-activity learners
+31 Pagination
+32 Access matrix
+33 Permission seeds
+34 Security/minors
+35 Filter/date strategy
+36 Historical enrollment strategy
+37 N+1/performance
+38 Aggregate-table final decision
+39 Multilingual readiness
+40 FE readiness
+41 Mobile readiness
+42 Microservice extraction
+43 Demo seed
+44 Seed idempotency
+45 Postman
+46 README/docs
+47 Swagger/OpenAPI
+48 Unit tests
+49 Integration tests
+50 DB e2e
+51 Existing regression
+52 pristine quality:full
+53 npm audit
+54 Docker
+55 runtime smoke decision
+56 Files created
+57 Files modified
+58 Commands
+59 Explicit validation matrix
+60 Known/deferred
+61 Out-of-scope
+62 Final phase completion decision
+63 Next backend phase sequencing audit
+64 Prompt count
+65 Commit recommendation
+
+51. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- LearningProgressService only export
+- exactly one owned table
+- no aggregate table
+- no Practice repo/entity
+- no Exam dependency
+- learner=enrollment
+- Parent proxy actor model
+- missing row=NOT_STARTED
+- IN_PROGRESS persisted
+- COMPLETED persisted
+- no persisted NOT_STARTED
+- explicit tracking
+- no passive GET write
+- monotonic transition
+- no reopen
+- timestamps stable
+- actors stable
+- active enrollment write only
+- linked Parent PATCH
+- unlinked Parent denied
+- Catechist PATCH denied
+- Parish Admin PATCH denied
+- Super Admin PATCH denied
+- assigned curriculum derived
+- canonical lesson validation
+- assigned version snapshot
+- version carry-forward
+- removed lesson excluded current denominator
+- new lesson increases denominator
+- new enrollment fresh
+- enrollment aggregate
+- all lesson states synthesized
+- completion ratio
+- Practice enrollment composition once
+- class aggregate
+- weighted class ratio
+- zero activity learners
+- class pagination
+- Practice class composition once
+- Parent enrollment read
+- Parent class denied
+- Catechist assigned class
+- unassigned Catechist denied
+- Parish Admin own parish
+- cross-parish denied
+- Super Admin read
+- no selected answers
+- no correct answers
+- no mastery
+- no universal weighted score
+- no date filter mixed semantics
+- no N+1
+- aggregate-table decision
+- FE contract ready
+- Mobile contract ready
+- multilingual ready
+- demo seed
+- demo seed idempotent
+- Postman
+- README/OpenAPI
+- no secrets
+- regression
+- Git compliance
+
+52. Completion Decision
+-----------------------
+If and ONLY if:
+- unresolved BLOCKER = 0
+- unresolved HIGH = 0
+- mandatory feature gates PASS
+- integration PASS
+- DB e2e PASS
+- quality:full one clean run PASS
+- Docker PASS
+- FE READY
+- MOBILE READY
+
+Then state exactly:
+
+LEARNING PROGRESS PHASE COMPLETE
+
+LEARNING PROGRESS DOMAIN READY: YES
+
+FE LEARNING PROGRESS CONTRACT READY: YES
+
+MOBILE LEARNING PROGRESS CONTRACT READY: YES
+
+LEARNING PROGRESS MULTILINGUAL FOUNDATION READY: YES
+
+PRACTICE COMPOSITION READY: YES
+
+Otherwise state:
+
+LEARNING PROGRESS PHASE NOT COMPLETE
+
+and list blockers precisely.
+
+53. Next Backend Phase Sequencing Audit
+---------------------------------------
+Only if Learning Progress COMPLETE.
+
+We must now re-evaluate roadmap sequencing before automatically starting Exam.
+
+Compare at least:
+
+A. LOCALIZATION / CONTENT TRANSLATION FOUNDATION
+B. EXAM ENGINE / FORMAL ASSESSMENT
+
+Important architectural roadmap constraint:
+
+Localization should happen after Curriculum/Lesson + Media are stable, and before downstream content-heavy features become deeply coupled to single-language content.
+
+Current state:
+- Curriculum stable
+- Media stable
+- Question Bank stable
+- Practice stable
+- Learning Progress now potentially complete
+
+Therefore Localization may now be overdue.
+
+Final report MUST recommend one next phase and explain why.
+
+Do NOT implement either automatically.
+
+54. Prompt Count
+----------------
+State:
+LEARNING PROGRESS #004/4 complete
+Learning Progress phase COMPLETE or BLOCKED
+
+55. Final Response
+------------------
+Respond concisely:
+
+- LEARNING PROGRESS #004 status
+- phase COMPLETE/NOT COMPLETE
+- architecture PASS/FAIL
+- demo seed PASS/FAIL
+- Postman PASS/FAIL
+- FE readiness
+- Mobile readiness
+- multilingual readiness
+- Practice composition PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- aggregate-table final decision
+- next phase recommendation
+- report:
+  docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(learning-progress): finalize learning progress foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next phase automatically.

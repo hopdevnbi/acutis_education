@@ -1,0 +1,818 @@
+CURSOR PROMPT — PARISH/ACADEMIC STRUCTURE #002/5
+SCHEMA + ENTITIES + MIGRATIONS FOUNDATION
+
+1. Context
+----------
+We are building a long-term parish catechism platform backend.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- Auth / User / Role / Permission: COMPLETE
+- PARISH/ACADEMIC #001 — Domain Audit + Modular Boundary Design: COMPLETE
+
+Current:
+- PARISH/ACADEMIC #002 / 5 — Schema + Entities + Migrations
+
+Remaining:
+- #003 Parish application/service/API layer
+- #004 Academic Year + Catechism Level application/service/API layer
+- #005 Integration hardening + final audit
+
+This prompt implements PERSISTENCE FOUNDATION ONLY.
+
+DO NOT implement controllers, business services, DTOs, permissions, or seed data yet.
+
+2. Required Reading
+-------------------
+Before editing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all `.cursor/rules/*.mdc`
+4. Read:
+   docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+5. Read:
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+6. Inspect:
+   src/modules/
+   src/database/
+   src/app.module.ts
+   src/database/uuid-v4.util.ts
+   src/modules/module-boundaries.spec.ts
+   test/
+7. Inspect Git status using read-only commands.
+
+3. Architecture Decision From #001
+----------------------------------
+Selected module split:
+
+ParishModule
+- owns `parishes`
+
+AcademicStructureModule
+- owns `academic_years`
+- owns `catechism_levels`
+
+Dependency direction:
+
+AcademicStructureModule -> ParishModule eventually via public service contract
+
+BUT in #002 there are no services yet.
+
+Therefore #002 should NOT create cross-module service imports just for schema registration.
+
+4. Primary Objective
+--------------------
+Implement:
+
+- ParishModule skeleton
+- AcademicStructureModule skeleton
+- ParishEntity
+- AcademicYearEntity
+- CatechismLevelEntity
+- status enums
+- migration(s)
+- constraints/indexes/FKs
+- entity metadata tests
+- migration integration tests
+- module-boundary tests
+
+No application behavior yet.
+
+5. UUID Strategy
+----------------
+Follow established project rule:
+
+- MSSQL `uniqueidentifier`
+- application-generated UUID v4
+- no DB UUID default
+- no NEWID()
+- no NEWSEQUENTIALID()
+- entity field initializer using existing UUID utility
+
+Do NOT introduce a base entity abstraction.
+
+6. Parish Entity
+----------------
+Implement table:
+
+parishes
+
+Fields:
+
+id
+- uniqueidentifier
+- PK
+- application UUID v4
+
+code
+- varchar(32)
+- NOT NULL
+- globally unique
+
+name
+- nvarchar(128)
+- NOT NULL
+
+status
+- varchar(32)
+- NOT NULL
+- enum:
+  ACTIVE
+  INACTIVE
+
+created_at
+- datetime2
+- NOT NULL
+
+updated_at
+- datetime2
+- NOT NULL
+
+Do NOT add:
+- slug
+- address
+- email
+- phone
+- description
+- deleted_at
+
+7. Parish Code Persistence
+--------------------------
+Persistence layer should support future normalized lowercase codes.
+
+Do not add DB lowercasing function.
+
+Service-layer normalization comes in #003.
+
+Unique index:
+
+UQ_parishes_code
+
+Optional status index may be added only if consistent with #001 plan and justified.
+
+8. AcademicYear Entity
+----------------------
+Implement table:
+
+academic_years
+
+Fields:
+
+id
+- uniqueidentifier
+- PK
+- application UUID v4
+
+parish_id
+- uniqueidentifier
+- NOT NULL
+- scalar field only
+
+name
+- nvarchar(128)
+- NOT NULL
+
+start_date
+- DATE
+- NOT NULL
+
+end_date
+- DATE
+- NOT NULL
+
+status
+- varchar(32)
+- NOT NULL
+- enum:
+  PLANNED
+  ACTIVE
+  CLOSED
+
+created_at
+updated_at
+
+Do NOT add ORM relation to ParishEntity.
+
+No `@ManyToOne`.
+
+9. Academic Year Constraints
+----------------------------
+Required:
+
+FK:
+academic_years.parish_id -> parishes.id
+
+Delete behavior:
+NO ACTION / RESTRICT equivalent
+
+Unique:
+(parish_id, name)
+
+Name:
+UQ_academic_years_parish_id_name
+
+Indexes:
+IX_academic_years_parish_id
+IX_academic_years_parish_id_status
+
+Add CHECK:
+start_date < end_date
+
+Use explicit stable constraint name.
+
+10. Academic Year Active Policy
+-------------------------------
+DO NOT enforce "one ACTIVE academic year per parish" in DB in this prompt.
+
+Reason:
+service-layer lifecycle rule belongs in #004.
+
+Do not add filtered unique index for status.
+
+11. CatechismLevel Entity
+-------------------------
+Implement table:
+
+catechism_levels
+
+Fields:
+
+id
+- uniqueidentifier
+- PK
+- app UUID v4
+
+parish_id
+- uniqueidentifier
+- NOT NULL
+- scalar only
+
+code
+- varchar(32)
+- NOT NULL
+
+name
+- nvarchar(128)
+- NOT NULL
+
+sort_order
+- int
+- NOT NULL
+- default 0 is acceptable
+
+status
+- varchar(32)
+- NOT NULL
+- ACTIVE / INACTIVE
+
+created_at
+updated_at
+
+No ORM ParishEntity relation.
+
+12. Catechism Level Constraints
+-------------------------------
+FK:
+catechism_levels.parish_id -> parishes.id
+
+Delete:
+NO ACTION / RESTRICT
+
+Unique:
+(parish_id, code)
+
+Name:
+UQ_catechism_levels_parish_id_code
+
+Indexes:
+IX_catechism_levels_parish_id
+IX_catechism_levels_parish_id_sort_order
+
+Do NOT enforce unique sort_order.
+
+13. Cross-Module ORM Rule — CRITICAL
+------------------------------------
+AcademicStructure entities MUST NOT import ParishEntity.
+
+Use:
+
+parishId: string
+
+No:
+@ManyToOne
+@JoinColumn
+relation property
+
+SQL FK exists only in migration.
+
+This mirrors Auth/RBAC modular boundary rules.
+
+14. Status Enums
+----------------
+Create module-owned enums.
+
+ParishModule:
+ParishStatus
+- ACTIVE
+- INACTIVE
+
+AcademicStructureModule:
+AcademicYearStatus
+- PLANNED
+- ACTIVE
+- CLOSED
+
+CatechismLevelStatus
+- ACTIVE
+- INACTIVE
+
+Do not place these in generic common/shared.
+
+15. Timestamp Mapping
+---------------------
+Follow current project TypeORM conventions.
+
+Use UTC datetime2.
+
+Do not invent a shared base timestamp entity unless project already has one and rules permit it.
+
+16. Module Skeletons
+--------------------
+Create:
+
+src/modules/parish/parish.module.ts
+
+src/modules/academic-structure/academic-structure.module.ts
+
+Each uses TypeOrmModule.forFeature internally.
+
+At #002:
+- no providers
+- no controllers
+- no exports
+
+Persistence remains private.
+
+17. AppModule Registration
+--------------------------
+Register both modules in AppModule.
+
+Do not disturb:
+- AuthModule
+- AccessControlModule
+- demo flag logic
+- AppModule.forRoot()
+
+18. Migration Strategy
+----------------------
+Create a NEW migration.
+
+Do not edit committed auth migrations.
+
+Preferred one migration for this cohesive phase:
+
+create-parish-academic-structure-schema
+
+Migration should create in order:
+
+1. parishes
+2. academic_years
+3. catechism_levels
+4. constraints/indexes/FKs
+
+Down order:
+1. catechism_levels
+2. academic_years
+3. parishes
+
+19. Migration Naming
+--------------------
+Use existing timestamp convention.
+
+Do not reuse old timestamps.
+
+Migration class name must match file timestamp.
+
+20. Fresh DB Compatibility
+--------------------------
+Migration chain from zero must be:
+
+Auth migrations
+then
+Parish/Academic schema migration
+
+Must work on:
+catechism_api_test
+
+No synchronize.
+
+21. Existing Dev DB Safety
+--------------------------
+Do NOT reset dev DB.
+
+Test against test DB.
+
+If dev migration is later needed:
+user can run manually after prompt report.
+
+22. Entity Metadata Tests
+-------------------------
+Add tests verifying:
+
+ParishEntity:
+- UUID PK not generated by DB
+- correct column types/lengths
+- status mapping
+
+AcademicYearEntity:
+- scalar parishId
+- no ORM relation metadata to Parish
+- DATE fields
+
+CatechismLevelEntity:
+- scalar parishId
+- no ORM relation metadata
+- sortOrder int
+
+Ensure no `PrimaryGeneratedColumn`.
+
+23. Module Boundary Tests
+-------------------------
+Extend `src/modules/module-boundaries.spec.ts`.
+
+At #002 expected:
+
+ParishModule exports:
+nothing
+
+AcademicStructureModule exports:
+nothing
+
+Assert:
+- no TypeOrmModule export
+- no entity export
+- no repository export
+
+24. Cross-Module Import Audit
+-----------------------------
+Add or extend tests/audit so:
+
+AcademicStructure production code does NOT import:
+ParishEntity
+
+No cross-module entity relations.
+
+25. Migration Integration Tests
+-------------------------------
+Extend DB integration coverage.
+
+Verify tables exist:
+
+parishes
+academic_years
+catechism_levels
+
+Verify required columns/types.
+
+Verify:
+- PKs
+- unique constraints
+- FKs
+- indexes
+- CHECK start_date < end_date
+- UUID PK columns have NO DB default
+
+Do NOT use brittle "exact total table count" assertions.
+
+Use arrayContaining / required table checks.
+
+26. Constraint Behavior Tests
+-----------------------------
+Where practical in integration tests:
+
+- duplicate parish code rejected
+- duplicate academic year name within same parish rejected
+- same academic year name across different parishes allowed
+- invalid start_date >= end_date rejected by CHECK
+- duplicate level code within same parish rejected
+- same level code across different parishes allowed
+- FK invalid parish rejected
+
+No service layer involved yet.
+
+27. Unicode Test
+----------------
+Add at least one persistence/integration assertion that nvarchar supports Vietnamese names, e.g. a parish or level name with diacritics.
+
+Do not hard-code real parish production data.
+
+28. Date Mapping Test
+---------------------
+Verify DATE values round-trip without unintended timezone shift.
+
+Use ISO YYYY-MM-DD semantics.
+
+29. No Business Logic
+---------------------
+STRICTLY do NOT implement:
+
+ParishService
+AcademicYearService
+CatechismLevelService
+
+No:
+- create methods
+- normalization
+- active-year logic
+- deactivation behavior
+
+That is #003/#004.
+
+30. No HTTP
+-----------
+Do NOT add controllers or DTOs.
+
+31. No RBAC Permissions
+-----------------------
+Do NOT create permission rows:
+parishes.read
+parishes.manage
+etc.
+
+Do NOT wire guards.
+
+That is #003/#004/#005.
+
+32. No Seeds
+------------
+Do NOT seed parish/year/level.
+
+33. No User Changes
+-------------------
+Do NOT:
+- add parish_id to users
+- alter users
+- change RBAC schema
+- add memberships
+
+34. Microservice Boundary Review
+--------------------------------
+After implementation confirm:
+
+ParishModule:
+- owns parishes persistence
+- exports nothing yet
+- future ParishService public API
+
+AcademicStructureModule:
+- owns academic years + catechism levels
+- scalar parishId
+- SQL FK only
+- no ParishEntity dependency
+
+35. Index Review
+---------------
+Do not add speculative indexes beyond approved plan.
+
+Expected:
+
+parishes:
+- unique code
+- optional status
+
+academic_years:
+- parish_id
+- parish_id + status
+- unique parish_id + name
+
+catechism_levels:
+- parish_id
+- parish_id + sort_order
+- unique parish_id + code
+
+36. Dependency Review
+---------------------
+Do not add new npm dependencies unless truly required.
+
+No new library should be necessary.
+
+37. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Migration:
+npm run migration:show
+
+Docker:
+production build should be run if module registration/entity changes can affect runtime boot.
+
+Preferred:
+wsl docker build --target production -t catechism-api:parish-schema .
+
+38. Existing Auth Regression
+----------------------------
+Ensure all Auth/RBAC tests continue passing.
+
+This prompt must not regress:
+- login
+- refresh
+- logout
+- RBAC
+- seed
+- demo endpoint gating
+
+39. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(parish): add academic structure schema"
+
+Cursor must NOT execute it.
+
+40. Required Report
+-------------------
+Create:
+
+docs/PARISH_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From #001
+
+3. Rules Applied
+
+4. Files Created
+
+5. Files Modified
+
+6. ParishModule Skeleton
+
+7. AcademicStructureModule Skeleton
+
+8. ParishEntity
+
+9. AcademicYearEntity
+
+10. CatechismLevelEntity
+
+11. Enum Definitions
+
+12. UUID Strategy
+
+13. Timestamp Strategy
+
+14. Migration Added
+
+15. Parish Table Definition
+
+16. Academic Year Table Definition
+
+17. Catechism Level Table Definition
+
+18. FK Strategy
+
+19. Constraint Names
+
+20. Indexes
+
+21. CHECK Constraint
+
+22. Cross-Module ORM Audit
+
+23. Module Export Audit
+
+24. Metadata Tests
+
+25. Integration Tests
+
+26. Constraint Behavior Tests
+
+27. Unicode Validation
+
+28. Date Round-Trip Validation
+
+29. Existing Auth/RBAC Regression
+
+30. Migration Fresh DB Result
+
+31. Migration Re-run Result
+
+32. Docker Validation
+
+33. Module Boundary Matrix
+
+34. Future Microservice Extraction Review
+
+35. Commands Executed
+
+36. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- required tables
+- UUID no DB defaults
+- FKs
+- unique constraints
+- date CHECK
+- Vietnamese nvarchar
+- no cross-module ORM relation
+- no persistence exports
+- Auth/RBAC regression
+
+37. Known Issues / Deferred Items
+
+38. Out-of-Scope Confirmation
+
+39. PARISH #003 Readiness
+
+Only if no BLOCKER/HIGH:
+
+Recommend:
+PARISH/ACADEMIC #003 — Parish Service + API + RBAC Integration
+
+#003 should implement:
+- ParishService
+- code normalization/validation
+- create/list/get/update/status
+- safe snapshots
+- ParishController
+- JwtAuthGuard + PermissionGuard
+- parish permissions
+- service/e2e tests
+- no AcademicYear/CatechismLevel service behavior yet
+
+40. Prompt Count / Phase Status
+State:
+#002/5 complete
+approximately 3 prompts remain.
+
+41. Commit Recommendation
+
+Print exactly ONE:
+
+git commit -m "feat(parish): add academic structure schema"
+
+Cursor MUST NOT execute it.
+
+41. Final Response
+------------------
+Respond concisely:
+
+- PARISH/ACADEMIC #002 status
+- schema/migrations PASS/FAIL
+- boundary PASS/FAIL
+- DB validation PASS/FAIL
+- report:
+  docs/PARISH_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(parish): add academic structure schema"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to #003 automatically.

@@ -1,0 +1,828 @@
+CURSOR PROMPT — LEARNING PROGRESS #001/4
+DOMAIN AUDIT + OWNERSHIP + CROSS-MODULE PROGRESS MODEL DESIGN
+
+1. Context
+----------
+Completed major backend phases:
+- Backend Foundation
+- CI/CD Foundation
+- Auth/User/RBAC
+- Parish + Academic Year + Catechism Level
+- Class + Student + Catechist + Parent + Enrollment
+- Curriculum + Topic + Lesson + Learning Content
+- Media
+- Question Bank
+- Practice Engine / Quiz Delivery Foundation
+
+Practice Engine final state:
+- PHASE COMPLETE
+- STANDARD + REVIEW_WRONG stable
+- answer/grading/retry/idempotency stable
+- Parent learner scope stable
+- Practice progress/statistics stable
+- FE/Mobile Practice contract READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+Roadmap next:
+LEARNING PROGRESS
+Estimated size: 3–5 prompts
+
+Then:
+EXAM ENGINE
+
+Current proposal:
+LEARNING PROGRESS #001 / 4
+
+Planned sequence (subject to #001 audit findings):
+#001/4 Domain audit + ownership + progress model design
+#002/4 Persistence/event/projection foundation if actually needed
+#003/4 Progress APIs + scoped Parent/Catechist/Admin access + Practice/Curriculum integration
+#004/4 Final audit + demo/Postman + quality/full + Docker + completion
+
+This prompt is AUDIT/DESIGN ONLY.
+DO NOT implement code/schema/API yet.
+
+2. Why this module exists
+-------------------------
+Practice already has practice-specific progress:
+- sessionsCompleted
+- firstAttemptAccuracy
+- finalAccuracy
+- review metrics
+- class Practice progress
+
+Learning Progress must NOT duplicate that.
+
+Learning Progress should represent the learner's broader educational progress across:
+- enrollment
+- curriculum
+- curriculum version/assignment
+- lesson/topic learning
+- Practice outcomes
+- future Exam outcomes
+
+It should become an aggregation/read-model domain, not a god module.
+
+3. Permanent Workflow / Git Rules
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect current code deeply
+- create one detailed report in docs/
+- not modify production code/schema in #001
+- not auto-proceed to #002
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+Audit-only:
+no commit recommendation unless tracked source changes somehow occur.
+
+4. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/PRACTICE_005_PROGRESS_STATISTICS_CONTRACT_HARDENING_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Also inspect latest relevant reports for:
+- Curriculum Delivery
+- Enrollment
+- Class
+- Parent/Student scopes
+- Media
+- Auth/RBAC
+
+Inspect:
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/practice/
+src/modules/enrollment/
+src/modules/class/
+src/modules/student/
+src/modules/parish/
+src/modules/question-bank/
+src/modules/auth/
+src/modules/access-control/
+src/modules/module-boundaries.spec.ts
+src/database/
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+5. Primary Audit Objective
+--------------------------
+Determine the exact bounded context and implementation plan for Learning Progress.
+
+Answer:
+
+A. What progress data already exists today?
+B. Which module owns each source-of-truth?
+C. What should LearningProgress own?
+D. Does LearningProgress need new tables?
+E. If yes, what exact projections/events/snapshots?
+F. If no, can it be pure aggregation/read-model initially?
+G. How should lesson completion be represented?
+H. How should Practice metrics contribute?
+I. How will future Exam metrics plug in without redesign?
+J. How should Parent/Catechist/Admin authorization work?
+K. What should FE/Mobile receive?
+L. What is historical/versioning behavior?
+M. What multilingual concerns exist?
+N. What is the final 3–5 prompt implementation plan?
+
+No implementation in #001.
+
+6. Critical Distinction
+-----------------------
+Learning Progress is NOT:
+- Practice progress duplicated
+- Exam results
+- Curriculum ownership
+- Enrollment ownership
+- Question Bank statistics
+- Student profile
+- analytics warehouse
+- spiritual ranking/mastery score
+
+It is a learner progress/read-model domain.
+
+7. Existing Progress Inventory
+------------------------------
+Audit all current progress-like state.
+
+Specifically inspect whether CurriculumDelivery currently has:
+- lesson progress
+- content block progress
+- completed lessons
+- started/completed timestamps
+- completion percentages
+- learner/enrollment references
+- curriculum assignment progress
+
+Inspect Practice:
+- enrollment progress
+- class progress
+- STANDARD metrics
+- REVIEW metrics
+- lastPracticedAt
+
+Inspect Enrollment/Class:
+- enrollment lifecycle
+- curriculum assignment
+- class/academic year context
+
+Document exact existing tables, DTOs, APIs, ownership.
+
+8. Learner Identity
+-------------------
+Strong expected invariant:
+Learning Progress keyed by enrollmentId.
+
+Reason:
+- enrollment is learner academic context
+- links student/class/academic period
+- Parent scope reusable
+- Catechist assigned-class scope reusable
+- future STUDENT login can map to enrollment
+
+Audit and confirm.
+
+Do not key aggregate progress only by userId.
+
+9. Curriculum Context
+---------------------
+Progress should be attributable to:
+- enrollmentId
+- curriculumId
+- curriculumVersionId if needed
+- canonicalLessonKey
+- topic semantic key only if stable/current design supports it
+
+Do not invent unstable direct topic references.
+
+10. Historical Stability
+------------------------
+Critical:
+progress history must not silently change when:
+- lesson text changes
+- new curriculum version publishes
+- Practice question version changes
+- tags change
+- class assignment changes
+
+Audit which identifiers are stable enough.
+
+Prefer semantic/stable keys + exact source version IDs where necessary.
+
+11. Lesson Completion Model
+---------------------------
+Audit current Learning Content/Curriculum Delivery behavior.
+
+Need define:
+- what means STARTED?
+- what means COMPLETED?
+- is completion explicit user action or derived?
+- is content progress per lesson or per block?
+- does viewing content count?
+- can lesson completion be reopened?
+- how are multiple lesson versions handled?
+
+Do NOT invent product behavior if current code/reports do not define it.
+
+If missing, report the gap clearly and recommend a conservative MVP.
+
+12. Suggested Conservative MVP
+------------------------------
+If no existing lesson progress exists:
+
+Potential learner lesson progress states:
+NOT_STARTED
+IN_PROGRESS
+COMPLETED
+
+Potential source:
+explicit learner interaction, not passive GET/view.
+
+But this must be justified from product/current architecture.
+
+No implementation yet.
+
+13. Practice Contribution
+-------------------------
+Learning Progress should consume PracticeService public contracts, not Practice tables/repos.
+
+Possible Practice contribution:
+- sessionsCompleted
+- firstAttemptAccuracy
+- finalAccuracy
+- lastPracticedAt
+- review activity
+
+Question:
+Should Learning Progress query Practice on demand?
+Or should Practice emit/update a Learning Progress projection?
+
+Audit.
+
+Strong initial preference:
+read-model aggregation through public services before introducing duplicate persisted aggregates.
+
+But future microservice extraction may favor events/projections.
+
+Report tradeoff.
+
+14. Future Exam Contribution
+----------------------------
+Exam does not exist yet.
+
+Design extension point now.
+
+Potential future Exam contribution:
+- examsAssigned
+- examsCompleted
+- latestScore
+- pass/fail if product defines
+- attempt status
+
+Do NOT add Exam tables or fields now unless generic extension contract is clearly safe.
+
+Avoid hard-coded exam columns prematurely.
+
+15. Overall Progress Percentage
+-------------------------------
+Do NOT invent one universal percentage unless product semantics are defined.
+
+Example problem:
+lesson completion + Practice accuracy + future Exam score are not naturally comparable.
+
+Strong recommendation:
+Expose dimensions separately first.
+
+Potential:
+learning:
+  lessonsCompleted / lessonsAssigned
+
+practice:
+  sessionsCompleted
+  firstAttemptAccuracy
+  finalAccuracy
+
+future exam:
+  separately
+
+If a top-level completionPercent exists, it should be based only on curriculum lesson completion, not arbitrary weighted practice/exam scores.
+
+Audit and decide.
+
+16. Mastery
+-----------
+Do NOT implement:
+masteryScore
+faith/spiritual score
+ranking
+behavioral score
+
+Practice already intentionally avoided "mastery".
+
+Keep that rule.
+
+17. Progress Domain Shape
+-------------------------
+Potential high-level DTO:
+
+{
+  enrollmentId,
+  curriculum: {
+    curriculumId,
+    versionId?,
+    lessonsTotal,
+    lessonsStarted,
+    lessonsCompleted,
+    completionRatio
+  },
+  practice: {
+    sessionsCompleted,
+    firstAttemptAccuracy,
+    finalAccuracy,
+    lastPracticedAt
+  },
+  recentActivity: ...
+}
+
+Future:
+exam: {...}
+
+Do not lock this shape until audit.
+
+18. Read Model vs Persistence
+-----------------------------
+This is the main #001 decision.
+
+Option A:
+Pure read aggregation from CurriculumDelivery + Practice.
+
+Pros:
+- no duplicated data
+- simpler consistency
+- faster implementation
+
+Cons:
+- cross-module read fanout
+- future microservice latency
+- harder historical snapshot if sources evolve
+
+Option B:
+LearningProgress-owned projection tables updated by domain events.
+
+Pros:
+- fast reads
+- extraction-friendly
+- historical stability
+
+Cons:
+- event consistency complexity
+- duplication
+- more schema/work
+
+Option C:
+Hybrid:
+minimal persisted learner lesson progress + aggregate Practice on demand.
+
+Audit and choose.
+
+19. Strong Expected Direction
+-----------------------------
+Likely:
+LearningProgress owns lesson/learning progress state if no existing module owns it.
+
+Practice remains source of Practice metrics.
+
+LearningProgress aggregate endpoint composes:
+- owned lesson progress
+- Practice public summary
+
+But do NOT assume; audit actual CurriculumDelivery code.
+
+20. Cross-Module Ownership Rule
+-------------------------------
+If CurriculumDelivery already owns learner lesson completion:
+LearningProgress must not steal it.
+
+Then LearningProgress may be read/projection facade only.
+
+If no module owns lesson completion:
+LearningProgress may own that state.
+
+Report exact ownership.
+
+21. Tables — Audit Only
+-----------------------
+Potential candidates IF needed:
+
+learning_progress
+lesson_progress
+learning_activity_events
+
+Do NOT create in #001.
+
+Report whether each is:
+REQUIRED / DEFERRED / REJECTED.
+
+22. Suggested Minimal Persistence Candidate
+------------------------------------------
+If needed:
+
+lesson_progress
+- id
+- enrollmentId
+- curriculumId
+- curriculumVersionId?
+- canonicalLessonKey
+- status
+- startedAt
+- completedAt
+- updatedAt
+
+Potential unique:
+(enrollmentId, curriculumId, canonicalLessonKey)
+
+But versioning semantics must be audited first.
+
+23. Versioning Question
+-----------------------
+If curriculum v1 lesson canonical key persists into v2:
+should completion carry forward?
+
+Possible:
+A. completion by canonicalLessonKey carries across versions
+B. completion tied to exact curriculumVersionId
+C. carry-forward with explicit policy
+
+This is a critical product/domain decision.
+
+Do not implement before deciding.
+
+Strong likely recommendation:
+canonical lesson identity may preserve conceptual completion, but material changes could invalidate it.
+
+Need audit existing canonicalLessonKey/version semantics and roadmap intent.
+
+24. Academic Year / Enrollment Change
+-------------------------------------
+Progress should normally remain scoped to enrollment.
+
+New academic-year enrollment should not automatically inherit old progress unless explicit transfer policy exists.
+
+This is another key reason to use enrollmentId.
+
+25. Parent Access
+----------------
+Linked Parent:
+read linked learner progress.
+
+No write unless lesson progress actions are explicitly learner-facing.
+
+26. Catechist Access
+--------------------
+Assigned Catechist:
+read learner/class progress for assigned class.
+
+Potential lesson completion write?
+Do not allow unless product explicitly says catechist marks completion.
+
+Audit.
+
+27. Parish Admin
+----------------
+Own parish read.
+
+Potential correction/admin write should be deferred unless required.
+
+28. Super Admin
+---------------
+Global read.
+
+29. Future Student
+------------------
+No STUDENT role implementation now.
+
+Design self-access later via enrollment mapping.
+
+30. API Concepts — Audit Only
+-----------------------------
+Potential:
+
+GET /api/v1/enrollments/:enrollmentId/learning-progress
+
+GET /api/v1/classes/:classId/learning-progress
+
+Potential lesson action:
+PATCH /api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress
+
+But only if LearningProgress owns lesson state.
+
+No implementation now.
+
+31. Class Progress
+------------------
+Teacher view may need:
+- learner rows
+- lesson completion
+- Practice summary
+
+Avoid giant nested payload.
+
+Pagination required.
+
+32. Recent Activity
+-------------------
+Potential useful dimension:
+lastLearningActivityAt
+
+Sources:
+lesson progress update
+Practice attempt
+
+But cross-domain max timestamps may be composed.
+
+Do not create global event log unless needed.
+
+33. Performance
+--------------
+Audit expected query fanout.
+
+If LearningProgress calls PracticeService per learner:
+N+1 risk.
+
+Need batch contracts or class-level Practice progress reuse.
+
+Practice already has:
+class progress API/service-level equivalent?
+
+Audit public facade availability.
+
+If internal HTTP only, consider narrow service method in #003 later.
+
+34. Practice Public Contract
+----------------------------
+Audit whether PracticeService exposes reusable:
+getEnrollmentProgress
+getClassProgress
+
+If yes, LearningProgress may compose via public service.
+
+No Practice repo access.
+
+35. CurriculumDelivery Public Contract
+--------------------------------------
+Audit whether it exposes:
+- assigned curriculum
+- learner lesson states
+- lesson roster/count
+- curriculum lesson list
+
+Document contract gaps.
+
+36. Class/Enrollment Contract
+-----------------------------
+Use public APIs for:
+- enrollment -> class/parish
+- current active roster
+- catechist scope
+
+No repo/entity imports.
+
+37. Security / Minors
+---------------------
+No child directory.
+No sensitive content in progress DTO.
+No raw Practice answers.
+No correct answers.
+No unnecessary student profile duplication.
+
+38. Multilingual
+----------------
+Progress statuses/counters locale-neutral.
+
+Do not persist translated labels.
+
+Lesson identity should be language-neutral.
+
+No runtime translation.
+
+39. Microservice Extraction
+---------------------------
+Future Learning Progress service should consume:
+Enrollment/Class API
+Curriculum/Learning API
+Practice API
+future Exam API
+
+No shared ORM.
+
+Report ideal extraction boundary.
+
+40. Eventing Future
+-------------------
+Even if MVP is synchronous read aggregation, identify future domain events:
+
+LessonProgressChanged
+PracticeSessionCompleted
+PracticeReviewCompleted
+ExamCompleted
+
+Do NOT implement events now unless existing architecture already has event bus and audit concludes necessary.
+
+41. Error Model
+---------------
+Plan:
+LearningProgressAccessDenied
+LearningProgressNotFound
+LearningProgressInvalidFilter
+LessonProgressInvalidTransition if owned
+CurriculumProgressContextMismatch
+
+No implementation now.
+
+42. Prompt Count Decision
+-------------------------
+User expects 3–5 prompts.
+
+Recommend exact count after audit.
+
+Provisional plan:
+#001/4 Audit/design
+#002/4 Persistence/lesson-progress foundation IF needed
+#003/4 Aggregation APIs + scopes + Practice/Curriculum integration
+#004/4 Final audit + demo/Postman + quality/full + Docker
+
+If #001 concludes no persistence needed:
+compress to 3 prompts.
+
+If complex lesson version carry-forward policy requires separation:
+expand to 5.
+
+Report final recommendation.
+
+43. No Implementation
+---------------------
+DO NOT create:
+entities
+migrations
+module
+services
+controllers
+permissions
+seeds
+Postman
+production code
+
+Only audit/report.
+
+44. Validation
+--------------
+Audit-only run:
+
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+No DB mutation required unless existing test command convention requires it.
+
+45. Required Report
+-------------------
+Create:
+
+docs/LEARNING_PROGRESS_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Current roadmap position
+3 Completed dependencies
+4 Existing progress inventory
+5 Existing Practice progress inventory
+6 Existing CurriculumDelivery learner-state inventory
+7 Existing Enrollment/Class context
+8 Bounded context definition
+9 What LearningProgress must NOT own
+10 Learner identity decision
+11 Enrollment scope
+12 Curriculum context
+13 Lesson identity
+14 Topic identity
+15 Historical stability
+16 Lesson completion semantics
+17 Existing lesson progress owner decision
+18 Practice contribution
+19 Future Exam extension
+20 Overall progress percentage decision
+21 Mastery decision
+22 Read-model vs persistence options
+23 Final persistence decision
+24 Proposed owned tables if any
+25 lesson_progress candidate
+26 Versioning/canonicalLessonKey policy
+27 Academic-year carry-forward policy
+28 Parent access
+29 Catechist access
+30 Parish Admin access
+31 Super Admin access
+32 Future Student scope
+33 Enrollment progress API design
+34 Class progress API design
+35 Lesson progress write API decision
+36 Recent activity decision
+37 Practice public contract gaps
+38 CurriculumDelivery contract gaps
+39 Enrollment/Class contract gaps
+40 Batch/performance risks
+41 N+1 prevention
+42 Security/minors
+43 Multilingual readiness
+44 Microservice extraction
+45 Future eventing strategy
+46 Error model
+47 Risks/open questions
+48 BLOCKER/HIGH/MEDIUM/LOW
+49 Files created
+50 Files modified
+51 Commands
+52 Validation
+53 Out-of-scope
+54 Final prompt count recommendation
+55 LEARNING PROGRESS #002 readiness
+56 Commit recommendation
+
+46. Required Verdicts
+---------------------
+Report must explicitly state:
+
+LEARNING PROGRESS DOMAIN DESIGN READY: YES/NO
+
+LEARNER IDENTITY MODEL READY: YES/NO
+
+LESSON PROGRESS OWNERSHIP READY: YES/NO
+
+PRACTICE INTEGRATION MODEL READY: YES/NO
+
+FUTURE EXAM EXTENSION MODEL READY: YES/NO
+
+HISTORICAL/VERSIONING MODEL READY: YES/NO
+
+PARENT/CATECHIST SCOPE READY: YES/NO
+
+PERSISTENCE REQUIRED NOW: YES/NO
+
+FINAL RECOMMENDED PROMPT COUNT: 3 / 4 / 5
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+47. #002 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH.
+
+If persistence is required:
+Recommend:
+LEARNING PROGRESS #002 — Persistence + Lesson Progress Foundation
+
+If persistence is NOT required:
+Recommend:
+LEARNING PROGRESS #002 — Aggregation APIs + Scoped Access + Practice/Curriculum Integration
+
+Do not auto-proceed.
+
+48. Final Response
+------------------
+Respond concisely:
+- LEARNING PROGRESS #001 status
+- current progress owner findings
+- persistence YES/NO
+- lesson versioning decision
+- Practice integration
+- Parent/Catechist scope
+- recommended total prompt count
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed automatically.

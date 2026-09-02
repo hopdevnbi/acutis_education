@@ -1,0 +1,928 @@
+CURSOR PROMPT — PRACTICE ENGINE #004/6
+ANSWER SUBMISSION + GRADING + RETRY + FEEDBACK REVEAL + REVIEW-WRONG
+
+CONTEXT
+-------
+Completed:
+- #001 Domain Audit + Flow Design
+- #002 Schema + Entities + Migrations
+- #003 Generation + Session Lifecycle + Question Selection + Contextual Media
+
+Current: PRACTICE ENGINE #004/6
+Remaining:
+#005 Progress/statistics + scoped Parent/Catechist access + FE/Mobile hardening
+#006 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+Inherited:
+- PracticeModule exports PracticeService only
+- Parent linked-enrollment create/read/manage
+- Catechist/Parish Admin denied learner delivery
+- exact questionVersionId pinned
+- persisted question/option order
+- clientRequestId + generationRequestHash idempotency
+- current-published Question Bank selection
+- contextual media route
+- maxAttemptsPerQuestion persisted; default 3
+- no answer route yet
+
+This prompt implements answer → grade → retry/finalize → feedback → auto-complete → review-wrong.
+
+Do NOT implement progress/statistics API yet.
+
+PERMANENT RULES
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports/current code first
+- stay inside #004
+- create detailed docs report
+- not auto-proceed to #005
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(practice): add answer grading and review flow"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_001_DOMAIN_AUDIT_AND_FLOW_DESIGN_REPORT.md
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/PRACTICE_003_GENERATION_SESSION_DELIVERY_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+docs/QUESTION_BANK_006_CURRICULUM_MEDIA_SCOPED_DELIVERY_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/practice/
+src/modules/question-bank/
+src/modules/enrollment/
+src/modules/media/
+src/modules/auth/
+src/modules/access-control/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+1. answer POST
+2. clientAnswerId idempotency
+3. transaction-safe attemptNumber
+4. QuestionBankService.gradeAnswer integration
+5. retry/max-attempt policy
+6. question finalization
+7. immediate isCorrect/score
+8. reveal-gated feedback
+9. QuestionBankService.getPracticeFeedback service-only contract
+10. auto session completion
+11. completed session immutability
+12. review-wrong child sessions
+13. review exact-version reuse/order
+14. review creation idempotency
+15. tests + quality/full + Docker
+
+Do NOT implement:
+- progress API
+- progress aggregate table
+- Exam
+- STUDENT role
+- SHORT_TEXT/NUMBER
+- partial credit
+- teacher-assigned practice
+
+ANSWER ENDPOINT
+---------------
+POST /api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/answers
+
+Permission: practice.manage
+Relationship scope still mandatory.
+
+PARENT:
+linked enrollment only.
+
+CATECHIST:
+denied.
+
+PARISH_ADMIN:
+denied.
+
+SUPER_ADMIN:
+audit current #003 behavior carefully. Do not silently allow answer submission as learner/support impersonation unless existing policy explicitly permits it. Prefer deny learner submission while allowing safe inspection if already supported.
+
+Body:
+{
+  "clientAnswerId": "uuid-v4",
+  "selectedOptionIds": ["uuid", "..."]
+}
+
+clientAnswerId REQUIRED.
+
+DTO VALIDATION
+--------------
+- clientAnswerId UUID v4
+- selectedOptionIds array
+- at least 1
+- max <= Question Bank MVP max options
+- every item UUID
+- no duplicates
+- reject unknown fields
+
+Do not accept:
+score
+isCorrect
+attemptNumber
+questionVersionId
+submittedByUserId
+
+SESSION/QUESTION FLOW
+---------------------
+1. load session
+2. authorize against enrollment
+3. assert sessionQuestion belongs exact session
+4. assert session IN_PROGRESS
+5. resolve idempotent replay if clientAnswerId exists
+6. derive current attempt state
+7. reject if question finalized
+8. grade exact pinned questionVersionId via QuestionBankService
+9. persist attempt
+10. derive question finalization
+11. maybe auto-complete session
+12. return answer result
+
+Never resolve root.currentPublishedVersionId.
+
+ATTEMPT TRANSACTION / LOCKING
+-----------------------------
+Correctness is more important than premature distributed optimization.
+
+Use a transaction with a pessimistic write lock on the practice session and/or session question so:
+- attemptNumber is serialized
+- max attempts cannot be exceeded concurrently
+- session completion cannot race
+- duplicate clientAnswerId resolves safely
+
+Question Bank grading is read-only local service today. Calling it while holding the local transaction is acceptable for MVP if needed for correctness, but document that future microservice extraction should use shorter lock/recheck or reservation semantics.
+
+DB unique constraints remain final guards:
+- (sessionQuestionId, clientAnswerId)
+- (sessionQuestionId, attemptNumber)
+
+ANSWER IDEMPOTENCY
+------------------
+If clientAnswerId already exists:
+
+Same semantic selected set:
+- return existing attempt
+- no new row
+- no re-grade
+- HTTP 200 preferred
+
+Different semantic selected set:
+- 409 PracticeAnswerIdempotencyConflictError
+
+New answer:
+- HTTP 201
+
+NORMALIZATION
+-------------
+Normalize selectedOptionIds before persistence/comparison:
+- canonical UUID casing
+- sort lexically
+- serialize deterministic JSON
+
+MULTIPLE_CHOICE answer order is not semantic.
+
+GRADING BOUNDARY
+----------------
+Practice calls ONLY:
+
+QuestionBankService.gradeAnswer({
+  questionVersionId,
+  selectedOptionIds
+})
+
+Practice MUST NOT:
+- import Question Bank repos/entities
+- read correct-option tables
+- infer correctness from option code/text
+
+Persist:
+isCorrect
+score
+
+Question Bank owns grading semantics.
+
+Question Bank errors for invalid option/cardinality must map to safe Practice errors, not leak internal domain details.
+
+PINNED VERSION COMPATIBILITY
+----------------------------
+PUBLISHED and ARCHIVED pinned versions remain gradable.
+
+Existing session must still work when:
+- selected version later becomes ARCHIVED
+- question root later becomes INACTIVE
+
+Do not re-check current root status during answer.
+
+ATTEMPT NUMBER / RETRY
+----------------------
+nextAttemptNumber = current attempts + 1, lock protected.
+
+maxAttemptsPerQuestion from session.
+
+Final policy:
+- CORRECT at any attempt -> finalized immediately
+- WRONG and attempt < max -> canRetry=true
+- WRONG at max -> finalized
+- no answer after finalized
+
+Default max attempts remains 3.
+
+No partial credit.
+
+DERIVED QUESTION STATE
+----------------------
+Do NOT add denormalized columns unless proven necessary.
+
+Derive:
+attemptCount
+latestAttempt
+firstAttemptCorrect
+finalCorrect
+finalized
+canRetry
+remainingAttempts
+
+Question is finalized if:
+- latest/terminal attempt is correct
+OR
+- attemptCount >= maxAttemptsPerQuestion
+
+Because correct answers lock the question, a later attempt after correct must never exist.
+
+ANSWER RESPONSE
+---------------
+Return:
+attemptId
+clientAnswerId
+attemptNumber
+isCorrect
+score
+questionFinalized
+canRetry
+remainingAttempts
+sessionCompleted
+
+Feedback only when reveal gate is open.
+
+FEEDBACK REVEAL POLICY — FINAL
+------------------------------
+Reveal:
+- explanation
+- explanationMediaJson
+- correctOptionIds
+
+ONLY when:
+A. question is finalized, OR
+B. session is COMPLETED
+
+Examples:
+- correct attempt 1 -> finalized, feedback allowed
+- wrong 1/3 -> no feedback
+- wrong 2/3 -> no feedback
+- wrong 3/3 -> finalized, feedback allowed
+- completed session GET -> feedback for all finalized questions
+
+Do NOT expose correct answers before this.
+
+QUESTION BANK FEEDBACK CONTRACT
+-------------------------------
+Add service-only method:
+
+QuestionBankService.getPracticeFeedback(questionVersionId)
+
+Return narrow snapshot:
+{
+  questionVersionId,
+  explanation,
+  explanationMediaJson,
+  correctOptionIds
+}
+
+Allowed:
+PUBLISHED
+ARCHIVED
+
+Reject:
+DRAFT
+
+No new Question Bank HTTP endpoint.
+
+QuestionBankModule must continue exporting ONLY QuestionBankService.
+
+FEEDBACK MEDIA
+--------------
+Existing learner projection omits explanation media.
+
+Extend Practice contextual media authorization:
+
+Before feedback reveal:
+- prompt media
+- option media only
+
+After feedback reveal for that session question:
+- prompt media
+- option media
+- explanation media
+
+Server computes reveal state.
+Never trust client flags.
+
+Explanation media requested too early -> 404 preferred.
+
+AUTO SESSION COMPLETION
+-----------------------
+After terminal answer:
+if every session question finalized:
+- status = COMPLETED
+- completedAt = now
+- abandonedAt stays null
+
+No explicit complete endpoint.
+
+Serialize answer submissions at session level if necessary for simple reliable completion.
+
+COMPLETED / ABANDONED
+---------------------
+COMPLETED:
+- no new answers
+- no abandon
+- no question/order mutation
+- GET allowed
+- review-wrong allowed
+
+ABANDONED:
+- no answers
+- no review-wrong
+- historical GET allowed to authorized actor
+
+GET SESSION ENHANCEMENT
+-----------------------
+Per question include:
+attemptCount
+latestAttempt:
+  attemptId
+  attemptNumber
+  selectedOptionIds
+  isCorrect
+  score
+  submittedAt
+finalized
+canRetry
+remainingAttempts
+feedbackRevealed
+
+If revealed:
+feedback:
+  explanation
+  explanationMediaJson
+  correctOptionIds
+
+Else:
+feedback null/omitted.
+
+Session summary:
+answeredQuestionCount
+finalizedQuestionCount
+finalCorrectCount
+totalQuestions
+sessionCompleted
+
+Do NOT call this mastery.
+
+Raw selected answers belong only learner-session DTO. Future progress DTOs must not expose them.
+
+REVIEW-WRONG ENDPOINT
+---------------------
+POST /api/v1/practice-sessions/:sessionId/review-wrong
+
+Permission:
+practice.manage + linked Parent scope.
+
+Body:
+{
+  "clientRequestId": "uuid-v4"
+}
+
+Strong requirement: clientRequestId REQUIRED for mobile-safe review creation.
+
+Source session:
+- must be COMPLETED
+- may be STANDARD or REVIEW_WRONG
+- same linked enrollment
+- not ABANDONED
+
+WRONG QUESTION DEFINITION
+-------------------------
+Include only source session questions whose FINAL outcome is incorrect.
+
+Exclude:
+- questions eventually answered correctly after retry
+- any question with final correct=true
+
+A completed session should have no unanswered questions.
+
+NO WRONG QUESTIONS
+------------------
+If none:
+PracticeNoWrongQuestionsError
+HTTP 422.
+
+REVIEW CHILD
+------------
+Create:
+sessionType = REVIEW_WRONG
+sourceSessionId = source.id
+enrollmentId = same source enrollment
+locale = same
+curriculumId = same
+canonicalLessonKey = same
+requestedQuestionCount = wrong count
+maxAttemptsPerQuestion = same source
+randomizeQuestions = false
+randomizeOptions = false
+createdByUserId = actor
+status = IN_PROGRESS
+startedAt = now
+
+Do NOT call Question Bank selection.
+
+Reuse exact pinned questionVersionIds.
+
+REVIEW ORDER / OPTION ORDER
+---------------------------
+Preserve source relative question order.
+
+Reset child positions to 1..N.
+
+Copy source deliveredOptionOrderJson for each included question.
+
+Do not re-randomize.
+
+REVIEW ATTEMPTS
+---------------
+Fresh attempt history.
+attemptNumber restarts at 1.
+
+REVIEW CHAIN
+------------
+Allow:
+STANDARD -> REVIEW_WRONG -> REVIEW_WRONG
+
+Each child derives final wrong set from immediate source.
+
+REVIEW IDEMPOTENCY
+------------------
+Use existing:
+(enrollmentId, clientRequestId)
+
+Use generationRequestHash (or equivalent existing session request hash) for review operation too.
+
+Hash canonical payload:
+operation = REVIEW_WRONG
+sourceSessionId
+
+Same key + same source:
+return existing child session.
+
+Same key + different source/operation:
+409 PracticeIdempotencyConflictError.
+
+Do not accept client-provided wrong question IDs.
+
+ACTOR VS LEARNER
+----------------
+enrollmentId = learner context.
+
+createdByUserId = actor starting review.
+submittedByUserId = actor submitting answer.
+
+Progress remains attributed to enrollment.
+
+SERVICE DECOMPOSITION
+---------------------
+PracticeService remains sole public export.
+
+Suggested internal services:
+- PracticeAnswerService
+- PracticeReviewService
+- PracticeSessionQueryService
+- PracticeMediaService
+- PracticeAccessService
+
+Optional PracticeFeedbackService if it reduces duplication.
+
+Do not create a god service.
+
+ERRORS
+------
+Add/reuse typed errors:
+
+PracticeInvalidAnswerError
+PracticeQuestionFinalizedError
+PracticeAnswerIdempotencyConflictError
+PracticeRetryNotAllowedError
+PracticeNoWrongQuestionsError
+PracticeReviewSourceNotCompletedError
+PracticeReviewSourceInvalidError
+PracticeSessionQuestionContentUnavailableError
+
+Reuse existing:
+PracticeSessionNotFoundError
+PracticeSessionCompletedError
+PracticeSessionAbandonedError
+PracticeQuestionNotFoundError
+PracticeAccessDeniedError
+PracticeIdempotencyConflictError
+
+HTTP mapping:
+400 invalid answer
+403 access
+404 not found/content missing
+409 lifecycle/idempotency/finalized
+422 review no-wrong / invalid review source where consistent
+
+SECURITY
+--------
+- linked Parent only for learner submit/review
+- CATECHIST cannot submit
+- PARISH_ADMIN cannot submit
+- no client-provided correctness
+- no premature correct-answer/explanation leak
+- no generic QB feedback HTTP
+- no generic learner Media route
+- no selected/correct answer IDs in logs
+- no child names in logs
+
+OBSERVABILITY
+-------------
+Log IDs:
+sessionId
+sessionQuestionId
+questionVersionId
+attemptNumber
+actorUserId
+action
+
+Optional isCorrect boolean if project privacy convention permits.
+
+Do NOT log:
+selectedOptionIds
+correctOptionIds
+prompt
+explanation
+student name
+
+UNIT TESTS — ANSWER
+-------------------
+Required:
+- first correct -> final + feedback
+- first wrong -> retry, no feedback
+- second wrong -> retry, no feedback
+- third wrong -> final + feedback
+- submit after correct -> 409
+- submit after max -> 409
+- completed session -> reject
+- abandoned session -> reject
+- wrong sessionQuestion -> 404
+- empty selected IDs -> 400
+- duplicate selected IDs -> 400
+- invalid/cross-version option -> safe Practice 400
+- PUBLISHED grading
+- ARCHIVED grading
+- root inactive later still works
+- same clientAnswerId + same set -> replay
+- same clientAnswerId + different set -> 409
+- selected set normalization stable
+
+UNIT TESTS — COMPLETION
+-----------------------
+- session remains IN_PROGRESS while any question non-final
+- last terminal answer auto-completes
+- completedAt set exactly once
+- completed session immutable
+- abandon completed -> conflict
+
+UNIT TESTS — FEEDBACK
+---------------------
+- hidden before final
+- visible after correct final
+- visible after max wrong
+- completed GET includes feedback
+- QB getPracticeFeedback rejects DRAFT
+- QB getPracticeFeedback allows ARCHIVED
+- no QB HTTP feedback route
+
+UNIT TESTS — REVIEW
+-------------------
+- completed STANDARD with final wrong -> child review
+- eventually-correct excluded
+- final-wrong included
+- relative order preserved
+- option order preserved
+- exact questionVersionIds reused
+- fresh attempts
+- sourceSessionId set
+- same enrollment enforced
+- no wrong -> 422
+- incomplete source denied
+- abandoned source denied
+- chained review allowed
+- review clientRequestId replay
+- review idempotency mismatch conflict
+
+INTEGRATION TESTS
+-----------------
+Real MSSQL:
+- generate STANDARD session
+- submit multiple attempts
+- attempt rows persisted
+- attempt numbers 1..N
+- normalized selectedOptionIdsJson
+- answer replay creates no duplicate
+- auto-complete
+- feedback gate
+- archive pinned version after generation then grade/feedback successfully
+- create review child
+- child exact versions/order
+- child fresh history
+- complete review
+- no duplicate answer/client ids
+
+DB E2E
+------
+- unauthenticated 401
+- linked Parent submit success
+- unlinked Parent 403
+- CATECHIST submit 403
+- PARISH_ADMIN submit 403
+- wrong non-final response has no feedback
+- retry works
+- terminal response reveals feedback
+- completed GET reveals feedback
+- submit after final 409
+- answer replay 200
+- answer id mismatch 409
+- review-wrong 201
+- review no-wrong 422
+- review replay 200
+- no public QB feedback HTTP route
+- explanation contextual media reveal gate tested if fixture is practical
+
+NO PROGRESS YET
+---------------
+Do NOT implement:
+GET .../practice/progress
+progress aggregate table
+mastery
+leaderboards
+teacher analytics
+
+#005 owns progress/statistics.
+
+EXISTING REGRESSION
+-------------------
+Must remain green:
+- Practice #003 generation/delivery
+- Question Bank
+- Enrollment/Class
+- Curriculum
+- Media
+- Auth
+
+QUALITY
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require ONE CLEAN PASS.
+
+No contradictory report summary/detail.
+
+DOCKER
+------
+Run:
+wsl docker build --target production -t catechism-api:practice-answer-review .
+
+PASS required.
+
+REQUIRED COMMANDS
+-----------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:practice-answer-review .
+
+REQUIRED REPORT
+---------------
+Create:
+docs/PRACTICE_004_ANSWER_GRADING_RETRY_REVIEW_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #003
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final module architecture
+7 Public export
+8 Answer endpoint
+9 Answer DTO
+10 Session/question access
+11 Attempt transaction
+12 Locking/concurrency
+13 clientAnswerId idempotency
+14 Idempotency payload comparison
+15 Answer normalization
+16 Attempt numbering
+17 Question Bank grading boundary
+18 Invalid option mapping
+19 Retry policy
+20 Question finalization
+21 Immediate response
+22 Feedback reveal policy
+23 QuestionBank getPracticeFeedback contract
+24 Feedback trust boundary
+25 Feedback media authorization
+26 Session GET attempt state
+27 Session auto-completion
+28 Completed immutability
+29 Abandoned behavior
+30 Review-wrong endpoint
+31 Wrong question definition
+32 Review child creation
+33 Review ordering
+34 Review option ordering
+35 Review exact version pinning
+36 Review fresh attempt history
+37 Review idempotency
+38 Review chain support
+39 Actor/learner attribution
+40 Error mapping
+41 Security/privacy
+42 Observability
+43 Unit tests
+44 Integration tests
+45 DB e2e
+46 Archived-version compatibility
+47 Existing regression
+48 pristine quality:full
+49 Docker
+50 Mobile/offline readiness
+51 Multilingual readiness
+52 Microservice extraction
+53 Commands
+54 Validation matrix
+55 Known/deferred
+56 Out-of-scope
+57 PRACTICE #005 readiness
+58 Prompt count
+59 Commit recommendation
+
+EXPLICIT PASS/FAIL MATRIX
+-------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- PracticeService only export
+- answer POST
+- linked Parent submit
+- unlinked Parent denied
+- CATECHIST submit denied
+- PARISH_ADMIN submit denied
+- clientAnswerId required
+- idempotent replay
+- idempotency mismatch 409
+- attemptNumber unique
+- selected answers normalized
+- no client score trust
+- QuestionBank gradeAnswer only
+- PUBLISHED grading
+- ARCHIVED grading
+- first correct finalizes
+- wrong retry
+- max attempts finalizes
+- no retry after final
+- immediate isCorrect
+- no feedback before final
+- feedback after final
+- correctOptionIds hidden before final
+- getPracticeFeedback service-only
+- no QB feedback HTTP
+- session auto-complete
+- completedAt
+- completed immutable
+- review-wrong create
+- no-wrong 422
+- review exact versions
+- review order preserved
+- review option order preserved
+- review fresh attempts
+- chained review
+- review idempotency
+- contextual explanation media reveal-gated
+- no progress API
+- no aggregate progress table
+- no Exam
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+#005 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+PRACTICE ENGINE #005/6 — Progress/Statistics + Scoped Parent/Catechist Access + FE/Mobile Contract Hardening
+
+#005 should implement:
+- derived progress queries
+- first-attempt accuracy
+- final accuracy
+- STANDARD vs REVIEW metrics
+- Parent linked progress
+- Catechist assigned-class progress
+- Parish Admin scoped aggregate read
+- FE/Mobile contract hardening
+- performance audit
+- no Exam
+
+PROMPT COUNT
+------------
+State:
+PRACTICE ENGINE #004/6 complete
+approximately 2 prompts remain (#005–#006)
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- PRACTICE #004 status
+- answer/grading PASS/FAIL
+- retry/finalization PASS/FAIL
+- feedback reveal PASS/FAIL
+- review-wrong PASS/FAIL
+- auto-completion PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly:
+git commit -m "feat(practice): add answer grading and review flow"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #005 automatically.

@@ -1,0 +1,1093 @@
+CURSOR PROMPT — AUTH/RBAC #006/9
+ROLE + PERMISSION + RBAC SERVICES + PERMISSION GUARD
+
+1. Context
+----------
+We are building a long-term parish catechism backend platform.
+
+Completed:
+- Backend Foundation: COMPLETE
+- Backend Bitbucket CI Foundation: COMPLETE
+- AUTH/RBAC #001 — Modular Rules + Auth/RBAC Audit: COMPLETE
+- AUTH/RBAC #002 — Schema + Entities + Migrations: COMPLETE
+- AUTH/RBAC #002B — Schema Boundary Hardening: COMPLETE
+- AUTH/RBAC #003 — User Account + Password Foundation: COMPLETE
+- AUTH/RBAC #004 — Login + Access JWT: COMPLETE
+- AUTH/RBAC #005 — Refresh Token + Session + Logout: COMPLETE
+
+Current:
+- AUTH/RBAC #006 / 9 — Role + Permission + RBAC Guards
+
+Remaining:
+- #007 Security Hardening + Auth/RBAC Integration Tests
+- #008 Sample Seed Data + Postman Verification
+- #009 Final Auth/RBAC Audit + Module Boundary Review
+
+This prompt implements authorization/RBAC behavior only.
+
+DO NOT add sample seed data yet.
+
+2. Required Reading
+-------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. Read:
+   docs/AUTH_001_MODULAR_RULES_AND_AUTH_RBAC_AUDIT_REPORT.md
+5. Read:
+   docs/AUTH_002_AUTH_FOUNDATION_SCHEMA_REPORT.md
+6. Read:
+   docs/AUTH_002B_SCHEMA_BOUNDARY_HARDENING_REPORT.md
+7. Read:
+   docs/AUTH_003_USER_ACCOUNT_PASSWORD_FOUNDATION_REPORT.md
+8. Read:
+   docs/AUTH_004_LOGIN_ACCESS_JWT_REPORT.md
+9. Read:
+   docs/AUTH_005_REFRESH_SESSION_LOGOUT_REPORT.md
+10. Inspect:
+    src/modules/access-control/
+    src/modules/auth/
+    src/modules/users/
+    test/
+    package.json
+11. Inspect Git status using read-only commands.
+
+3. Primary Objective
+--------------------
+Implement AccessControlModule application behavior:
+
+- role management service foundation
+- permission management service foundation
+- user-role assignment
+- role-permission assignment
+- effective permission resolution
+- permission checks
+- @RequirePermissions(...)
+- PermissionGuard
+- integration tests
+- DB-aware authorization e2e tests
+
+Do NOT implement:
+- sample RBAC seeds
+- admin UI/API CRUD
+- parish-scoped RBAC
+- permission caching
+- audit log subsystem
+- global super-admin bypass unless explicitly justified
+
+4. Module Ownership
+-------------------
+AccessControlModule owns:
+
+- roles
+- permissions
+- user_roles
+- role_permissions
+- assignment logic
+- effective permission evaluation
+- authorization guard/decorator
+
+UsersModule owns:
+- users
+
+AuthModule owns:
+- identity/session/JWT
+
+AccessControlModule MUST NOT:
+- inject User repository
+- import UserEntity
+- mutate users table
+- import AuthSessionEntity
+
+Use authenticated `userId` as scalar identity reference.
+
+5. Existing Schema
+------------------
+Current tables:
+
+roles
+permissions
+user_roles
+role_permissions
+
+Before coding:
+audit actual entity/migration definitions.
+
+Do NOT change schema unless service needs reveal a real gap.
+
+No seed rows exist yet.
+
+6. AccessControlService
+-----------------------
+Create one clear primary public application service.
+
+Preferred:
+AccessControlService
+
+Responsibilities:
+- create role
+- create permission
+- assign role to user
+- remove role from user
+- assign permission to role
+- remove permission from role
+- resolve roles for user
+- resolve effective permissions
+- check user permission
+
+Avoid splitting into many tiny overlapping managers.
+
+7. Public Exports
+-----------------
+After #006, AccessControlModule may export:
+
+- AccessControlService
+- PermissionGuard
+
+Decorator is imported directly by path if needed; Nest module export is not required for plain decorator metadata.
+
+Must NOT export:
+- TypeOrmModule
+- repositories
+- entities
+
+8. Role Contract
+----------------
+Create safe public read model.
+
+Possible:
+
+RoleSnapshot:
+- id
+- code
+- name
+- description
+
+Do not expose RoleEntity.
+
+9. Permission Contract
+----------------------
+PermissionSnapshot:
+- id
+- code
+- name
+- description
+
+Do not expose PermissionEntity.
+
+10. Role Code Normalization
+---------------------------
+Roles are data-driven.
+
+Define stable normalization policy.
+
+Preferred:
+- trim
+- uppercase
+- pattern such as:
+  [A-Z][A-Z0-9_]*
+
+Examples:
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST
+
+But do NOT seed these rows yet.
+
+Enforce:
+- bounded length
+- stable machine-readable code
+
+Human-readable role name remains separate.
+
+11. Permission Code Normalization
+---------------------------------
+Permission code convention from AUTH #001:
+
+{resource}.{action}
+
+lowercase.
+
+Examples:
+users.read
+users.manage
+classes.read
+classes.manage
+
+Implement normalization:
+- trim
+- lowercase
+
+Validate pattern.
+
+Preferred pattern conceptually:
+[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+
+
+Require at least one dot.
+
+Do not hard-code allowed resources/actions yet.
+
+12. Creation Services
+---------------------
+Implement internal/application service functions:
+
+createRole(...)
+createPermission(...)
+
+Required:
+- validate code
+- normalize code
+- validate name
+- persist
+- map duplicate unique DB error to module error
+- return safe snapshot
+
+No HTTP endpoint yet.
+
+These are used by tests and later seed/admin flows.
+
+13. Duplicate Error Mapping
+---------------------------
+Map SQL duplicate constraints cleanly.
+
+Possible errors:
+RoleCodeAlreadyExistsError
+PermissionCodeAlreadyExistsError
+
+Do not expose MSSQL 2601/2627 outside module.
+
+14. User Existence on Role Assignment
+-------------------------------------
+When assigning a role to user:
+
+AccessControlModule must NOT query UserEntity directly.
+
+Evaluate two options:
+
+A. Rely on SQL FK and map FK violation
+B. Ask UsersModule public contract to validate user existence
+
+For modular extraction readiness:
+
+Preferred:
+use a narrow UsersModule public contract if semantic validation is needed.
+
+But avoid adding a dependency unless useful.
+
+SQL FK may be acceptable for current modular monolith.
+
+Document decision.
+
+If AccessControlModule imports UsersModule:
+dependency graph becomes:
+AccessControlModule -> UsersModule
+
+Then AuthModule already imports both.
+
+This is still acyclic:
+UsersModule <- AccessControlModule
+UsersModule <- AuthModule
+AccessControlModule <- AuthModule possibly
+
+Evaluate carefully.
+
+15. Preferred Dependency Direction
+----------------------------------
+Prefer no AccessControlModule -> UsersModule dependency if FK constraint + scalar user id is sufficient.
+
+Assignment can:
+- insert user_roles
+- catch FK violation
+- map to UserNotFoundForRoleAssignmentError or generic assignment error
+
+This keeps RBAC service more extractable.
+
+Document tradeoff.
+
+16. Assign Role to User
+-----------------------
+Implement:
+
+assignRoleToUser(userId, roleCode or roleId)
+
+Choose one public contract.
+
+Preferred:
+assignRoleToUser(userId, roleCode)
+
+Reason:
+callers/admin workflows use stable role code, not DB id.
+
+Flow:
+- normalize role code
+- find role
+- if missing -> RoleNotFoundError
+- insert user_roles
+- duplicate assignment should be idempotent or explicit
+
+Choose behavior.
+
+Preferred:
+idempotent assignment:
+assigning existing role does not fail.
+
+Document decision.
+
+17. Remove Role from User
+-------------------------
+Implement:
+removeRoleFromUser(userId, roleCode)
+
+Preferred:
+idempotent removal.
+
+No error if assignment absent.
+
+Role missing may still be explicit error depending design.
+
+Keep behavior predictable.
+
+18. Assign Permission to Role
+-----------------------------
+Implement:
+assignPermissionToRole(roleCode, permissionCode)
+
+Preferred:
+idempotent.
+
+Flow:
+- normalize both
+- require role exists
+- require permission exists
+- insert role_permissions
+
+No direct user-permission grants.
+
+19. Remove Permission from Role
+-------------------------------
+Implement:
+removePermissionFromRole(roleCode, permissionCode)
+
+Prefer idempotent.
+
+20. Effective Permission Resolution
+-----------------------------------
+Implement:
+getEffectivePermissions(userId)
+
+Result:
+stable unique permission code strings.
+
+Data path:
+user_roles
+-> roles
+-> role_permissions
+-> permissions
+
+Requirements:
+- no duplicates
+- deterministic ordering preferred
+- only active/valid records (there is no status column, so all current rows valid)
+
+Do not cache yet.
+
+21. User Roles Resolution
+-------------------------
+Implement:
+getRolesForUser(userId)
+
+Return safe RoleSnapshot[] or role codes.
+
+Preferred:
+role codes for auth/authorization internals may be enough.
+
+But public service may expose snapshot for future admin.
+
+Keep simple.
+
+22. Permission Check
+--------------------
+Implement:
+userHasPermission(userId, permissionCode)
+
+Normalize code.
+
+Return boolean.
+
+Do not throw for missing permission assignment.
+
+Unknown permission code:
+decide whether false or explicit invalid-code error.
+
+Preferred:
+- malformed code -> validation error
+- well-formed but nonexistent/unassigned -> false
+
+23. Authorization Decorator
+---------------------------
+Implement:
+
+@RequirePermissions(...codes)
+
+Requirements:
+- stores metadata
+- accepts one or more permission codes
+- normalize/validate preferably at application startup/use time
+- no empty declaration
+
+Do not implement roles-only decorator yet.
+
+24. PermissionGuard
+-------------------
+Implement PermissionGuard.
+
+Dependencies:
+- Reflector
+- AccessControlService
+
+Expected flow:
+
+1. retrieve required permissions metadata
+2. read authenticated user context from request
+3. if route has no required permissions:
+   decide behavior
+4. resolve/check user permissions
+5. allow or throw ForbiddenException
+
+25. Guard Composition
+---------------------
+PermissionGuard assumes JwtAuthGuard has already authenticated request.
+
+Preferred route usage:
+
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions('users.read')
+
+Do not make PermissionGuard re-verify JWT.
+
+Clear separation:
+- JwtAuthGuard = authentication
+- PermissionGuard = authorization
+
+26. No Metadata Behavior
+------------------------
+If PermissionGuard is applied but no permissions metadata exists:
+
+Preferred:
+allow authenticated request.
+
+Reason:
+JwtAuthGuard already enforces authentication.
+
+Do not make every guarded route require explicit permission unless a global authorization policy exists.
+
+Document choice.
+
+27. Multiple Permission Semantics
+---------------------------------
+Decide whether:
+
+@RequirePermissions('users.read', 'users.manage')
+
+means:
+- ALL required
+or
+- ANY required
+
+Preferred:
+ALL required.
+
+If future ANY semantics needed:
+add separate decorator later.
+
+Document clearly.
+
+28. Forbidden Response
+----------------------
+Authenticated but unauthorized:
+HTTP 403 Forbidden.
+
+Use generic message:
+Forbidden
+
+Do not reveal:
+- which permission is missing
+- user's roles
+- permission topology
+
+Logs may contain safe permission code if needed, but avoid noisy authorization logs.
+
+29. Missing Authentication
+--------------------------
+If PermissionGuard receives no authenticated context due incorrect guard order:
+fail safely.
+
+Preferred:
+401 Unauthorized rather than crash.
+
+But route should always compose JwtAuthGuard first.
+
+Document expected usage.
+
+30. Protected Test Endpoint Strategy
+------------------------------------
+Do NOT create business User CRUD endpoints just for RBAC testing.
+
+Choose:
+
+A. test-only controller in DB-aware e2e
+or
+B. minimal auth diagnostic endpoint
+
+Preferred:
+test-only controller to avoid production API surface.
+
+Define routes only inside test module/application where practical.
+
+31. AccessControlModule Repository Boundary
+-------------------------------------------
+Repositories private.
+
+AccessControlService may inject:
+Repository<RoleEntity>
+Repository<PermissionEntity>
+Repository<UserRoleEntity>
+Repository<RolePermissionEntity>
+
+No repository export.
+
+No entities returned.
+
+32. Query Strategy
+------------------
+For effective permission lookup:
+prefer one efficient query/query builder inside AccessControlModule.
+
+Avoid N+1:
+- load roles
+- loop roles
+- load permissions each
+
+One joined query is appropriate because all tables are owned by same AccessControlModule except user_id scalar reference.
+
+33. Cross-Module FK
+-------------------
+user_roles.user_id FK -> users.id remains DB-level only.
+
+AccessControlModule uses userId scalar.
+
+No UserEntity relation.
+
+Preserve microservice boundary.
+
+34. Transactions
+----------------
+Simple single-row assignments may not need transactions.
+
+If a service operation spans multiple dependent writes:
+use transaction.
+
+Do not wrap every simple query in transaction unnecessarily.
+
+35. RBAC Seed Policy
+--------------------
+DO NOT seed roles/permissions here.
+
+However design services so #008 seed can call/use same normalization and rules.
+
+Seed should not bypass business rules unnecessarily.
+
+36. Role/Permission Admin Endpoints
+----------------------------------
+DO NOT implement:
+POST /roles
+POST /permissions
+POST /users/:id/roles
+etc.
+
+Those need protected admin API design later.
+
+This prompt is service + guard only.
+
+37. JWT Claims
+--------------
+Do NOT add roles/permissions to JWT.
+
+Continue:
+sub
+sid
+iat
+exp
+
+PermissionGuard loads from AccessControlModule.
+
+This keeps permission changes effective immediately.
+
+38. Permission Caching
+----------------------
+Do NOT add Redis/cache.
+
+Document performance tradeoff.
+
+MVP can query DB per protected request.
+
+Future cache may be keyed by user id with invalidation on assignment change.
+
+39. Super Admin Bypass
+----------------------
+Do NOT implement hard-coded:
+if role === SUPER_ADMIN then allow everything
+
+Permissions must remain explicit.
+
+Later seed may assign all permissions to super-admin role.
+
+This avoids role-name conditionals in guards.
+
+40. Role Hierarchy
+------------------
+Do NOT implement role inheritance/hierarchy.
+
+No:
+SUPER_ADMIN > ADMIN > USER
+
+Permissions remain flat and explicit.
+
+41. Tenant/Parish Scope
+-----------------------
+Do NOT implement:
+parish_id
+scope
+resource ownership
+
+Document:
+current RBAC is global.
+
+Future parish-scoped authorization may extend assignment model.
+
+Do not prematurely change schema.
+
+42. Integration Tests
+---------------------
+Against catechism_api_test:
+
+Create test data through AccessControlService where possible.
+
+Test:
+
+A. create role
+- normalized code
+- safe snapshot
+
+B. duplicate role
+- mapped error
+
+C. create permission
+- normalized code
+
+D. duplicate permission
+- mapped error
+
+E. assign role to user
+- persists
+- repeat is idempotent
+
+F. remove role
+- works/idempotent
+
+G. assign permission to role
+- persists/idempotent
+
+H. effective permissions
+- multiple roles
+- deduplicated permission result
+
+I. userHasPermission true/false
+
+J. remove permission
+- effective permissions update immediately
+
+43. DB-Aware E2E Authorization
+------------------------------
+Build test-only protected controller.
+
+Example:
+
+GET /test-rbac/read
+requires:
+test.read
+
+GET /test-rbac/manage
+requires:
+test.manage
+
+Flow:
+1. create test user via UserAccountService
+2. login -> JWT
+3. create role/permissions
+4. assign role + permission
+5. call read route -> 200
+6. call manage route without permission -> 403
+7. assign manage permission
+8. same access JWT call manage -> 200
+
+This proves:
+permissions are NOT embedded in JWT and permission changes take effect immediately.
+
+Important valuable test.
+
+44. Auth Token / Session Interaction
+------------------------------------
+Use existing login/session flow.
+
+Do not bypass JwtAuthGuard.
+
+Protected e2e should use a real access token.
+
+45. User Without Roles
+----------------------
+Authenticated user with no roles:
+- protected permission route -> 403
+
+Test explicitly.
+
+46. Multiple Roles
+------------------
+Test user with two roles:
+permissions union together.
+
+No duplicates.
+
+47. Duplicate Permission Through Roles
+--------------------------------------
+If two roles grant same permission:
+effective list contains one code.
+
+48. Deleted Role/Permission
+---------------------------
+There are no delete services yet.
+
+Do not add full CRUD deletion unless needed.
+
+Assignment removal is enough.
+
+49. Validation Errors
+---------------------
+Create concise module errors for:
+- invalid role code
+- invalid permission code
+- role not found
+- permission not found
+- duplicate code
+
+Do not expose SQL internals.
+
+50. Security Review
+-------------------
+Explicitly verify:
+- deny unauthorized with 403
+- no permission info leak
+- no role-name bypass
+- no direct user permission grants
+- no permission claims trusted from JWT
+- no cross-module repository access
+- no hard-coded privilege role
+- assignment FKs protect integrity
+
+51. Module Boundary Audit
+-------------------------
+Expected final exports:
+
+UsersModule:
+- UserAccountService
+
+AuthModule:
+- JwtAuthGuard
+
+AccessControlModule:
+- AccessControlService
+- PermissionGuard
+
+No:
+- TypeOrmModule
+- repositories
+- entities
+
+No cycles.
+
+52. Future Microservice Extraction
+----------------------------------
+AccessControl service future boundary:
+
+Owned:
+- roles
+- permissions
+- user_roles
+- role_permissions
+
+Public operations:
+- effective permission resolution
+- role/permission assignment
+
+Future service callers send:
+- userId
+- permission code
+
+No ORM types cross boundary.
+
+53. Tests — Unit
+----------------
+At minimum:
+
+role code validation/normalization
+permission code validation/normalization
+AccessControlService behavior
+PermissionGuard:
+- no metadata
+- one permission success
+- missing permission -> 403
+- multiple ALL success/failure
+- missing auth context safe failure
+Decorator metadata
+
+54. Tests — Existing Layer Preservation
+---------------------------------------
+Keep:
+npm test
+npm run test:e2e
+npm run test:integration
+npm run test:e2e:db
+npm run quality
+npm run quality:full
+
+Fast DB-free e2e remains DB-free.
+
+RBAC HTTP tests go DB-aware.
+
+55. No Schema Migration Unless Needed
+-------------------------------------
+Existing schema should support implementation.
+
+If no schema change required:
+do not create migration.
+
+If a concrete missing index causes necessary query problem:
+justify and add migration.
+
+Do not add speculative indexes.
+
+56. Docker / CI
+---------------
+Run production Docker build.
+
+Existing CI DB step should execute integration/e2e tests automatically.
+
+No pipeline changes unless a real new config requirement appears.
+
+57. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm ci
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+With MSSQL:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+production target build.
+
+58. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(auth): add role permission authorization"
+
+Cursor must NOT execute it.
+
+59. Required Report
+-------------------
+Create:
+
+docs/AUTH_006_ROLE_PERMISSION_RBAC_REPORT.md
+
+Required sections:
+
+1. Objective
+
+2. State Inherited From AUTH #005
+
+3. Architecture / Module Boundary Audit
+
+4. Existing RBAC Schema Assessment
+
+5. Files Created
+
+6. Files Modified
+
+7. AccessControlModule Architecture
+
+8. Public Exports
+
+9. Role Code Strategy
+
+10. Permission Code Strategy
+
+11. Role Creation
+
+12. Permission Creation
+
+13. User Role Assignment
+
+14. Role Permission Assignment
+
+15. Idempotency Decisions
+
+16. Effective Permission Resolution
+
+17. Query Strategy / N+1 Review
+
+18. userHasPermission Behavior
+
+19. @RequirePermissions Decorator
+
+20. PermissionGuard
+
+21. Guard Composition
+
+22. Multiple Permission Semantics
+
+23. Forbidden / Unauthorized Behavior
+
+24. JWT Claims Review
+Confirm no permissions/roles added.
+
+25. Integration Tests
+
+26. DB-Aware RBAC E2E
+
+27. Immediate Permission Change Test
+Same JWT should reflect new permission assignment.
+
+28. Multiple Roles / Deduplication Test
+
+29. Existing Test Regression
+
+30. CI / Docker Compatibility
+
+31. Security Review
+
+32. Module Boundary Audit After Implementation
+
+33. Future Microservice Extraction Review
+
+34. Performance / Cache Deferred Note
+
+35. Tenant/Parish Scope Deferred Note
+
+36. Commands Executed
+
+37. Validation Results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- RBAC DB e2e
+- quality:full
+- Docker production build
+- role creation
+- permission creation
+- assignment
+- effective permissions
+- allow
+- deny 403
+- immediate permission change without new JWT
+- no JWT permission claims
+- no persistence exports
+- no sample seed data
+
+38. Known Issues / Deferred Items
+
+39. Out-of-Scope Confirmation
+Confirm no:
+- seed
+- admin CRUD endpoints
+- tenant-scoped RBAC
+- role hierarchy
+- permission cache
+- hard-coded super-admin bypass
+
+40. AUTH #007 Readiness
+
+Recommend:
+AUTH/RBAC #007 — Security Hardening + Full Auth/RBAC Integration
+
+It should audit/harden:
+- rate limiting/brute-force policy
+- CSRF implications
+- access token/session revocation behavior
+- auth error consistency
+- session cleanup policy
+- Argon2 rehash
+- complete login/refresh/logout/RBAC e2e matrix
+- security regression tests
+
+Do NOT seed data in #007.
+
+41. Commit Message Recommendation
+
+Print exactly ONE:
+
+git commit -m "feat(auth): add role permission authorization"
+
+Cursor MUST NOT execute it.
+
+60. Final Response
+------------------
+When finished, respond concisely with:
+
+- AUTH/RBAC #006 status
+- RBAC services PASS/FAIL
+- PermissionGuard PASS/FAIL
+- module boundary PASS/FAIL
+- report path:
+  docs/AUTH_006_ROLE_PERMISSION_RBAC_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(auth): add role permission authorization"
+
+Do NOT run:
+git add
+git commit
+git push
+
+Do NOT proceed to AUTH #007 automatically.

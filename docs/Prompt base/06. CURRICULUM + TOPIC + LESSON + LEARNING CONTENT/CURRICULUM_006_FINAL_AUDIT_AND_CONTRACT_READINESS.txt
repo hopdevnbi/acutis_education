@@ -1,0 +1,946 @@
+CURSOR PROMPT — CURRICULUM/CONTENT #006/6
+FINAL AUDIT + DOMAIN SEED + POSTMAN + OPENAPI + FE/MOBILE/MULTILINGUAL READINESS
+
+1. Context
+----------
+Completed:
+- CURRICULUM #001 Domain Audit + Content Model Design
+- CURRICULUM #002 Schema + Entities + Migrations
+- CURRICULUM #003 Curriculum + Topic Services/API/RBAC
+- CURRICULUM #004 Lesson + Learning Content + Publish/Clone/Assignment
+- CURRICULUM #005 Scoped Learner Delivery + Cross-Domain Integration
+
+Current:
+CURRICULUM/CONTENT #006 / 6
+
+This is the FINAL phase gate.
+
+Do NOT start the next backend domain automatically.
+
+2. Mandatory Reading
+--------------------
+Read completely:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- docs/CURRICULUM_001_DOMAIN_AUDIT_AND_CONTENT_MODEL_DESIGN_REPORT.md
+- docs/CURRICULUM_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+- docs/CURRICULUM_003_CURRICULUM_TOPIC_SERVICES_API_RBAC_REPORT.md
+- docs/CURRICULUM_004_LESSON_CONTENT_PUBLISH_CLONE_ASSIGNMENT_REPORT.md
+- docs/CURRICULUM_005_SCOPED_LEARNER_DELIVERY_REPORT.md
+- docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Inspect:
+src/modules/curriculum/
+src/modules/learning-content/
+src/modules/curriculum-delivery/
+src/modules/curriculum-orchestration/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/parish/
+src/modules/academic-structure/
+src/modules/access-control/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+3. Primary Objective
+--------------------
+Close the Curriculum phase ONLY if all critical gates pass.
+
+Final required outcomes:
+
+- architecture acyclic
+- no forwardRef in curriculum bounded context
+- no cross-module repo/entity leakage
+- published immutability validated
+- clone preserves canonicalLessonKey
+- assignment resolution correct
+- learner scope matrix correct
+- no draft leakage
+- multilingual-ready contracts preserved
+- full demo seed
+- Postman/manual flow
+- Swagger/OpenAPI contract audit
+- Web FE readiness decision
+- Mobile readiness decision
+- quality:full shared-DB flake resolved or explicitly blocks completion
+- Docker PASS
+- no BLOCKER/HIGH
+
+4. Final Architecture Audit
+---------------------------
+Build actual dependency graph.
+
+Required direction:
+
+Parish / AcademicStructure
+        ↓
+CurriculumModule
+        ↓
+LearningContentModule
+
+CurriculumOrchestrationModule
+   → CurriculumModule
+   → LearningContentModule
+
+CurriculumDeliveryModule
+   → CurriculumModule
+   → LearningContentModule
+   → ClassModule
+   → EnrollmentModule
+
+No reverse edge from:
+CurriculumModule -> Class/Enrollment
+LearningContentModule -> Enrollment
+Class/Enrollment -> LearningContentModule unless already cleanly justified
+
+No cycles.
+
+5. forwardRef Audit
+-------------------
+Search:
+forwardRef(
+@Inject(forwardRef
+
+Curriculum-related modules must have zero forwardRef.
+
+If unrelated legacy usage exists:
+document only.
+
+6. Public Export Audit
+----------------------
+Expected roughly:
+
+CurriculumModule:
+- CurriculumService
+- TopicService only if required
+- LessonService only if required by orchestration
+
+LearningContentModule:
+- LearningContentService
+
+CurriculumOrchestrationModule:
+- no public export unless justified
+
+CurriculumDeliveryModule:
+- no public export
+
+No:
+TypeOrmModule
+entities
+repositories
+
+Review whether TopicService/LessonService exports are broader than needed.
+If only orchestration requires them inside same app layer, keep if justified.
+Do not over-expose.
+
+7. Data Ownership Audit
+-----------------------
+CurriculumModule owns:
+curriculums
+curriculum_versions
+topics
+lessons
+curriculum_assignments
+
+LearningContentModule owns:
+lesson_contents
+
+No other module writes these tables.
+
+8. Lifecycle Audit — Curriculum
+-------------------------------
+Validate:
+ACTIVE <-> INACTIVE
+inactive blocks new draft/version mutations
+historical reads preserved
+
+sourceLocale:
+change allowed only before published history
+immutable after published history
+
+9. Version Lifecycle Audit
+--------------------------
+DRAFT -> PUBLISHED
+PUBLISHED -> ARCHIVED when superseded
+ARCHIVED terminal
+
+Exactly one DRAFT per curriculum.
+Exactly one currentPublishedVersionId pointer.
+No generic unsafe status mutation.
+
+10. Published Immutability Audit
+--------------------------------
+After publish:
+- topic update/delete/reorder blocked
+- lesson update/delete/reorder blocked
+- content update blocked
+- version label update blocked
+- published version remains historical
+
+11. Clone Audit
+---------------
+Published/archived -> new DRAFT:
+- new version ID
+- new topic IDs
+- new lesson IDs
+- canonicalLessonKey preserved
+- content cloned
+- contentHash preserved/recomputed consistently
+- rollback atomic
+
+12. Assignment Audit
+--------------------
+One assignment per:
+(parishId, academicYearId, catechismLevelId)
+
+Target:
+PUBLISHED only
+
+Must match:
+parish
+level
+year
+
+No fallback to currentPublishedVersionId for delivery.
+
+13. Assignment Mid-Year Replacement Risk
+----------------------------------------
+Audit behavior of changing assignment mid-year.
+
+Current model updates pointer.
+
+Document implications:
+- class immediately sees new published version
+- old published version remains historical
+- progress mapping relies canonicalLessonKey later
+
+Do NOT add assignment history unless clearly required now.
+Mark as deferred product policy if acceptable.
+
+14. Learner Delivery Audit
+--------------------------
+Validate:
+
+Class route:
+GET /classes/:classId/curriculum-tree
+
+Enrollment route:
+GET /enrollments/:enrollmentId/curriculum-tree
+
+Contextual content:
+GET /classes/:classId/lessons/:lessonId/content
+GET /enrollments/:enrollmentId/lessons/:lessonId/content
+
+Published only.
+
+15. Scope Matrix — FINAL
+------------------------
+SUPER_ADMIN:
+global
+
+PARISH_ADMIN:
+own parish only
+
+CATECHIST:
+assigned classes only
+
+PARENT:
+guardian-linked child only
+
+STUDENT:
+own user-linked student/enrollment only if role exists
+
+Permission alone insufficient.
+
+16. STUDENT Role Decision
+-------------------------
+CURRICULUM #005 noted:
+student self-link supported
+but STUDENT role not seeded.
+
+Audit auth role catalog.
+
+If STUDENT role already exists conceptually but missing in seed:
+add it cleanly now if consistent with platform model.
+
+If STUDENT role does not yet exist in auth design:
+do NOT invent a partial role casually.
+Document:
+- self-link path supported
+- role creation deferred to dedicated identity/product decision
+
+Make explicit completion decision.
+
+17. Draft Leakage Security Tests
+--------------------------------
+Must verify:
+- parent cannot access draft content by UUID
+- catechist cannot access draft
+- student/self cannot access draft
+- unassigned published lesson cannot be read via contextual route
+- admin editor can access draft only with parish admin scope
+
+18. Learner DTO Audit
+---------------------
+Tree DTO:
+no admin metadata.
+
+Content DTO:
+- lessonId
+- canonicalLessonKey
+- curriculumVersionId
+- versionNumber
+- contentSchemaVersion
+- contentHash
+- document
+- sourceLocale
+- resolvedLocale
+- isFallback
+- translationStatus
+- requestedLocale optional
+
+No author/publisher user IDs.
+
+19. Multilingual Readiness — FINAL
+----------------------------------
+Confirm:
+
+- sourceLocale BCP47-like
+- country != locale
+- no Vietnamese-specific canonical IDs
+- content block schema language-neutral
+- contentHash stable
+- locale metadata in learner delivery
+- translationStatus=SOURCE currently
+- no translation subsystem yet
+- future Localization can add translated resources without rewriting core schema
+
+20. Google Translation Readiness
+--------------------------------
+Do NOT implement Google Cloud Translation.
+
+But explicitly assess:
+READY FOR FUTURE LOCALIZATION MODULE: YES/NO
+
+Check ability to attach future translations by:
+- curriculumId
+- curriculumVersionId
+- lessonId
+- contentHash
+- sourceLocale
+- targetLocale
+
+21. Structured Content v1 Audit
+-------------------------------
+Validate:
+- schemaVersion 1
+- strict block types
+- no raw HTML
+- block count cap
+- payload size cap
+- asset UUID validation
+- deterministic canonical hash
+
+22. Demo Seed — REQUIRED
+------------------------
+Create:
+npm run seed:curriculum-demo
+
+Prerequisites:
+npm run seed:auth-rbac
+npm run seed:parish-academic
+npm run seed:class-enrollment
+
+Seed must be:
+- dev/test safe
+- production rejected
+- idempotent
+- public services only
+- synthetic original sample text only
+
+23. Demo Seed Content
+---------------------
+At minimum:
+
+Demo parish
+Use existing demo academic year/levels/classes
+
+Create one curriculum for at least one active demo level:
+code:
+demo-curriculum-level-1
+sourceLocale:
+vi-VN
+
+Create:
+- initial DRAFT
+- 2 topics
+- 2 lessons each
+- content for all lessons using JSON block v1
+- publish
+- assignment to active demo year + level
+
+Optional second curriculum/level if easy.
+
+24. Demo Content Copyright Rule
+-------------------------------
+Use original short synthetic catechism sample content.
+
+Do not copy long copyrighted catechism textbook passages.
+
+Bible/Catechism references may be metadata/citations.
+
+25. Seed Idempotency
+--------------------
+Run twice.
+
+Second run must not:
+- duplicate curriculum
+- duplicate versions
+- duplicate topics/lessons
+- create second draft
+- alter canonicalLessonKey unexpectedly
+- corrupt assignment
+
+Prefer ensure/find logic through public services.
+
+26. Seed Through Public Services
+--------------------------------
+No direct repositories in seed orchestration outside owning public services.
+
+If seed needs high-level orchestration:
+use existing CurriculumOrchestrationService or public app contracts.
+
+27. Postman Collection
+----------------------
+Create:
+
+docs/postman/Acutis-Education-Curriculum.postman_collection.json
+
+Use local synthetic credentials/variables only.
+
+Flow:
+
+1. login admin
+2. list parish curricula
+3. create curriculum
+4. create draft
+5. create topics
+6. create lessons
+7. write lesson content
+8. publish
+9. assign
+10. class curriculum tree
+11. enrollment curriculum tree
+12. contextual lesson content
+13. clone-to-draft
+14. verify published immutability
+15. parent/catechist scoped read examples
+
+Do not include secrets.
+
+28. Postman Environment
+-----------------------
+If project already has environment:
+reuse it.
+
+Otherwise create minimal local environment file in docs/postman.
+
+Variables:
+baseUrl
+adminEmail
+adminPassword
+catechistEmail
+parentEmail
+classId
+enrollmentId
+curriculumId
+versionId
+lessonId
+
+Use synthetic demo values.
+
+29. Swagger / OpenAPI Audit
+---------------------------
+Verify all routes:
+curriculum
+versions
+topics
+lessons
+content
+publish
+clone
+assignment
+tree
+delivery
+
+Check:
+- bearer auth
+- enums
+- request/response DTOs
+- pagination
+- errors
+- 422 publish validation
+- Accept-Language header docs
+- sourceLocale/contentHash fields
+- no TypeORM entity schema leakage
+
+30. OpenAPI Client Readiness
+----------------------------
+Evaluate:
+OPENAPI CLIENT GENERATION READY: YES/NO
+
+Avoid ambiguous unions/undocumented any.
+
+Block schema v1 must be representable in generated TS types.
+
+31. Web FE Readiness
+--------------------
+Evaluate:
+
+FE CURRICULUM/LEARNING CONTRACT READY: YES/NO
+
+Admin Web needs:
+- curriculum list/create/edit
+- versions
+- draft editor
+- topic/lesson tree
+- content editor
+- publish
+- clone
+- assignment
+- preview
+
+Learner Web needs:
+- assigned tree
+- lesson content
+- safe scope
+
+Check DTO sufficiency.
+
+32. Mobile Readiness
+--------------------
+Evaluate:
+
+MOBILE CURRICULUM/LEARNING CONTRACT READY: YES/NO
+
+Check:
+- tree + lazy content
+- contentHash
+- sourceLocale
+- canonicalLessonKey
+- immutable published versions
+- offline/cache compatibility
+- no browser-only assumption in domain APIs
+- contextual content routes
+- payload reasonable
+
+33. Offline Cache Readiness
+---------------------------
+Published content immutable + contentHash should allow:
+- cache by curriculumVersionId
+- lesson cache by lessonId + contentHash
+- stale detection after assignment points to new version
+
+No offline implementation now.
+
+34. File/Media Readiness
+------------------------
+Current:
+assetId UUID only.
+
+Evaluate:
+READY FOR FUTURE MEDIA MODULE: YES/NO
+
+No storage implementation.
+
+35. LearningProgress Readiness
+------------------------------
+Evaluate:
+READY FOR FUTURE LEARNING PROGRESS: YES/NO
+
+canonicalLessonKey should provide stable semantic identity.
+
+No progress table/code now.
+
+36. Question Bank Readiness
+---------------------------
+Evaluate:
+READY FOR QUESTION BANK LINKAGE: YES/NO
+
+Potential taxonomy references:
+curriculumVersionId
+topicId
+canonicalLessonKey / lessonId
+
+Do not implement Question Bank.
+
+37. quality:full Flake — MUST INVESTIGATE
+----------------------------------------
+This has persisted from prior phases.
+
+Known symptoms:
+- shared MSSQL test DB
+- auth-rbac seed inserts
+- parish fixtures
+- deadlocks on academic-year locks
+- parallel Jest suites
+
+This final gate must perform a focused root-cause audit.
+
+Goal:
+npm run quality:full PASS in one clean run.
+
+38. quality:full Preferred Fixes
+--------------------------------
+Allowed:
+- unique fixture prefixes
+- safer test cleanup
+- eliminate shared fixed IDs where unnecessary
+- serialize DB integration stage if architecture/test conventions allow
+- separate DB schema/database per Jest worker if feasible but not overkill
+- deterministic seed setup
+- avoid suites deleting shared seed rows
+
+Do NOT:
+- disable tests
+- weaken assertions
+- hide failures
+- mark PASS if command failed
+
+39. quality:full Completion Policy
+----------------------------------
+If full one-shot remains flaky after a reasonable safe fix attempt:
+
+Determine severity.
+
+If flake is infrastructure/test-runner only and:
+- all product suites pass sequentially
+- no data correctness risk
+- root cause documented
+
+You MAY declare phase complete with LOW/MEDIUM technical debt ONLY if PROJECT_RULES DoD permits.
+
+If it can mask real regressions:
+mark phase NOT COMPLETE.
+
+Be explicit.
+
+40. Fresh DB Validation
+-----------------------
+Run:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run migration:show
+
+All migrations from zero.
+
+Do not edit prior migrations.
+
+41. Full Regression
+-------------------
+Run:
+Auth
+Parish
+Class
+Enrollment
+Curriculum
+
+No regression.
+
+42. Docker
+----------
+Required:
+
+wsl docker build --target production -t catechism-api:curriculum-final .
+
+PASS required unless infrastructure unavailable with exact evidence.
+
+43. Security / Privacy Final
+----------------------------
+Audit:
+- no anonymous catalog
+- no draft leakage
+- parent/child scope
+- catechist/class scope
+- no PII in content
+- no content body logs
+- no raw HTML
+- no Google translation of private data
+- no unsafe URL script content
+- learner DTO minimal
+
+44. Microservice Extraction Map
+-------------------------------
+Document final boundaries:
+
+Curriculum Service:
+- curriculums
+- curriculum_versions
+- topics
+- lessons
+- curriculum_assignments
+
+Content Service:
+- lesson_contents
+
+Delivery/BFF:
+- class/enrollment scoped read composition
+
+Dependencies future:
+- Parish
+- Academic Structure
+- Class
+- Enrollment
+- Media
+- Localization
+
+45. No Next Domain Work
+-----------------------
+Do NOT implement:
+File/Media
+Question Bank
+Practice
+Progress
+Exam
+Localization
+Web
+Mobile
+
+This prompt closes Curriculum only.
+
+46. Required Commands
+---------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Seeds:
+npm run seed:auth-rbac
+npm run seed:parish-academic
+npm run seed:class-enrollment
+npm run seed:curriculum-demo
+npm run seed:curriculum-demo
+
+Migration:
+npm run migration:show
+
+Docker:
+wsl docker build --target production -t catechism-api:curriculum-final .
+
+47. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(curriculum): finalize learning content phase"
+
+Cursor must NOT execute it.
+
+48. Required Report
+-------------------
+Create:
+
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #001–#005
+3. Rules applied
+4. Findings summary with severity
+5. Final architecture graph
+6. Cycle audit
+7. forwardRef audit
+8. Data ownership matrix
+9. Public export matrix
+10. Curriculum lifecycle
+11. Version lifecycle
+12. Published immutability
+13. Clone semantics
+14. Assignment semantics
+15. Mid-year assignment replacement risk
+16. Learner delivery routes
+17. Scope matrix
+18. STUDENT role decision
+19. Draft leakage audit
+20. Learner DTO audit
+21. Structured content v1
+22. contentHash audit
+23. Multilingual readiness
+24. Future Localization readiness
+25. Demo seed architecture
+26. Demo seed data
+27. Seed idempotency
+28. Postman collection
+29. Swagger/OpenAPI
+30. OpenAPI client generation
+31. Web FE readiness
+32. Mobile readiness
+33. Offline cache readiness
+34. Media readiness
+35. LearningProgress readiness
+36. Question Bank readiness
+37. quality:full root cause
+38. quality:full fix
+39. quality:full final result
+40. Fresh DB result
+41. Full regression
+42. Docker
+43. Security/privacy
+44. Microservice extraction map
+45. Files created
+46. Files modified
+47. Commands executed
+48. Validation results
+49. Known/deferred issues
+50. Out-of-scope confirmation
+51. Final completion decision
+52. Next backend phase recommendation
+53. Commit recommendation
+
+49. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- fresh DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- seed auth-rbac
+- seed parish-academic
+- seed class-enrollment
+- seed curriculum first run
+- seed curriculum second run
+- Docker
+- no cycle
+- no curriculum forwardRef
+- no cross-module repo/entity
+- curriculum lifecycle
+- one DRAFT
+- publish
+- published immutability
+- clone
+- canonicalLessonKey preservation
+- contentHash
+- assignment
+- class delivery
+- enrollment delivery
+- catechist scope
+- parent scope
+- student scope/deferred
+- parish admin scope
+- super admin
+- draft leakage
+- multilingual readiness
+- localization readiness
+- Postman
+- Swagger
+- OpenAPI client
+- Web FE ready
+- Mobile ready
+- offline cache ready
+- Media ready
+- Progress ready
+- Question Bank ready
+- prior regression
+
+50. Completion Decision
+-----------------------
+If and ONLY if no BLOCKER/HIGH remains:
+
+Print exactly:
+
+CURRICULUM / TOPIC / LESSON / LEARNING CONTENT PHASE COMPLETE
+
+FE CURRICULUM/LEARNING CONTRACT READY: YES
+
+MOBILE CURRICULUM/LEARNING CONTRACT READY: YES
+
+FUTURE LOCALIZATION FOUNDATION READY: YES
+
+If not:
+
+CURRICULUM / TOPIC / LESSON / LEARNING CONTENT PHASE NOT COMPLETE
+
+and list blockers.
+
+51. Next Backend Phase
+----------------------
+Only if COMPLETE, recommend:
+
+FILE / MEDIA STORAGE ABSTRACTION
+
+Reason:
+- lesson block schema already references assetId
+- Question Bank and Chat attachments will need media/file infrastructure
+- File/Media should stabilize before Question Bank becomes large
+
+Do NOT implement it automatically.
+
+52. Prompt Count
+----------------
+State:
+
+CURRICULUM/CONTENT #006/6 complete
+CURRICULUM phase complete or blocked
+
+53. Final Response
+------------------
+Respond concisely:
+
+- CURRICULUM #006 status
+- phase COMPLETE/NOT COMPLETE
+- quality:full PASS/FAIL
+- Web FE readiness
+- Mobile readiness
+- Localization readiness
+- unresolved BLOCKER/HIGH
+- next backend phase recommendation
+- report:
+  docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(curriculum): finalize learning content phase"
+
+Do NOT run git add/commit/push.
+Do NOT start File/Media automatically.

@@ -263,6 +263,13 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).not.toContain(ExamModule);
   });
 
+  it('does not import FamilyPortalModule from EnrollmentModule', () => {
+    const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, EnrollmentModule);
+
+    expect(Array.isArray(imports)).toBe(true);
+    expect(imports).not.toContain(FamilyPortalModule);
+  });
+
   it('does not use forwardRef in class-domain module definitions', () => {
     const modulePaths = [
       join(__dirname, 'student/student.module.ts'),
@@ -273,6 +280,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'curriculum-delivery/curriculum-delivery.module.ts'),
       join(__dirname, 'localization/localization.module.ts'),
       join(__dirname, 'exam/exam.module.ts'),
+      join(__dirname, 'family-portal/family-portal.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {

@@ -246,4 +246,58 @@ describe('CatechistPortalService', () => {
       },
     });
   });
+
+  it('uses bounded batch queries for roster page composition', async () => {
+    learningProgressService.getClassLearningProgress.mockResolvedValue({
+      classId,
+      filters: { curriculumId: null, canonicalLessonKey: null },
+      summary: {
+        learnersTotal: 0,
+        learnersWithLearningActivity: 0,
+        lessonAssignmentsTotal: 0,
+        lessonsStarted: 0,
+        lessonsCompleted: 0,
+        completionRatio: 0,
+        practice: {
+          standard: {
+            sessionsCompleted: 0,
+            questionsAttempted: 0,
+            firstAttemptCorrect: 0,
+            finalCorrect: 0,
+            firstAttemptAccuracy: 0,
+            finalAccuracy: 0,
+          },
+          review: {
+            sessionsCompleted: 0,
+            questionsAttempted: 0,
+            finalCorrect: 0,
+            finalAccuracy: 0,
+            uniqueQuestionVersionsReviewed: 0,
+          },
+          lastPracticedAt: null,
+        },
+        lastLearningActivityAt: null,
+      },
+      learners: {
+        items: [],
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0,
+      },
+    });
+    examService.getEnrollmentExamSummariesByEnrollmentIds.mockResolvedValue(new Map());
+    studentService.getStudentSnapshotsByIds.mockResolvedValue([]);
+    enrollmentQueryService.getEnrollmentSnapshotsByIds.mockResolvedValue([]);
+
+    await catechistPortalService.getClassRoster({
+      actorUserId,
+      classId,
+    });
+
+    expect(learningProgressService.getClassLearningProgress).toHaveBeenCalledTimes(1);
+    expect(examService.getEnrollmentExamSummariesByEnrollmentIds).toHaveBeenCalledTimes(1);
+    expect(studentService.getStudentSnapshotsByIds).toHaveBeenCalledTimes(1);
+    expect(enrollmentQueryService.getEnrollmentSnapshotsByIds).toHaveBeenCalledTimes(1);
+  });
 });

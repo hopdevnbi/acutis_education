@@ -1,0 +1,838 @@
+CURSOR PROMPT — PARISH/ACADEMIC STRUCTURE #003/5
+PARISH SERVICE + API + RBAC INTEGRATION
+
+1. Context
+----------
+Completed:
+- Backend Foundation
+- Bitbucket CI Foundation
+- Auth/User/Role/Permission
+- PARISH #001 Domain Audit
+- PARISH #002 Schema + Entities + Migrations
+
+Current:
+- PARISH/ACADEMIC #003 / 5 — Parish Service + API + RBAC
+
+Remaining:
+- #004 Academic Year + Catechism Level services/API
+- #005 Integration hardening + final audit
+
+Frontend architecture reminder:
+- ReactJS is a separate independent source/repository
+- FE communicates with BE via HTTP API only
+- no shared repositories/entities/services between FE and BE
+- FE has its own Docker and CI/CD
+- do not modify FE from this BE prompt
+
+2. Mandatory Rules
+------------------
+Before changing anything:
+
+1. Read PROJECT_RULES.md
+2. Read AGENTS.md
+3. Read all .cursor/rules/*.mdc
+4. If the rules do NOT explicitly state:
+   "Frontend is a separate ReactJS source/repository and integrates with backend only via HTTP API contracts; FE and BE have independent Docker/CI/CD"
+   then add this as a permanent architecture rule in the appropriate existing rule file(s), without creating unnecessary duplicate rules.
+5. Read:
+   docs/PARISH_001_DOMAIN_AUDIT_AND_MODULE_DESIGN_REPORT.md
+   docs/PARISH_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+   docs/AUTH_009_FINAL_AUTH_RBAC_AUDIT_REPORT.md
+
+Inspect:
+- src/modules/parish/
+- src/modules/access-control/
+- src/modules/auth/
+- src/app.module.ts
+- test/
+- README.md
+- package.json
+
+Inspect Git status with read-only commands.
+
+3. Primary Objective
+--------------------
+Implement Parish application layer and HTTP API:
+
+- ParishService
+- Parish safe snapshot/contracts
+- code normalization/validation
+- create
+- list
+- get by id
+- update
+- activate/deactivate status
+- ParishController
+- DTO validation
+- JwtAuthGuard
+- PermissionGuard
+- RBAC permission codes:
+  parishes.read
+  parishes.manage
+- unit/integration/e2e tests
+
+Do NOT implement AcademicYear or CatechismLevel services yet.
+
+4. ParishModule Ownership
+-------------------------
+ParishModule owns:
+- parishes table
+- ParishEntity
+- repository
+- ParishService
+- ParishController
+- Parish lifecycle
+
+Persistence remains private.
+
+Exports:
+- ParishService only
+
+Do NOT export:
+- TypeOrmModule
+- ParishEntity
+- Repository
+
+5. Public Parish Contract
+-------------------------
+Create a safe public snapshot:
+
+ParishSnapshot:
+- id
+- code
+- name
+- status
+- createdAt
+- updatedAt
+
+No TypeORM entity in public contract.
+
+For cross-module use, expose narrow methods such as:
+
+findParishSnapshotById(id)
+assertParishActive(id)
+
+Do not expose query builder/repository.
+
+6. Parish Code Normalization
+----------------------------
+Implement one normalization utility.
+
+Rules:
+- trim
+- lowercase
+
+Validate:
+- length 1..32
+- pattern:
+  lowercase letters
+  digits
+  hyphen
+- no spaces
+- no Vietnamese accents in code
+- no leading/trailing hyphen if practical
+
+Example:
+giao-xu-thanh-gia
+
+Do not auto-generate code from name in this phase.
+
+Code is explicit input.
+
+7. Parish Name Validation
+-------------------------
+Name:
+- trim
+- required
+- nvarchar-backed
+- reasonable max 128
+- support Vietnamese
+
+Do not over-normalize display text.
+
+8. Parish Status
+----------------
+Status:
+ACTIVE
+INACTIVE
+
+Creation default:
+ACTIVE
+
+Do not accept arbitrary status strings.
+
+Status update should be explicit.
+
+9. Create Parish
+----------------
+Implement service method conceptually:
+
+createParish({
+  code,
+  name
+})
+
+Flow:
+1. normalize/validate code
+2. validate/normalize name
+3. create entity
+4. save
+5. map unique code error
+6. return snapshot
+
+Do not create related academic data.
+
+10. Duplicate Parish Code
+-------------------------
+DB has UQ_parishes_code.
+
+Handle race safely.
+
+Map MSSQL duplicate errors to module-specific error:
+ParishCodeAlreadyExistsError
+
+No raw SQL error leakage.
+
+11. Get Parish
+--------------
+Implement:
+getParishById(id)
+or equivalent.
+
+Validate UUID.
+
+If missing:
+ParishNotFoundError
+
+Return snapshot.
+
+12. List Parishes
+-----------------
+Implement list with conservative scope.
+
+Requirements:
+- deterministic ordering
+- pagination using existing project conventions
+
+Audit whether project has shared pagination types.
+
+Prefer:
+GET /api/v1/parishes?page=1&limit=20&sort=Asc&sortBy=name
+
+Only if consistent with current API conventions.
+
+Do not invent inconsistent pagination.
+
+If project has no generic list convention, implement a simple validated:
+page
+limit
+sort
+sortBy
+
+Allowed sort fields should be whitelisted.
+
+No arbitrary column names.
+
+13. List Filters
+----------------
+Support minimal useful filters:
+
+- status
+- search by name/code if straightforward
+
+Do not over-build complex filtering.
+
+If search added:
+safe parameterized query only.
+
+14. Update Parish
+-----------------
+Implement:
+updateParish(id, input)
+
+Allow:
+- name
+- code if intentional
+- status may be separate endpoint
+
+Preferred:
+general PATCH can update code/name
+status uses dedicated status endpoint
+
+Avoid mixing lifecycle accidentally.
+
+15. Code Update
+---------------
+If code may be changed:
+- normalize/validate
+- unique constraint
+- map duplicate error
+
+Document:
+code is stable but editable before downstream integrations rely on it.
+
+Do not add immutable restriction unless requirement says so.
+
+16. Status Endpoint
+-------------------
+Implement:
+
+PATCH /api/v1/parishes/:id/status
+
+Body:
+{
+  status: "ACTIVE" | "INACTIVE"
+}
+
+Use explicit DTO.
+
+Reactivation allowed.
+
+No delete endpoint.
+
+17. assertParishActive
+----------------------
+Expose narrow public method:
+
+assertParishActive(parishId)
+
+Behavior:
+- missing -> ParishNotFoundError
+- inactive -> ParishInactiveError
+- active -> returns safe snapshot or void
+
+This will be consumed by AcademicStructureModule in #004.
+
+Do not let #004 need ParishEntity.
+
+18. Controller Routes
+---------------------
+Implement:
+
+POST   /api/v1/parishes
+GET    /api/v1/parishes
+GET    /api/v1/parishes/:id
+PATCH  /api/v1/parishes/:id
+PATCH  /api/v1/parishes/:id/status
+
+No DELETE.
+
+19. HTTP Statuses
+-----------------
+Preferred:
+POST -> 201
+GET -> 200
+PATCH -> 200
+
+Validation -> 400
+Unauthenticated -> 401
+Forbidden -> 403
+Not found -> 404
+Duplicate -> 409
+
+Use existing global error contract.
+
+20. Error Mapping
+-----------------
+Create concise module-level errors.
+
+Possible:
+- InvalidParishCodeError
+- ParishCodeAlreadyExistsError
+- ParishNotFoundError
+- ParishInactiveError
+
+Controller should not contain DB logic.
+
+Use existing exception mapping conventions.
+
+21. Authentication
+------------------
+All Parish endpoints require:
+
+JwtAuthGuard
+
+No public Parish endpoint.
+
+22. Permissions
+---------------
+Use existing PermissionGuard + @RequirePermissions.
+
+Permissions:
+
+GET list/detail:
+parishes.read
+
+POST/PATCH/status:
+parishes.manage
+
+Do NOT use role-name checks.
+
+No hard-coded SUPER_ADMIN bypass.
+
+23. Permission Provisioning Strategy
+------------------------------------
+Current Auth/RBAC local seed exists.
+
+We need these permission codes available for local testing.
+
+Evaluate best approach:
+
+A. Extend Auth/RBAC seed catalog with:
+parishes.read
+parishes.manage
+
+B. Create separate domain permission seed
+
+Preferred for current stage:
+extend existing local/dev seed constants using AccessControlService conventions,
+but keep ownership clear:
+these are sample/dev permission records, not production bootstrap.
+
+Do NOT seed Parish data yet.
+
+Do not auto-run.
+
+24. Sample Role Mapping
+-----------------------
+For local/dev verification, update sample permission mapping:
+
+SUPER_ADMIN:
+- parishes.read
+- parishes.manage
+
+PARISH_ADMIN:
+- parishes.read
+- parishes.manage
+
+CATECHIST:
+- parishes.read
+
+PARENT:
+- parishes.read or none
+
+Choose intentionally.
+
+Recommended:
+CATECHIST -> parishes.read
+PARENT -> parishes.read
+
+Because basic parish identity is non-sensitive operational metadata for authenticated participants.
+
+Document sample policy only; not final product policy.
+
+25. No Parish Scope Enforcement Yet
+-----------------------------------
+Important:
+
+Current RBAC is global.
+
+Do NOT introduce scoped role assignments here.
+
+For this phase:
+permission check is global.
+
+Document future trigger:
+when multi-parish management APIs become sensitive, scope check must be added.
+
+No parish_id on user.
+
+26. DTOs
+--------
+Create:
+CreateParishRequestDto
+UpdateParishRequestDto
+UpdateParishStatusRequestDto
+ParishResponseDto
+ParishListQueryDto
+ParishListResponseDto if project convention uses envelope
+
+Use class-validator.
+
+Do not expose entity directly.
+
+27. Swagger
+-----------
+Document all endpoints.
+
+Include:
+- auth bearer
+- permission expectations if project convention supports descriptions
+- DTO schemas
+- pagination params
+- status values
+
+No real access tokens/examples.
+
+28. Search / Pagination Security
+--------------------------------
+Whitelist sort fields.
+
+Do not pass arbitrary sortBy into query builder.
+
+Use parameterized LIKE/search.
+
+Avoid SQL wildcard injection issues.
+
+29. Repository Boundary
+-----------------------
+ParishService injects Repository<ParishEntity> privately.
+
+Repository stays inside ParishModule.
+
+30. Query Efficiency
+--------------------
+No N+1 issue expected.
+
+List should use one query plus count if pagination requires.
+
+Do not preload unrelated relations.
+
+31. Module Exports
+------------------
+Final ParishModule exports:
+- ParishService
+
+No more unless justified.
+
+Update module-boundary tests.
+
+32. Cross-Module Audit
+----------------------
+Ensure:
+- ParishModule does not import AcademicStructureModule
+- ParishModule does not import UsersModule
+- ParishModule does not import entities from Auth/RBAC
+- controller may use Auth/AccessControl guards via module imports
+
+Dependency:
+ParishModule -> AuthModule + AccessControlModule only for controller security if needed by Nest DI.
+
+Do not create cycles.
+
+33. Architecture Note on Guard Dependencies
+-------------------------------------------
+If guard usage requires module imports:
+import AuthModule and AccessControlModule in ParishModule.
+
+This is acceptable:
+ParishModule -> AuthModule
+ParishModule -> AccessControlModule
+
+Business service must NOT depend on auth modules.
+
+Keep auth dependency at delivery/controller/module wiring layer only.
+
+34. Unit Tests
+--------------
+Test:
+
+code normalization:
+- lowercase
+- trim
+- invalid chars
+- too long
+
+ParishService:
+- create
+- duplicate mapping
+- get
+- not found
+- update
+- status
+- assert active
+- inactive rejection
+- safe snapshot
+
+35. Integration Tests
+---------------------
+Against catechism_api_test:
+
+- create parish persists normalized code
+- Vietnamese name
+- duplicate code mapped
+- update code/name
+- status transition
+- list pagination/filter
+- assert active
+- inactive behavior
+
+Use service through Nest module where practical.
+
+36. DB-Aware E2E
+----------------
+Test HTTP with real JWT and permissions.
+
+Scenarios:
+
+A. unauthenticated:
+GET /parishes -> 401
+
+B. authenticated no parishes.read:
+-> 403
+
+C. parishes.read:
+GET list/detail -> 200
+
+D. read-only:
+POST/PATCH -> 403
+
+E. parishes.manage:
+POST -> 201
+PATCH -> 200
+status -> 200
+
+F. duplicate code:
+409
+
+G. invalid DTO:
+400
+
+H. missing parish:
+404
+
+Use test users/roles/permissions created via public services.
+
+37. Permission Change Immediate Effect
+--------------------------------------
+Optional but valuable:
+same JWT gets parishes.read assigned -> access immediately.
+
+Existing RBAC tests already prove general behavior, so no need to duplicate heavily.
+
+38. No Academic Structure Logic
+--------------------------------
+STRICTLY no:
+AcademicYearService
+CatechismLevelService
+their controllers/DTOs/business logic
+
+39. No Parish Data Seed
+-----------------------
+Do NOT seed a sample Parish in #003.
+
+Only permission codes may be added to local Auth/RBAC sample seed.
+
+Actual domain sample seed can be #005 if desired.
+
+40. No FE Changes
+-----------------
+Do NOT touch frontend repository/source.
+
+Backend only.
+
+Frontend is separate ReactJS source communicating through HTTP APIs.
+
+41. Permanent FE Rule
+---------------------
+If missing from PROJECT_RULES/AGENTS/.cursor rules, add the permanent rule:
+
+- Frontend is a separate independent ReactJS repository/source
+- Frontend calls backend via HTTP API only
+- FE/BE do not import each other's source/entity/repository/service code
+- FE and BE maintain independent Docker and CI/CD
+- shared API contracts should use OpenAPI/generated client/types where appropriate, not copied business logic
+
+Avoid duplicate wording if rule already exists.
+
+42. README
+----------
+Update backend README only if necessary to document:
+- Parish API
+- local permission seed rerun if new permissions added
+
+Do not document FE implementation here.
+
+43. Existing Auth Regression
+----------------------------
+Run all auth tests.
+
+Do not regress:
+login/refresh/logout/RBAC/seed/demo gating.
+
+44. Required Validation
+-----------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+Docker:
+wsl docker build --target production -t catechism-api:parish-api .
+
+45. Security Review
+-------------------
+Verify:
+- all routes authenticated
+- permission allow/deny
+- no entity leakage
+- no SQL error leakage
+- pagination sort whitelist
+- no parish scope false claim
+- no user parish coupling
+- no new sensitive data logging
+
+46. Microservice Extraction Review
+----------------------------------
+Final ParishModule:
+
+Owned data:
+parishes
+
+Public application contract:
+ParishService snapshots/assertions
+
+Inbound:
+AcademicStructureModule future
+ClassModule future
+HTTP controller
+
+Outbound:
+DB only in business layer
+
+When extracted:
+ParishService methods map naturally to HTTP/gRPC.
+
+No consumer receives entity/repository.
+
+47. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+
+git add
+git commit
+git push
+
+If tracked changes exist, print exactly ONE:
+
+git commit -m "feat(parish): add parish management API"
+
+Cursor must NOT execute it.
+
+48. Required Report
+-------------------
+Create:
+
+docs/PARISH_003_PARISH_SERVICE_API_RBAC_REPORT.md
+
+Required sections:
+
+1. Objective
+2. State inherited from #002
+3. Rules read/applied
+4. FE/BE separation rule status
+5. Files created
+6. Files modified
+7. ParishModule architecture
+8. Public exports
+9. ParishService API
+10. ParishSnapshot
+11. Code normalization/validation
+12. Name validation
+13. Create flow
+14. Duplicate handling
+15. Get flow
+16. List/pagination/filter strategy
+17. Update flow
+18. Status lifecycle
+19. assertParishActive
+20. Controller endpoints
+21. DTOs
+22. HTTP/error mapping
+23. RBAC permissions
+24. Local/dev permission seed update
+25. Swagger
+26. Repository boundary
+27. Module dependency audit
+28. Unit tests
+29. Integration tests
+30. DB-aware E2E
+31. Existing Auth/RBAC regression
+32. Security review
+33. Docker validation
+34. Microservice extraction review
+35. Commands executed
+36. Validation results
+Explicit PASS/FAIL:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- audit
+- quality
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- create
+- list
+- get
+- update
+- status
+- duplicate 409
+- auth 401
+- permission 403
+- no persistence export
+- safe snapshots
+- FE rule present
+37. Known issues/deferred
+38. Out-of-scope confirmation
+39. PARISH #004 readiness
+40. Prompt count status
+41. Commit recommendation
+
+49. PARISH #004 Readiness
+-------------------------
+Only if no BLOCKER/HIGH:
+
+Recommend:
+PARISH/ACADEMIC #004 — Academic Year + Catechism Level Services + APIs
+
+That prompt should implement:
+- AcademicYearService
+- one ACTIVE year per parish rule
+- date validation
+- lifecycle transitions
+- CatechismLevelService
+- ordering/status
+- ParishService validation
+- APIs
+- RBAC permissions
+- tests
+
+50. Final Response
+------------------
+Respond concisely:
+
+- PARISH/ACADEMIC #003 status
+- Parish API PASS/FAIL
+- RBAC PASS/FAIL
+- module boundary PASS/FAIL
+- FE/BE rule present YES/NO
+- report:
+  docs/PARISH_003_PARISH_SERVICE_API_RBAC_REPORT.md
+
+Then print exactly ONE:
+
+git commit -m "feat(parish): add parish management API"
+
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

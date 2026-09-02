@@ -1,0 +1,571 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #003A
+CORRECTIVE GATE — CLOSE #002A QUALITY DEBT + VALIDATE PARENT PORTAL SECURITY / N+1 / FULL BASELINE
+
+1. Context
+----------
+Completed main prompts:
+- #001/5 Audit/design
+- #001A Baseline cleanup fix — PASS
+- #002/5 Catechist portal
+- #003/5 Parent portal
+
+Corrective #002A was requested but skipped.
+
+Current #003 report confirms:
+- Parent context endpoint
+- Parent children endpoint
+- Parent enrollment progress endpoint
+- guardian relationship scope
+- no class-wide aggregate for Parent
+- batch active enrollments by student IDs
+- build PASS
+- targeted unit PASS
+- targeted Parent DB e2e PASS
+
+BUT still missing:
+- self-contained quality:full proof
+- full integration
+- full DB e2e
+- Docker production validation
+- npm audit
+- full denial matrix
+- explicit N+1/service-call verification
+- Catechist + Parent combined regression
+
+Do NOT implement #004 hardening/business extensions yet.
+This prompt IS the corrective hardening gate.
+
+2. Permanent workflow / Git rules
+---------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001/#001A/#002/#003 reports
+- close #002A quality lifecycle debt
+- validate Parent portal fully
+- fix only defects discovered
+- create detailed report
+- NOT auto-proceed #004
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "fix(family-portal): harden parent portal and quality gates"
+
+Do not execute it.
+
+3. Mandatory reading
+--------------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+docs/CATECHIST_PARENT_002_FAMILY_PORTAL_CATECHIST_CONTEXT_CLASSES_ROSTER_REPORT.md
+docs/CATECHIST_PARENT_003_FAMILY_PORTAL_PARENT_CONTEXT_CHILDREN_PROGRESS_REPORT.md
+
+Inspect:
+package.json
+src/modules/family-portal/
+src/modules/enrollment/
+src/modules/student/
+src/modules/learning-progress/
+src/modules/exam/
+src/modules/class/
+src/modules/module-boundaries.spec.ts
+test/
+Dockerfile
+
+4. Primary objectives
+---------------------
+A. Make quality:full self-contained from dirty test DB
+B. Validate full Catechist regression
+C. Validate full Parent portal
+D. Validate RBAC + relationship denial matrix
+E. Prove no class-wide leakage to Parent
+F. Prove no N+1 on children list / progress flow
+G. Validate zero-table/module boundaries
+H. Run full integration + DB e2e
+I. Run pristine/self-contained quality:full
+J. Run Docker
+K. Decide #004 readiness
+
+5. quality:full self-contained lifecycle
+----------------------------------------
+Audit current package.json `quality:full`.
+
+Acceptance criterion:
+developer runs only:
+
+npm run quality:full
+
+and it must own/reset its DB lifecycle appropriately.
+
+It must NOT depend on a manual reset immediately before command.
+
+If current order can run integration on dirty DB:
+fix script ordering minimally.
+
+Preferred concept:
+quality
+→ test DB reset/prepare
+→ migrations
+→ integration
+→ DB e2e
+
+Do not hide failures.
+
+6. Dirty DB reproducibility
+---------------------------
+If practical:
+- leave test DB after an e2e/integration run
+- run `npm run quality:full`
+- verify final script is deterministic
+
+Test DB only.
+
+7. Parent actor semantics
+-------------------------
+Verify:
+- actual PARENT actor required
+- zero active guardian links => chosen stable empty-context/list behavior
+- non-Parent actor => 403
+- SUPER_ADMIN/PARISH_ADMIN do not impersonate `/me/parent/*`
+- Catechist cannot use Parent portal
+- Student cannot use Parent portal
+
+No role-only child access.
+
+8. Guardian relationship scope
+------------------------------
+Use persisted ACTIVE guardian link.
+
+For point lookup:
+Parent enrollment progress must:
+1. load/resolve enrollment through public service
+2. derive studentId server-side
+3. assert guardian link
+4. only then compose progress
+
+Do not trust client studentId/userId.
+
+9. Parent context
+-----------------
+GET /api/v1/me/parent/context
+
+Validate:
+- linkedChildCount ACTIVE links only
+- activeEnrollmentCount ACTIVE enrollments only
+- no N+1
+- no PII
+- deterministic response
+
+10. Parent children
+-------------------
+GET /api/v1/me/parent/children
+
+Validate:
+- ACTIVE guardian links only
+- ACTIVE enrollments only
+- cross-parish children allowed only when relationship exists
+- no historical ended relationships
+- no sibling leakage
+- no guardian details
+- no contact info
+
+11. Children N+1 budget
+-----------------------
+Mandatory.
+
+Expected:
+- one guardian student-id query
+- one batch active-enrollment query
+- one batch student snapshot query
+- one batch class snapshot query if needed
+
+No:
+for each child -> query enrollments
+for each enrollment -> query class
+
+Target:
+constant/bounded orchestration-level calls independent of child count.
+
+Add spy/unit/integration verification where useful.
+
+12. Parent enrollment progress
+------------------------------
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Validate:
+- relationship check BEFORE LP composition
+- delegates to LearningProgressService.getEnrollmentLearningProgress
+- does not recompute LP/Practice/Exam
+- no class aggregate
+- no raw exam/practice answers
+- no exam attempt action
+- no correctness/review detail beyond existing summary
+
+13. Parent Exam invariant
+-------------------------
+Parent must still be denied:
+- exam start
+- answer save
+- submit
+- class exam summaries
+
+Family Portal must not accidentally expose equivalent mutation path.
+
+14. Parent Practice invariant
+-----------------------------
+Existing guardian Practice proxy may remain on Practice routes.
+
+Family Portal is read-only.
+Do not duplicate mutation APIs.
+
+15. Catechist regression
+------------------------
+Revalidate:
+- context
+- assigned classes
+- assigned roster
+- unassigned roster denied
+- Parent cannot use Catechist portal
+- Student cannot use Catechist portal
+- admin no `/me` impersonation
+
+16. Cross-actor denial matrix
+-----------------------------
+DB e2e matrix:
+
+PARENT:
+- parent context YES
+- parent children YES
+- own child progress YES
+- foreign child enrollment progress 403
+- catechist routes 403
+- class-wide progress 403
+- exam attempt 403
+
+CATECHIST:
+- catechist context/classes/roster YES assigned
+- unassigned class 403
+- parent routes 403
+- learner exam attempt 403
+
+STUDENT:
+- family parent routes 403
+- family catechist routes 403
+
+PARISH_ADMIN:
+- actor-specific parent/catechist `/me` routes do not turn into admin scope
+
+SUPER_ADMIN:
+- same no impersonation behavior
+
+17. Unknown vs foreign resource
+-------------------------------
+Ensure consistent:
+- unknown enrollment => 404 if project convention allows
+- existing but unlinked enrollment => 403
+- unassigned class => 403
+
+No resource-existence leakage beyond established conventions.
+
+18. Data minimization
+---------------------
+Parent child response allow-list:
+studentId
+displayName
+studentStatus
+active enrollment identifiers/context
+
+Progress:
+compact learning/practice/exam metrics only.
+
+Never return:
+DOB
+address
+phone
+email
+guardian PII
+siblings
+raw answers
+pastoral notes
+
+Catechist roster minimization regression too.
+
+19. Enrollment batch API
+------------------------
+Audit:
+EnrollmentQueryService.listActiveEnrollmentsByStudentIds
+
+Required:
+- empty input => empty
+- dedupe student IDs
+- one bounded query
+- active only
+- no entity leakage
+- deterministic ordering or explicit ordering contract
+
+20. Class snapshot batching
+---------------------------
+If Parent children output enriches class names:
+must use ClassService batch snapshots.
+
+No class get loop.
+
+21. Module boundaries
+---------------------
+FamilyPortal:
+- no TypeOrmModule
+- no entities
+- no migrations
+- no repositories
+- export FamilyPortalService only
+- no foreign entities/repos
+
+Domain modules must not import FamilyPortal.
+
+No forwardRef.
+Graph acyclic.
+
+22. Performance checks
+----------------------
+Document exact service-call budget:
+
+Catechist roster page:
+<= 5 orchestration-level calls
+
+Parent children:
+constant/bounded calls, target <= 4–5
+
+Parent progress:
+relationship resolution + one LP composition; bounded
+
+No O(n) cross-domain loop.
+
+23. OpenAPI sanity
+------------------
+Ensure six routes from #002/#003 have:
+- auth
+- permissions
+- pagination where applicable
+- DTOs
+- 400/401/403/404
+- relationship scope semantics
+
+Do not perform full docs polish beyond what is needed; #004 will do final hardening.
+
+24. Unit tests
+--------------
+Cover:
+- Parent actor check
+- zero links
+- guardian denial
+- context mapper
+- children mapper
+- active-only filtering assumptions
+- batch joins
+- Parent progress delegation
+- no class aggregate invocation
+- call-count budget
+- no PII fields
+
+25. Integration tests
+---------------------
+Real MSSQL:
+- Parent context
+- multiple linked children if fixture permits
+- active enrollment composition
+- cross-parish linked child if fixture supports
+- foreign enrollment denied
+- progress composition
+- Catechist regression
+- batch APIs
+
+26. DB e2e
+----------
+Run complete relevant suites plus full DB e2e.
+
+Must include:
+- Parent own linked child
+- Parent foreign child denial
+- Parent class aggregate denial
+- Parent exam attempt denial
+- Catechist assigned/unassigned
+- cross-actor portal denial
+- admin no impersonation
+
+27. Full validation
+-------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+Then individual DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then prove self-contained:
+npm run quality:full
+
+Do NOT manually reset immediately before this final quality:full unless the quality:full script itself performs the reset.
+
+Require PASS.
+
+28. Docker
+----------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:family-portal-parent-hardened ."
+
+PASS required.
+
+29. npm audit
+-------------
+npm audit --audit-level=moderate
+No unresolved HIGH.
+
+30. Required report
+-------------------
+Create:
+
+docs/CATECHIST_PARENT_003A_PARENT_AND_QUALITY_PERFORMANCE_CORRECTIVE_GATE_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Why #003A was required
+3 State inherited
+4 quality:full original order
+5 quality:full final order
+6 Dirty DB behavior
+7 Files created
+8 Files modified
+9 Production business behavior changes
+10 Parent actor semantics
+11 Guardian scope
+12 Parent context
+13 Parent children
+14 Parent children batching
+15 Parent progress
+16 Parent Exam invariant
+17 Parent Practice invariant
+18 Catechist regression
+19 Cross-actor denial matrix
+20 Unknown/foreign resource semantics
+21 Data minimization
+22 Enrollment batch API
+23 Class batching
+24 N+1 budgets
+25 Module boundaries
+26 OpenAPI sanity
+27 Unit tests
+28 Integration tests
+29 DB e2e
+30 Full regression
+31 self-contained quality:full
+32 npm audit
+33 Docker
+34 Commands
+35 Validation matrix
+36 Risks/deferred
+37 BLOCKER/HIGH/MEDIUM/LOW
+38 #004 readiness
+39 Commit recommendation
+
+31. Required verdicts
+---------------------
+QUALITY:FULL SELF-CONTAINED: YES/NO
+QUALITY:FULL DIRTY-DB SAFE: YES/NO
+
+PARENT ACTOR SCOPE SAFE: YES/NO
+PARENT CONTEXT READY: YES/NO
+PARENT CHILDREN READY: YES/NO
+PARENT ENROLLMENT PROGRESS READY: YES/NO
+
+PARENT CLASS-WIDE LEAKAGE SAFE: YES/NO
+PARENT EXAM ATTEMPT REMAINS DENIED: YES/NO
+
+CATECHIST REGRESSION: PASS/FAIL
+CROSS-ACTOR DENIAL MATRIX: PASS/FAIL
+
+PARENT N+1 BUDGET READY: YES/NO
+CATECHIST N+1 BUDGET READY: YES/NO
+
+ZERO-TABLE MODULE BOUNDARY READY: YES/NO
+
+FULL INTEGRATION: PASS/FAIL
+DB E2E: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+32. #004 gate
+-------------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- Parent scope safe
+- no class-wide leakage
+- no N+1
+- Catechist regression pass
+- cross-actor denial matrix pass
+- module boundary clean
+- full integration pass
+- DB e2e pass
+- self-contained quality:full pass
+- Docker pass
+
+Then recommend:
+
+CATECHIST + PARENT SUPPORTING APIs #004/5 —
+RBAC / SECURITY / PERFORMANCE / OPENAPI / CONTRACT HARDENING
+
+Do not auto-proceed.
+
+33. Final response
+------------------
+Respond concisely:
+- #003A status
+- quality:full self-contained
+- Parent scope
+- Parent APIs
+- denial matrix
+- N+1
+- Catechist regression
+- integration/DB e2e
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(family-portal): harden parent portal and quality gates"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

@@ -1,0 +1,822 @@
+CURSOR PROMPT — QUESTION BANK #005/8
+CLONE-TO-DRAFT + VERSION LINEAGE HARDENING + IMMUTABLE DELIVERY / GRADING CONTRACT FOUNDATION
+
+1. Context
+----------
+Completed:
+- QUESTION BANK #001/8 — Domain Audit + Model/Versioning Design
+- QUESTION BANK #002/8 — Schema + Entities + Migrations
+- QUESTION BANK #003/8 — Metadata CRUD + Tags/Curriculum Links + RBAC
+- QUESTION BANK #004/8 — Options + Correct Answers + Publish Workflow
+
+Important reality from #004:
+- Option/correct-answer APIs implemented
+- TRUE_FALSE auto-provision implemented
+- Media validation implemented
+- sourceContentHash recompute implemented
+- Publish validation implemented
+- Publish transaction implemented
+- Publish HTTP endpoint implemented
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+Therefore #005 MUST NOT reimplement publish.
+
+Current:
+QUESTION BANK #005 / 8
+
+Remaining after this:
+#006 Curriculum/Media integration + scoped authorization + learner-safe projection
+#007 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008 Final audit + demo seed + Postman + quality/full + Docker + completion
+
+2. Permanent Workflow / Git Rules — CRITICAL
+--------------------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports and current code before changes
+- keep scope limited
+- create detailed report in docs/
+- not auto-proceed to #006
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(question-bank): add version cloning and grading contracts"
+
+Do not execute it.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+docs/QUESTION_BANK_004_OPTIONS_ANSWERS_PUBLISH_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/curriculum/
+src/modules/media/
+src/modules/access-control/
+src/modules/auth/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement and harden:
+
+A. clone published/archived question version → new DRAFT
+B. deep-copy options
+C. remap correct-answer option IDs
+D. copy prompt/instruction/explanation/media JSON/difficulty
+E. copy source content safely
+F. preserve question root identity
+G. keep published/archived versions immutable
+H. version lineage/race handling
+I. authoring snapshot of clone
+J. internal learner-safe projection contract
+K. internal grading contract/primitives for objective MVP types
+L. NO public Practice/Exam routes yet
+M. tests + full quality/Docker
+
+Do NOT implement:
+- PracticeModule
+- ExamModule
+- learner attempts
+- public learner question routes
+- search/import/export
+- translations
+- SHORT_TEXT/NUMBER
+- partial credit
+
+5. Clone Route
+--------------
+Implement:
+
+POST /api/v1/question-versions/:versionId/clone-to-draft
+
+Permission:
+questions.manage
+
+Source:
+PUBLISHED or ARCHIVED only
+
+Rules:
+- question root ACTIVE
+- caller can manage question parish
+- reject if a DRAFT already exists
+- new versionNumber = max + 1
+- new status DRAFT
+- new version UUID
+- question root unchanged
+
+6. Clone Transaction — CRITICAL
+-------------------------------
+Use one transaction.
+
+Recommended sequence:
+1. lock question root pessimistically
+2. load source version
+3. assert source belongs root and is PUBLISHED/ARCHIVED
+4. assert root ACTIVE
+5. assert no DRAFT exists
+6. calculate next version number
+7. insert new DRAFT
+8. load source options ordered by sortOrder
+9. create NEW option UUIDs
+10. build oldOptionId -> newOptionId map
+11. insert cloned options
+12. load source correct-option mappings
+13. remap to new option IDs
+14. insert cloned correct-answer rows
+15. commit
+
+Rollback everything on failure.
+
+7. Clone Option Identity
+------------------------
+Do NOT preserve option row IDs across versions.
+
+Each cloned option gets a new UUID.
+
+Reason:
+options are version-scoped historical entities.
+
+Correct answers must be remapped to cloned IDs.
+
+No canonicalOptionKey is required for MVP.
+
+8. Clone Content Fields
+-----------------------
+Copy:
+questionType
+prompt
+instruction
+explanation
+promptMediaJson
+explanationMediaJson
+difficulty
+
+answerDefinitionJson:
+for current objective MVP types should be null.
+Copy only if schema future compatibility requires and source type supports it, otherwise assert null.
+
+9. sourceContentHash on Clone
+----------------------------
+Choose explicit policy.
+
+Recommended:
+Because cloned source content is initially semantically identical to source, compute/recompute deterministic sourceContentHash from cloned content/options after IDs are remapped.
+
+Important:
+Current #004 hash reportedly includes option IDs.
+If cloned options get new IDs, hash may differ even when display/translatable content is identical.
+
+Audit this carefully.
+
+10. CRITICAL sourceContentHash Semantics
+---------------------------------------
+The #001 design intended `sourceContentHash` for translation staleness of translatable/source content.
+
+If the hash includes version-scoped option UUIDs, a pure clone would produce a different hash even though human-visible translatable content did not change.
+
+That may incorrectly mark future translations stale.
+
+Audit current #004 canonical hash implementation.
+
+Preferred multilingual-safe rule:
+`sourceContentHash` should cover translatable semantic content, NOT volatile version-specific option UUIDs.
+
+Candidate canonical option content:
+- code
+- text
+- mediaAssetId
+- sortOrder
+
+Exclude:
+- option row UUID id
+
+Correct-answer mappings should generally also be excluded from translation-source hash because correctness is not translated.
+
+If current implementation includes option IDs:
+fix it now and update tests, unless there is a documented reason not to.
+
+11. Hash Stability Test
+-----------------------
+Add test:
+
+Published source cloned to DRAFT with identical translatable content:
+sourceContentHash should remain identical IF hash semantics are translation-source based.
+
+Then:
+change option text/prompt/media:
+hash changes.
+
+Change only option UUID due clone:
+hash does not change.
+
+This is strongly preferred.
+
+12. Published Immutability — FINALIZE
+------------------------------------
+Reconfirm after #004 publish:
+
+PUBLISHED/ARCHIVED cannot mutate:
+- questionType
+- prompt
+- instruction
+- explanation
+- media JSON
+- difficulty
+- options
+- correct answers
+- sourceContentHash
+
+No endpoints should allow writes.
+
+13. Previous Published Archive
+------------------------------
+Audit current publish behavior.
+
+When publishing a newer DRAFT:
+- previous current PUBLISHED becomes ARCHIVED
+- new version becomes PUBLISHED
+- root.currentPublishedVersionId updated
+
+Ensure old version remains fully readable for authoring/audit.
+
+14. Archive Semantics
+---------------------
+ARCHIVED is terminal for content.
+It can be clone source.
+It cannot be republished directly.
+It cannot be edited.
+
+No separate archive endpoint needed unless current design requires one.
+
+15. Root Status Interaction
+---------------------------
+INACTIVE root:
+- cannot clone
+- cannot publish
+- cannot mutate DRAFT
+- historical reads allowed
+
+Verify.
+
+16. Draft Existence Race
+------------------------
+Two simultaneous clone requests:
+only one succeeds.
+
+Use:
+- root lock
+- one-DRAFT unique index final guard
+
+Map loser to 409 domain conflict, not 500.
+
+17. Version Number Race
+-----------------------
+Concurrency safe.
+No duplicate version number.
+
+18. Clone Error Model
+---------------------
+Add typed errors:
+
+QuestionCloneSourceInvalidError
+QuestionDraftAlreadyExistsError (reuse)
+QuestionInactiveError (reuse)
+QuestionCloneConflictError if needed
+
+HTTP:
+400/409/404/403 safely.
+
+19. Clone Response
+------------------
+Return authoring-safe snapshot:
+question + new draft version
+or version authoring snapshot.
+
+Do not expose persistence internals.
+
+20. Authoring Snapshot
+----------------------
+Existing authoring route from #004 contains:
+- version
+- options
+- correct option IDs
+
+Ensure clone result can be fetched via:
+GET /api/v1/question-versions/:versionId/authoring
+
+No learner exposure concerns because questions.read authoring permission.
+
+21. Internal Learner Projection — FOUNDATION
+--------------------------------------------
+Implement an INTERNAL/public-service learner-safe projection method, but NO public learner HTTP route yet.
+
+Potential:
+
+getLearnerQuestionProjection(questionVersionId)
+
+Return:
+- questionVersionId
+- questionType
+- prompt
+- instruction
+- difficulty optional if product wants
+- prompt media references
+- options:
+  id
+  text
+  mediaAssetId
+  sortOrder/canonical order
+- NO correct answer IDs
+- NO answerDefinitionJson
+- NO createdBy/publishedBy
+- NO explanation by default
+
+This method will be consumed in #006/future Practice/Exam.
+
+22. Option Code Exposure
+------------------------
+Strong preference:
+do not expose option `code` to learner unless needed.
+
+Learner needs id + display text/media.
+
+23. Explanation Exposure
+------------------------
+Learner projection must omit explanation by default.
+
+Future Practice can reveal after grading.
+Exam may reveal after close.
+
+24. Correct Answer Leakage
+--------------------------
+Add unit test that learner projection contains none of:
+correctOptionIds
+correctOptions
+answerDefinitionJson
+isCorrect
+
+No mapper reuse from authoring DTO.
+
+25. Internal Grading Contract
+-----------------------------
+Implement objective grading primitives for MVP types.
+
+Prefer `QuestionBankService.gradeAnswer()` delegating to an internal `QuestionGradingService` so `QuestionBankModule` still exports only `QuestionBankService`.
+
+No HTTP grading endpoint.
+
+26. Grading Result
+------------------
+Keep MVP simple:
+- questionVersionId
+- questionType
+- isCorrect
+- score: 0|1
+
+Do not expose correctOptionIds in learner-facing results.
+
+Internal snapshot contract may include them.
+
+27. SINGLE_CHOICE Grading
+-------------------------
+Exactly one selected option.
+Exact set match.
+
+Invalid 0 or >1 selections -> typed validation error.
+
+28. MULTIPLE_CHOICE Grading
+---------------------------
+Exact-set semantics.
+Order irrelevant.
+Duplicates rejected.
+No partial credit.
+
+29. TRUE_FALSE Grading
+----------------------
+Same as SINGLE_CHOICE.
+Correctness by option UUID, never text/code.
+
+30. Grade Published/Archived Only
+---------------------------------
+Allow PUBLISHED and ARCHIVED immutable versions.
+
+Reject DRAFT.
+
+Reason:
+historical exams may reference a version archived after a newer publish.
+
+31. Grade Input Validation
+--------------------------
+Reject:
+unknown option ID
+option from another version
+duplicate option ID
+invalid selection count
+
+32. Grade Correctness Source
+----------------------------
+Use exact questionVersion correct-option rows.
+
+Never resolve root.currentPublishedVersionId.
+
+33. Grading Persistence
+-----------------------
+Read-only.
+No learner answer row.
+No attempt table.
+
+34. Immutable Assessment Snapshot
+---------------------------------
+Add service-to-service method if useful:
+
+getImmutableAssessmentSnapshot(questionVersionId)
+
+Potential:
+- questionVersionId
+- questionId
+- questionType
+- sourceLocale
+- sourceContentHash
+- prompt
+- instruction
+- promptMedia
+- options [{id,text,mediaAssetId,sortOrder}]
+- correctOptionIds
+
+No actor PII.
+
+Allow PUBLISHED/ARCHIVED.
+Reject DRAFT.
+
+No HTTP endpoint.
+
+35. Media Validation Regression
+-------------------------------
+Clone copies asset refs.
+Publish of cloned draft must revalidate via existing media validation.
+
+Do not block clone merely because external Media state changed; document that publish is final validation gate.
+
+36. Curriculum Links / Tags Clone Decision
+------------------------------------------
+Tags and curriculum links are root-level from #003.
+
+Do NOT duplicate them during clone.
+
+37. Question Type Mutation After Options Exist
+---------------------------------------------
+Safe policy:
+if DRAFT already has options/correct answers, changing questionType must reject with 409 until incompatible option/answer state is explicitly cleared.
+
+Do not silently destroy author work.
+
+38. TRUE_FALSE Transition
+-------------------------
+If changing into TRUE_FALSE:
+require no existing options/correct answers, then auto-provision.
+
+Changing away from TRUE_FALSE:
+require options/correct answers cleared first.
+
+39. Option Replace + Correct Answer Integrity
+---------------------------------------------
+Audit #004 PUT options behavior.
+
+Ensure replacing options cannot leave stale correct-answer mappings or FK failures.
+
+Choose deterministic behavior:
+- clear/remap correct answers safely, or
+- reject invalid replacement
+
+Document and test.
+
+40. Hash Recompute Triggers
+---------------------------
+If translation-source hash semantics selected:
+recompute after translatable content/options change.
+
+Correct-answer change should NOT alter sourceContentHash.
+
+41. Multilingual Semantics
+--------------------------
+Keep root sourceLocale.
+
+Hash stable over pure clone if translatable content unchanged.
+
+No translation tables.
+
+42. No Learner HTTP Route
+-------------------------
+Do NOT add Practice/Exam endpoints.
+
+43. No SHORT_TEXT/NUMBER
+------------------------
+Do not add.
+
+44. No Partial Credit
+---------------------
+Score remains 0/1.
+
+45. No Randomization
+--------------------
+Question Bank returns canonical order only.
+
+46. Swagger
+-----------
+Document clone endpoint only.
+
+47. Unit Tests
+--------------
+Clone:
+- PUBLISHED -> DRAFT
+- ARCHIVED -> DRAFT
+- DRAFT source reject
+- inactive root reject
+- existing draft reject
+- new version number
+- new option IDs
+- correct answer remap
+- content copied
+- tags/links not duplicated
+- concurrency conflict maps safely
+
+Hash:
+- pure clone stable
+- prompt mutation changes
+- option text mutation changes
+- option UUID-only changes do not
+- correct-answer mapping changes do not if translation-source hash policy
+
+Learner projection:
+- no answers
+- no explanation
+- no audit fields
+
+Grading:
+- single correct/incorrect
+- single invalid count
+- multiple exact-set correct
+- subset/superset incorrect
+- duplicates rejected
+- unknown option rejected
+- cross-version option rejected
+- true/false correct/incorrect
+- DRAFT rejected
+- ARCHIVED allowed
+
+Snapshot:
+- PUBLISHED allowed
+- ARCHIVED allowed
+- DRAFT rejected
+
+48. Integration Tests
+---------------------
+Real MSSQL:
+- publish v1
+- clone v1 -> v2 DRAFT
+- option IDs differ
+- correct mappings remapped
+- source hash semantics
+- publish v2
+- v1 ARCHIVED
+- both historical versions readable
+- grading v1 ARCHIVED works
+- grading v2 PUBLISHED works
+- root current pointer v2
+
+49. DB E2E
+----------
+- clone requires auth
+- questions.manage required
+- parish scope
+- clone published success
+- existing draft 409
+- inactive root reject
+- cloned authoring snapshot
+- old published unchanged
+- no grading HTTP endpoint
+
+50. Existing Regression
+-----------------------
+#003 metadata
+#004 options/answers/publish
+Curriculum/Media/Auth
+
+PASS.
+
+51. quality:full
+----------------
+Run pristine:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+ONE CLEAN PASS required.
+Report must be internally consistent.
+
+52. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-versioning .
+
+PASS required.
+
+53. Required Commands
+---------------------
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:question-bank-versioning .
+
+54. Required Report
+-------------------
+Create:
+
+docs/QUESTION_BANK_005_CLONE_VERSIONING_GRADING_CONTRACTS_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #004
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final module architecture
+7 Clone route
+8 Clone transaction
+9 Root locking
+10 Version-number concurrency
+11 One-DRAFT concurrency
+12 Option ID remapping
+13 Correct-answer remapping
+14 Content field copy
+15 Root-scoped tags/links behavior
+16 sourceContentHash audit
+17 Hash semantic correction if any
+18 Hash clone stability
+19 Hash mutation triggers
+20 Published immutability
+21 Archive semantics
+22 Root inactive behavior
+23 Question type mutation with options
+24 TRUE_FALSE transition policy
+25 Option replace/correct-answer integrity
+26 Authoring clone snapshot
+27 Internal learner projection
+28 Answer leakage tests
+29 Internal grading contract
+30 SINGLE_CHOICE grading
+31 MULTIPLE_CHOICE grading
+32 TRUE_FALSE grading
+33 Invalid answer handling
+34 ARCHIVED grading support
+35 DRAFT grading denial
+36 Immutable assessment snapshot
+37 Historical exam readiness
+38 Media clone/revalidation semantics
+39 Swagger
+40 Unit tests
+41 Integration tests
+42 DB e2e
+43 Existing regression
+44 pristine quality:full
+45 Docker
+46 Multilingual readiness
+47 Security/privacy
+48 Microservice extraction
+49 Commands
+50 Validation matrix
+51 Known/deferred
+52 Out-of-scope
+53 QUESTION BANK #006 readiness
+54 Prompt count
+55 Commit recommendation
+
+55. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- clone PUBLISHED
+- clone ARCHIVED
+- reject clone DRAFT
+- reject existing DRAFT
+- inactive root reject
+- version increment
+- new option IDs
+- correct mapping remap
+- content copied
+- root tags/links preserved without duplication
+- old published immutable
+- old archived readable
+- source hash stable over pure clone
+- option UUID excluded from hash
+- correct-answer mapping excluded from translation hash
+- prompt/option text mutation changes hash
+- learner projection no answer leakage
+- explanation omitted
+- single grading
+- multiple exact-set grading
+- true/false grading
+- duplicate answer IDs denied
+- cross-version option denied
+- DRAFT grading denied
+- ARCHIVED grading allowed
+- immutable assessment snapshot
+- no learner HTTP grading endpoint
+- no SHORT_TEXT/NUMBER
+- no partial credit
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+56. #006 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+QUESTION BANK #006/8 — Curriculum/Media Integration + Scoped Authorization + Learner-Safe Projection
+
+57. Prompt Count
+----------------
+State:
+QUESTION BANK #005/8 complete
+approximately 3 prompts remain (#006–#008)
+
+58. Final Response
+------------------
+Respond concisely:
+- QUESTION BANK #005 status
+- clone/versioning PASS/FAIL
+- hash semantics PASS/FAIL
+- learner-safe projection PASS/FAIL
+- grading contract PASS/FAIL
+- archived grading PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then print exactly ONE line:
+git commit -m "feat(question-bank): add version cloning and grading contracts"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT proceed to #006 automatically.

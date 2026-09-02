@@ -12,6 +12,8 @@ import {
   CLASS_ENROLLMENT_SEED_CATECHIST_EMAIL,
   CLASS_ENROLLMENT_SEED_PARENT_EMAIL,
 } from '../src/database/seeds/class-enrollment.seed.constants';
+import { CurriculumDemoSeedModule } from '../src/database/seeds/curriculum-demo-seed.module';
+import { CurriculumDemoSeedService } from '../src/database/seeds/curriculum-demo.seed.service';
 import { ParishAcademicSeedModule } from '../src/database/seeds/parish-academic-seed.module';
 import { ParishAcademicSeedService } from '../src/database/seeds/parish-academic.seed.service';
 import { EnrollmentStatus } from '../src/modules/enrollment/enums/enrollment-status.enum';
@@ -78,16 +80,23 @@ describe('Family Portal parent routes (db e2e)', () => {
     }
 
     seedModuleRef = await Test.createTestingModule({
-      imports: [AuthRbacSeedModule, ParishAcademicSeedModule, ClassEnrollmentSeedModule],
+      imports: [
+        AuthRbacSeedModule,
+        ParishAcademicSeedModule,
+        ClassEnrollmentSeedModule,
+        CurriculumDemoSeedModule,
+      ],
     }).compile();
 
     const authRbacSeedService = seedModuleRef.get(AuthRbacSeedService);
     const parishAcademicSeedService = seedModuleRef.get(ParishAcademicSeedService);
     const classEnrollmentSeedService = seedModuleRef.get(ClassEnrollmentSeedService);
+    const curriculumDemoSeedService = seedModuleRef.get(CurriculumDemoSeedService);
 
     await authRbacSeedService.run();
     await parishAcademicSeedService.run();
     await classEnrollmentSeedService.run();
+    await curriculumDemoSeedService.run();
 
     application = await createDatabaseTestApplication({ authRbacDemoEnabled: true });
 

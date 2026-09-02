@@ -1,0 +1,1058 @@
+CURSOR PROMPT — QUESTION BANK #003/8
+QUESTION ROOT / VERSION CRUD + TAGS + CURRICULUM LINK METADATA + RBAC
+
+1. Context
+----------
+Completed:
+- QUESTION BANK #001/8 — Domain Audit + Model/Versioning Design
+- QUESTION BANK #002/8 — Schema + Entities + Migrations
+
+Current:
+QUESTION BANK #003 / 8
+
+Remaining:
+#004 Question types + options + answer validation engine
+#005 Publish/clone/archive + immutable delivery/grading contracts
+#006 Curriculum/Media integration + scoped authorization + learner-safe projection
+#007 Search/filter + import/export readiness + OpenAPI/FE/Mobile hardening
+#008 Final audit + seed/Postman + quality/full + Docker + completion
+
+This prompt implements CRUD/application/RBAC metadata only.
+
+Do NOT implement type-specific option/correct-answer business logic yet.
+Do NOT implement publish/clone/grading yet.
+
+2. Permanent Workflow / Git Rules — CRITICAL
+--------------------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read prior reports and current code before editing
+- stay inside #003 scope
+- create detailed report in docs/
+- not auto-proceed to #004
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+If tracked changes exist, final response may print exactly ONE line:
+
+git commit -m "feat(question-bank): add question metadata APIs"
+
+Do not execute it.
+
+3. Mandatory Reading
+--------------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/QUESTION_BANK_001_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/QUESTION_BANK_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/MEDIA_004_FINAL_HARDENING_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect:
+src/modules/question-bank/
+src/modules/parish/
+src/modules/curriculum/
+src/modules/media/
+src/modules/access-control/
+src/modules/auth/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+test/
+package.json
+
+Inspect git status read-only.
+
+4. Primary Objective
+--------------------
+Implement:
+
+A. Question root CRUD/list/status
+B. Initial DRAFT version creation/list/get/basic metadata update
+C. Question Tag CRUD + link/unlink
+D. Curriculum semantic linkage CRUD
+E. Parish scope
+F. `questions.read/manage/publish` permissions
+G. Safe authoring snapshots/DTOs
+H. Swagger/OpenAPI
+I. Unit/integration/DB e2e tests
+
+Do NOT implement:
+- options CRUD
+- correct-answer CRUD
+- type-specific validation
+- publish
+- archive
+- clone
+- grading
+- learner-safe projection
+- Practice/Exam
+- translations
+- import/export
+
+5. Module Architecture
+----------------------
+QuestionBankModule may now own:
+- QuestionBankService
+- QuestionTagService
+- QuestionCurriculumLinkService
+- controllers
+- DTOs/mappers/errors
+
+Public export:
+prefer `QuestionBankService` only.
+
+Tag/link services should remain internal unless a concrete downstream need exists.
+
+Do NOT export:
+TypeOrmModule
+entities
+repositories
+
+No cross-module ORM relations/imports.
+
+6. Dependencies
+---------------
+Allowed:
+QuestionBankModule -> ParishModule via public ParishService/ParishScopeService
+QuestionBankModule -> CurriculumModule via public CurriculumService only
+QuestionBankModule -> Auth/AccessControl for guards/wiring
+
+MediaModule integration may remain deferred to #006; #003 can preserve scalar asset refs only.
+
+No cycle.
+No forwardRef.
+
+7. Question Root Snapshot
+-------------------------
+Create safe snapshot:
+
+id
+parishId
+code
+status
+sourceLocale
+currentPublishedVersionId
+createdAt
+updatedAt
+
+No entity leakage.
+
+Optionally createdByUserId in authoring snapshot if already standard, but do not expose unnecessary PII in list DTOs.
+
+8. Question Version Snapshot
+----------------------------
+For #003 authoring metadata only:
+
+id
+questionId
+versionNumber
+status
+questionType
+prompt
+instruction
+explanation
+difficulty
+sourceContentHash
+createdAt
+updatedAt
+publishedAt
+
+Do NOT expose correct answers because not implemented yet.
+
+Media JSON may be present if schema currently supports it, but #003 should not add business validation beyond structural DTO/schema checks.
+
+9. Question Create
+------------------
+POST /api/v1/parishes/:parishId/questions
+
+Permission:
+questions.manage
+
+Input:
+- code?
+- sourceLocale
+- questionType
+- prompt optional/required?
+- instruction?
+- difficulty?
+
+Recommended behavior:
+Create root ACTIVE + initial DRAFT version atomically.
+
+This avoids root without draft.
+
+Rules:
+- parish ACTIVE
+- actor can manage parish
+- code optional normalized lowercase kebab
+- sourceLocale BCP47-like validation
+- questionType one of MVP types
+- initial versionNumber = 1
+- status DRAFT
+- createdByUserId actor
+
+No options required at creation in #003.
+Question may be incomplete until #004.
+
+10. Atomic Create Root + Initial Draft
+-------------------------------------
+Use transaction.
+
+If root insert succeeds but draft fails:
+rollback.
+
+Concurrency safe.
+
+11. Question Get
+---------------
+GET /api/v1/questions/:id
+
+Permission:
+questions.read
+
+Scope:
+resolve parishId, then assert read/manage based on role.
+
+This is admin/authoring read, not learner delivery.
+
+12. Question List
+-----------------
+GET /api/v1/parishes/:parishId/questions
+
+Permission:
+questions.read
+
+Filters now:
+- status
+- sourceLocale
+- code/search
+- hasPublished?
+- hasDraft?
+- questionType of current draft/current published if feasible without complex query
+
+Keep #003 list practical.
+Advanced tag/curriculum/difficulty search belongs #007.
+
+Pagination + sort whitelist.
+
+13. Question Update
+-------------------
+PATCH /api/v1/questions/:id
+
+Permission:
+questions.manage
+
+Allow:
+- code
+- sourceLocale only under safe immutability policy
+
+Do NOT allow:
+- parishId
+- currentPublishedVersionId direct mutation
+
+sourceLocale rule:
+allowed only if no PUBLISHED/ARCHIVED version history.
+Checking currentPublishedVersionId alone is NOT sufficient.
+Must inspect any published history.
+
+14. Question Status
+-------------------
+PATCH /api/v1/questions/:id/status
+
+Permission:
+questions.manage
+
+ACTIVE <-> INACTIVE
+
+Inactive:
+- block creating new drafts
+- block metadata/version mutations where appropriate
+- reads preserved
+
+Do not hard delete root.
+
+15. Initial Draft / Additional Blank Draft
+------------------------------------------
+Need version creation path.
+
+POST /api/v1/questions/:questionId/versions
+
+Permission:
+questions.manage
+
+At #003:
+ONLY blank/initial DRAFT creation, no clone.
+
+Rules:
+- question ACTIVE
+- reject if DRAFT exists
+- versionNumber max+1
+- caller scope
+- questionType required or copied from current published? Decide.
+
+Recommended:
+For explicit blank draft after draft deletion/edge case:
+input requires questionType.
+But typical edit-after-publish clone comes #005.
+
+If root already has published history, creating a completely blank draft may be undesirable.
+Strong recommendation:
+Allow initial blank draft only before first publish.
+After published history, require clone-to-draft in #005.
+
+Implement safe policy and document.
+
+16. Version List
+----------------
+GET /api/v1/questions/:questionId/versions
+
+Permission:
+questions.read
+
+Filter:
+status optional
+
+Sort:
+versionNumber DESC default
+
+17. Version Get
+---------------
+GET /api/v1/question-versions/:versionId
+
+Permission:
+questions.read
+
+Authoring snapshot only.
+
+18. Version Basic Update
+------------------------
+PATCH /api/v1/question-versions/:versionId
+
+Permission:
+questions.manage
+
+DRAFT only.
+Question root ACTIVE.
+
+Allow in #003:
+- questionType
+- prompt
+- instruction
+- explanation
+- difficulty
+- promptMediaJson?
+- explanationMediaJson?
+
+BUT no type-specific option/answer validation yet.
+
+If media JSON strict validator does not exist yet, either:
+- validate only JSON shape safely now, or
+- defer media JSON mutation to #004/#006
+
+Do not accept arbitrary malformed JSON.
+
+19. Prompt Validation
+---------------------
+Basic authoring validation:
+- prompt Unicode max 2000
+- instruction max 1000
+- explanation max 2000
+- no raw HTML
+- trim sensible fields
+
+Question can remain incomplete DRAFT; publish validation later.
+
+20. Question Type Mutation
+--------------------------
+At #003 there are no options/answers yet.
+
+Allow changing questionType on DRAFT.
+
+Once options/answers exist (#004), type change policy must be revisited/restricted.
+
+Document this future constraint.
+
+21. Difficulty
+-------------
+Optional in draft.
+Enum EASY/MEDIUM/HARD.
+
+Publish will require non-null (#005).
+
+22. sourceContentHash
+---------------------
+Do not accept from client.
+
+Either:
+- leave null in #003
+- or compute if enough content exists
+
+Strong recommendation:
+leave hash computation to #004/#005 when options/content canonicalization is finalized.
+
+Never client-controlled.
+
+23. Tag Snapshot
+----------------
+QuestionTagSnapshot:
+id
+parishId
+code
+name
+status
+createdAt
+updatedAt
+
+24. Tag Create
+-------------
+POST /api/v1/parishes/:parishId/question-tags
+
+Permission:
+questions.manage
+
+Rules:
+- parish scope
+- code lowercase kebab, max 64
+- name Unicode max 128
+- ACTIVE default
+- unique per parish
+
+25. Tag List
+------------
+GET /api/v1/parishes/:parishId/question-tags
+
+Permission:
+questions.read
+
+Filters:
+status
+search
+
+Pagination optional if consistent with platform.
+
+26. Tag Update
+--------------
+PATCH /api/v1/question-tags/:tagId
+
+Permission:
+questions.manage
+
+Allow:
+code
+name
+status
+
+No parish move.
+
+27. Tag Link
+------------
+PUT or POST:
+POST /api/v1/questions/:questionId/tags/:tagId
+
+Permission:
+questions.manage
+
+Rules:
+- same parish
+- no duplicate
+- question ACTIVE?
+Recommend tags can be updated on ACTIVE root even if published versions exist because tags are classification metadata outside immutable content snapshot.
+
+Document this clearly.
+
+28. Tag Unlink
+--------------
+DELETE /api/v1/questions/:questionId/tags/:tagId
+
+Permission:
+questions.manage
+
+Root metadata only.
+Do not delete tag registry.
+
+29. Question Tag List
+---------------------
+GET /api/v1/questions/:questionId/tags
+
+Permission:
+questions.read
+
+30. Curriculum Link Snapshot
+----------------------------
+id
+questionId
+parishId
+curriculumId
+canonicalLessonKey
+authoringCurriculumVersionId
+createdAt
+
+31. Curriculum Link Create
+--------------------------
+POST /api/v1/questions/:questionId/curriculum-links
+
+Permission:
+questions.manage
+
+Input:
+curriculumId
+canonicalLessonKey?
+authoringCurriculumVersionId?
+
+Rules:
+- question parish matches curriculum parish
+- curriculum exists/ACTIVE? Audit whether inactive curriculum link may remain historical.
+For new link: require curriculum ACTIVE.
+- if canonicalLessonKey supplied:
+  validate it belongs to the curriculum lineage/context via public CurriculumService
+- if authoringCurriculumVersionId supplied:
+  must belong to curriculum
+- canonicalLessonKey may be null for curriculum-level association
+- no direct topicId/lessonId
+
+32. Curriculum Public Contract Gap
+----------------------------------
+Audit whether current CurriculumService has:
+- get curriculum by id
+- get version by id
+- lookup lesson by canonicalLessonKey within curriculum
+
+If lookup by canonicalLessonKey is missing:
+DO NOT import repositories/entities.
+
+Add a narrow public CurriculumService method if needed, such as:
+findLessonContextByCanonicalKey(curriculumId, canonicalLessonKey)
+or
+assertCanonicalLessonKeyBelongsToCurriculum(...)
+
+Return snapshots/IDs only.
+
+This change is allowed if minimal and architecture-clean.
+
+33. Curriculum Link List
+------------------------
+GET /api/v1/questions/:questionId/curriculum-links
+
+Permission:
+questions.read
+
+34. Curriculum Link Delete
+--------------------------
+DELETE /api/v1/question-curriculum-links/:linkId
+
+Permission:
+questions.manage
+
+Classification metadata can be changed independently of published version content because #001 chose root-level links.
+
+Document implications for historical exams:
+Exam snapshot does not rely on live curriculum links for grading.
+
+35. RBAC Seed
+-------------
+Add permissions:
+
+questions.read
+questions.manage
+questions.publish
+
+Role matrix:
+
+SUPER_ADMIN:
+read/manage/publish
+
+PARISH_ADMIN:
+read/manage/publish own parish
+
+CATECHIST:
+read only for now
+
+PARENT:
+none
+
+Do NOT grant CATECHIST manage yet.
+The #001 MEDIUM open question is deferred to #006 with scoped authoring policy.
+
+This conservative choice should be explicit.
+
+36. Parish Scope
+----------------
+All routes:
+- SUPER_ADMIN global
+- PARISH_ADMIN own parish
+- CATECHIST read own parish only if current ParishScopeService supports active membership
+- no cross-parish
+
+Use public ParishScopeService.
+
+37. Admin Read vs Learner Read
+------------------------------
+questions.read is an authoring/admin capability.
+
+No generic learner question endpoint.
+Parents/students get nothing from Question Bank APIs.
+
+Future Practice/Exam exposes learner-safe content.
+
+38. Error Model
+---------------
+Create typed domain errors:
+
+QuestionNotFoundError
+QuestionInactiveError
+QuestionDuplicateCodeError
+QuestionDraftAlreadyExistsError
+QuestionSourceLocaleImmutableError
+QuestionVersionNotFoundError
+QuestionVersionNotDraftError
+QuestionTagNotFoundError
+QuestionTagDuplicateCodeError
+QuestionTagParishMismatchError
+QuestionCurriculumLinkNotFoundError
+QuestionCurriculumMismatchError
+QuestionCanonicalLessonInvalidError
+QuestionAuthoringVersionMismatchError
+
+Map safely:
+400 / 404 / 409 / 403.
+
+No SQL leakage.
+
+39. DTO Validation
+------------------
+Use class-validator/project conventions.
+
+Reject unknown fields.
+
+No client fields:
+currentPublishedVersionId
+versionNumber
+status arbitrary
+publishedAt
+sourceContentHash
+createdBy
+publishedBy
+
+40. Swagger
+-----------
+Document:
+- question create/list/get/update/status
+- version create/list/get/update
+- tag CRUD/linking
+- curriculum links
+- permissions
+- enum values
+- pagination
+- error shapes
+
+No learner DTO yet.
+
+41. Public Service Export
+-------------------------
+QuestionBankModule exports:
+QuestionBankService only
+
+If downstream #004/#005 orchestration needs Tag/Link service later, keep internal unless proven necessary.
+
+QuestionBankService may expose narrow methods used by future modules:
+getQuestionById
+getVersionById
+getQuestionParishId
+
+No repository/entity export.
+
+42. Service Design
+------------------
+Avoid god service.
+
+Suggested:
+QuestionBankService:
+root + version lifecycle metadata
+
+QuestionTagService:
+tag registry/linking
+
+QuestionCurriculumLinkService:
+semantic links
+
+Controllers can use internal services.
+
+QuestionBankService public export only.
+
+43. Concurrency — Question Code
+------------------------------
+Duplicate code -> 409.
+DB unique final guard.
+Map DB duplicate safely.
+
+44. Concurrency — Version Number
+-------------------------------
+Creating DRAFT:
+transaction + pessimistic lock on question root
+check existing draft
+max version + 1
+insert
+
+DB unique final guard.
+
+Map race to domain conflict, not 500.
+
+45. Concurrency — Tags/Links
+---------------------------
+Unique constraints final guard.
+Map duplicate to idempotent success or 409 consistently.
+
+For tag link:
+idempotent PUT behavior is acceptable if route is PUT.
+Choose clean semantics.
+
+46. No Options Yet
+------------------
+Do NOT create:
+option CRUD
+correct-option CRUD
+true/false auto options
+answer_definition
+grading
+
+#004.
+
+47. No Publish/Clone Yet
+------------------------
+`questions.publish` permission is seeded now but not wired to endpoint yet.
+
+No publish endpoint until #005.
+
+No clone-to-draft until #005.
+
+48. No Media Validation Yet
+---------------------------
+If prompt/explanation media JSON is editable in #003:
+only structural JSON validation.
+Asset existence/category validation stays #006 unless trivial public MediaService call is already clean.
+
+Strong preference:
+defer actual Media validation to #006 to keep scope.
+
+49. No Translation
+------------------
+No LocalizationModule/tables/Google Translation.
+
+sourceLocale only.
+
+50. Unit Tests
+--------------
+QuestionBankService:
+- create root + initial draft
+- duplicate code
+- invalid locale
+- inactive parish
+- get
+- list
+- update root
+- sourceLocale mutable before publish history
+- sourceLocale immutable after published/archived history
+- status
+- create draft
+- duplicate draft
+- blank draft after publish policy
+- version update DRAFT only
+
+Tag:
+- create/list/update
+- duplicate code
+- cross-parish link denied
+- link/unlink
+
+Curriculum links:
+- curriculum-level link
+- canonicalLessonKey valid
+- invalid key
+- authoring version mismatch
+- duplicate link
+
+51. Integration Tests
+---------------------
+Real MSSQL:
+- create question + draft
+- list/filter
+- sourceLocale rule
+- version concurrency/basic
+- tags
+- links
+- Unicode
+- cross-parish validation
+
+52. DB E2E
+----------
+Required:
+
+401 unauthenticated
+
+403 permission:
+- no questions.manage create
+- parent denied
+- cross-parish admin denied
+
+SUPER_ADMIN:
+global allowed
+
+PARISH_ADMIN:
+own parish CRUD allowed
+
+CATECHIST:
+read allowed own parish
+manage denied
+
+Flows:
+- create question
+- initial DRAFT
+- list/get/update
+- tags
+- curriculum link
+- duplicate code 409
+- invalid locale 400
+- no publish endpoint yet
+
+53. Existing Regression
+-----------------------
+Auth
+Parish
+Class
+Curriculum
+Media
+Question schema
+
+PASS.
+
+54. quality:full
+----------------
+Run pristine clean:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+PASS required.
+
+55. Docker
+----------
+Run:
+wsl docker build --target production -t catechism-api:question-bank-metadata .
+
+PASS required.
+
+56. Git Policy — CRITICAL
+-------------------------
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest `git add`.
+
+Final response may print exactly ONE line:
+
+git commit -m "feat(question-bank): add question metadata APIs"
+
+Do not execute it.
+
+57. Required Commands
+---------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+npm run quality:full
+
+npm run migration:show
+
+wsl docker build --target production -t catechism-api:question-bank-metadata .
+
+58. Required Report
+-------------------
+Create:
+
+docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+
+Required sections:
+
+1 Objective
+2 State inherited from #002
+3 Rules applied
+4 Files created
+5 Files modified
+6 Final module architecture
+7 Public exports
+8 Dependency graph
+9 Cycle/forwardRef audit
+10 Question root snapshot
+11 Version snapshot
+12 Question create
+13 Root+initial-draft transaction
+14 Question get/list
+15 Question update
+16 sourceLocale policy
+17 status lifecycle
+18 blank draft creation policy
+19 Version list/get/update
+20 Question type metadata mutation
+21 sourceContentHash policy
+22 Tag snapshot
+23 Tag CRUD
+24 Tag link/unlink
+25 Root-level tag mutability after publish
+26 Curriculum link snapshot
+27 Curriculum link create
+28 canonicalLessonKey validation
+29 authoringCurriculumVersionId validation
+30 CurriculumService public contract delta
+31 Curriculum link list/delete
+32 Root-level curriculum-link mutability after publish
+33 RBAC permissions
+34 Role matrix
+35 Parish scope
+36 CATECHIST conservative policy
+37 DTO validation
+38 Error mapping
+39 Swagger/OpenAPI
+40 Service decomposition
+41 Concurrency/race handling
+42 Unit tests
+43 Integration tests
+44 DB e2e
+45 Existing regression
+46 quality:full
+47 Docker
+48 Multilingual readiness
+49 Security/privacy
+50 Microservice extraction
+51 Commands
+52 Validation matrix
+53 Known/deferred
+54 Out-of-scope
+55 QUESTION BANK #004 readiness
+56 Prompt count
+57 Commit recommendation
+
+59. Explicit PASS/FAIL Matrix
+-----------------------------
+Report:
+
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker
+- no cycle
+- no forwardRef
+- QuestionBankModule exports QuestionBankService only
+- create root + initial draft
+- duplicate code 409
+- sourceLocale validation
+- sourceLocale immutability after published history
+- status
+- create draft
+- duplicate draft
+- blank draft after publish policy
+- version update DRAFT only
+- tag CRUD
+- tag cross-parish deny
+- tag link/unlink
+- curriculum link
+- canonicalLessonKey validation
+- authoring version validation
+- cross-parish curriculum link deny
+- questions.read/manage/publish seed
+- CATECHIST read-only
+- PARENT no access
+- no options business API
+- no correct-answer API
+- no publish endpoint
+- no clone endpoint
+- no grading
+- no learner endpoint
+- no translation tables
+- no entity/repo export
+- prior regression
+- Git rule compliance
+
+60. #004 Readiness
+------------------
+Only if no unresolved BLOCKER/HIGH:
+
+Recommend:
+QUESTION BANK #004/8 — Question Types + Options + Correct Answers + Validation Engine
+
+#004 should implement:
+- option CRUD/reorder
+- TRUE_FALSE option provisioning
+- correct-option APIs
+- type-specific validation
+- draft sourceContentHash
+- media-aware option/prompt validation as appropriate
+- grading primitives/unit contracts
+- tests
+
+No publish yet.
+
+61. Prompt Count
+----------------
+State:
+QUESTION BANK #003/8 complete
+approximately 5 prompts remain (#004–#008)
+
+62. Final Response
+------------------
+Respond concisely:
+
+- QUESTION BANK #003 status
+- root/version CRUD PASS/FAIL
+- tags/links PASS/FAIL
+- RBAC/scope PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report:
+  docs/QUESTION_BANK_003_METADATA_CRUD_TAGS_LINKS_RBAC_REPORT.md
+
+Then print exactly ONE line:
+
+git commit -m "feat(question-bank): add question metadata APIs"
+
+Do NOT print `git add`.
+Do NOT run git add/commit/push.
+Do NOT proceed to #004 automatically.

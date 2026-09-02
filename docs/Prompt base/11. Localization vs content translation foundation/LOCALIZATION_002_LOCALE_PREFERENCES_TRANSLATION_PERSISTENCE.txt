@@ -1,0 +1,540 @@
+CURSOR PROMPT — LOCALIZATION #002/6
+LOCALE PREFERENCES + TRANSLATION PERSISTENCE FOUNDATION
+
+Context
+-------
+Completed:
+- LOCALIZATION #001/6 — Cross-Domain Audit + Translation Model Design
+
+Current:
+LOCALIZATION #002 / 6
+
+Remaining:
+#003 Provider abstraction + DB jobs + Catholic glossary
+#004 Resource adapters + localized Curriculum Delivery/QB integration + Practice snapshot
+#005 Admin/review/approve APIs + RBAC + FE/Mobile hardening
+#006 Final audit + demo/Postman + quality/full + Docker
+
+#001 locked decisions:
+- Localization domain design READY
+- persistence required
+- Users own preferredLocale
+- Parish owns defaultLocale
+- Localization owns translation resources/revisions/workflow
+- source content stays owned by source modules
+- translation revision tied to source hash/version
+- immutable revision history
+- approved non-stale only for learner reads
+- provider never called from learner GET
+- DB-backed jobs later (#003)
+- Catholic glossary later (#003)
+- final prompt count = 6
+- BLOCKER/HIGH = 0
+
+Permanent Rules
+---------------
+Workflow: AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- read #001 report/current code first
+- keep scope to locale preferences + persistence foundation
+- create detailed docs report
+- not auto-proceed #003
+- NEVER run git add / git commit / git push
+- NEVER suggest git add
+
+If tracked changes exist, final response may print exactly:
+git commit -m "feat(localization): add locale preferences and translation persistence foundation"
+
+Do not execute it.
+
+Mandatory Reading
+-----------------
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/LOCALIZATION_001_CROSS_DOMAIN_AUDIT_AND_MODEL_DESIGN_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+
+Inspect User/Auth, Parish, Curriculum, LearningContent, QuestionBank, common locale utils, DB migrations, AppModule, module-boundary tests.
+
+Primary Objective
+-----------------
+Implement:
+- LocalizationModule skeleton
+- shared locale parse/normalize utilities
+- LocaleResolutionService
+- users.preferred_locale
+- parishes.default_locale
+- translation_resources
+- translation_revisions
+- resource/status enums
+- payload JSON constraint + bounded size
+- source hash/version fields
+- parish scope
+- immutable revision payload model
+- latest approved/current lookup strategy
+- internal resource/revision services
+- module-boundary tests
+- migration/integration tests
+- quality:full + Docker
+
+Do NOT implement:
+provider/jobs/glossary/admin APIs/localized learner reads/Practice snapshot/Exam.
+
+Shared Locale Utility
+---------------------
+Move/refactor locale parsing/normalization from Curriculum-owned utility into neutral shared path, e.g. src/common/locale/.
+
+Requirements:
+- BCP47-ish validation
+- normalize language lower-case
+- region upper-case
+- max length 32
+- bounded input
+- backward-compatible re-export from old Curriculum utility if needed
+
+System default locale: vi-VN.
+
+User preferredLocale
+--------------------
+Add nullable users.preferred_locale varchar(32).
+Ownership remains Users.
+No forced backfill.
+Normalize/validate via shared utility.
+Expose additively in safe user snapshot/profile contract if appropriate.
+Do NOT add to JWT claims.
+
+Parish defaultLocale
+--------------------
+Add nullable parishes.default_locale varchar(32).
+Ownership remains Parish.
+No forced backfill.
+Normalize/validate via shared utility.
+System fallback stays vi-VN.
+
+LocaleResolutionService
+-----------------------
+Implement pure/foundation resolution service receiving values, not querying repos directly if possible.
+
+Precedence:
+1 explicit locale
+2 user preferredLocale
+3 Accept-Language
+4 parish defaultLocale
+5 vi-VN
+
+Proper Accept-Language parser:
+- comma-separated
+- q values
+- sort q desc then original order
+- ignore malformed
+- q=0 excluded
+- wildcard handled as fallback/ignored safely
+- max entries bounded
+
+No resource-availability check yet.
+
+LocalizationModule
+------------------
+Expected public exports:
+- LocalizationService
+- LocaleResolutionService
+
+Internal:
+- TranslationResourceService
+- TranslationRevisionService
+
+Do NOT export entities/repos/TypeOrmModule.
+
+Translation Resource Type
+-------------------------
+Initial stable codes:
+CURRICULUM_METADATA
+CURRICULUM_VERSION
+CURRICULUM_TOPIC
+CURRICULUM_LESSON
+LEARNING_CONTENT_DOCUMENT
+QUESTION_BANK_VERSION
+
+Question tags deferred.
+
+translation_resources
+---------------------
+Localization-owned logical resource binding.
+
+Recommended:
+id UUID PK
+resource_type varchar(64) NOT NULL
+resource_id UUID NOT NULL
+parish_id UUID NULL
+source_locale varchar(32) NOT NULL
+created_at
+updated_at
+
+Strong preference:
+unique(resource_type, resource_id)
+
+Do NOT make source hash part of stable logical identity.
+Do NOT FK to source module tables.
+parish_id scalar only preferred.
+
+Same resource with different parish/sourceLocale => conflict, not silent rebinding.
+
+translation_revisions
+---------------------
+Recommended:
+id UUID PK
+translation_resource_id UUID NOT NULL
+target_locale varchar(32) NOT NULL
+revision_number int NOT NULL
+source_content_hash varchar(64) NOT NULL
+source_version_key varchar(128) NULL
+status varchar(32) NOT NULL
+payload_json nvarchar(max) NOT NULL
+provider_id varchar(64) NULL
+provider_model varchar(128) NULL
+glossary_version_id UUID NULL
+created_by_user_id UUID NULL
+approved_by_user_id UUID NULL
+created_at
+approved_at NULL
+
+No provider/job behavior yet.
+
+Revision payload is immutable after insert.
+Workflow metadata may transition later.
+
+Revision numbering unique:
+(translation_resource_id, target_locale, revision_number)
+
+Concurrency safe.
+
+Status Model
+------------
+Audit and finalize persisted vs derived status.
+
+Preferred persisted:
+QUEUED
+TRANSLATING
+MACHINE_TRANSLATED
+REVIEWED
+APPROVED
+FAILED
+
+Derived read status:
+MISSING
+SOURCE
+STALE
+APPROVED
+MACHINE_TRANSLATED
+
+Important:
+do NOT mutate historical APPROVED revision to STALE merely because source hash changed.
+Staleness should preferably be derived from:
+revision.sourceContentHash != current source hash.
+
+Document any deviation.
+
+Approval integrity:
+APPROVED requires approved_by_user_id + approved_at.
+Non-approved generally null approval metadata.
+
+Payload JSON
+------------
+nvarchar(max)
+ISJSON
+service-level JSON object validation
+bounded size, choose reasonable cap <=512 KB generic
+source adapters later impose tighter resource-specific limits.
+
+Source Hash
+-----------
+SHA-256 hex length 64, validated.
+Never hash translated output for source staleness.
+
+Target locale
+-------------
+Must be valid and differ from sourceLocale.
+Same-locale content uses source fallback, not translation revision.
+
+TranslationResourceService
+--------------------------
+Internal methods:
+getOrCreateResource(...)
+getResourceByRef(...)
+
+Idempotent same binding.
+Conflict on parish/sourceLocale rebinding.
+
+TranslationRevisionService
+--------------------------
+Internal methods:
+createRevision(...)
+getLatestRevision(...)
+getLatestApprovedRevision(...)
+
+Approved current lookup should support currentSourceHash and return stale indication if latest approved hash differs.
+
+No provider/job/admin HTTP.
+
+FK Strategy
+-----------
+Within Localization:
+revision -> resource FK allowed.
+
+Cross-module actor FKs to users with NO ACTION may be used if consistent with project convention.
+No ORM relations.
+No FK to Curriculum/QB/LearningContent.
+parish scalar preferred.
+
+UUID
+----
+Application-generated UUID v4.
+No DB UUID defaults.
+
+Permission Seeds
+----------------
+Prefer defer localization.read/manage/approve until #005 admin API.
+Document decision.
+
+No Provider/Jobs/Glossary
+-------------------------
+Do NOT add translation_jobs or glossary tables yet.
+Do NOT install Google SDK yet.
+Do NOT add provider env requirements yet.
+
+No Adapter Integration
+----------------------
+Do NOT implement Curriculum/QB/LearningContent adapters.
+Do NOT change CurriculumDelivery localized behavior.
+Do NOT change Practice tables.
+
+Tests
+-----
+Locale:
+- normalization
+- precedence
+- q parsing
+- malformed ignore
+- q=0
+- wildcard
+- duplicates
+- max entries
+- fallback vi-VN
+
+User/Parish:
+- nullable
+- valid normalized
+- invalid rejected
+- no JWT claim change
+
+Resource:
+- create/idempotent
+- conflict sourceLocale/parish
+- resource type validation
+- unique logical identity
+- no cross-parish reuse
+
+Revision:
+- revision 1/increment
+- per-target sequence
+- same locale rejected
+- invalid locale/hash rejected
+- JSON required
+- size bounded
+- latest approved matching hash
+- stale derived on mismatch
+- approval integrity
+- concurrency-safe numbering
+
+Migration integration:
+- columns exist nullable
+- translation_resources/revisions exist
+- unique/check/ISJSON/indexes
+- UUID no DB default
+- exactly these 2 Localization tables in #002
+
+Module boundary:
+LocalizationService + LocaleResolutionService only exports
+no cycles/forwardRef/entity export
+
+Regression
+----------
+Keep green:
+Auth/User
+Parish
+Curriculum
+LearningContent
+Question Bank
+Practice
+Learning Progress
+
+Quality
+-------
+Run:
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require one clean PASS.
+
+Docker
+------
+Run actual repo path:
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:localization-foundation ."
+
+PASS required.
+
+Required Report
+---------------
+Create:
+docs/LOCALIZATION_002_LOCALE_PREFERENCES_TRANSLATION_PERSISTENCE_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #001
+3 Rules applied
+4 Files created
+5 Files modified
+6 LocalizationModule
+7 Public exports
+8 Dependency graph
+9 Shared locale utility
+10 BCP47 normalization
+11 Accept-Language parser
+12 System default locale
+13 User preferredLocale
+14 Parish defaultLocale
+15 LocaleResolutionService
+16 Resolution precedence
+17 TranslationResourceType enum
+18 TranslationStatus final decision
+19 Derived vs persisted statuses
+20 translation_resources schema
+21 resource identity/unique key
+22 parish scope
+23 sourceLocale
+24 translation_revisions schema
+25 revision numbering
+26 revision immutability
+27 approval metadata
+28 stale detection
+29 payload JSON/storage
+30 sourceContentHash validation
+31 sourceVersionKey
+32 targetLocale rules
+33 TranslationResourceService
+34 TranslationRevisionService
+35 approved lookup
+36 concurrency
+37 transaction boundaries
+38 FK strategy
+39 UUID strategy
+40 zero ORM relations
+41 permission seed decision
+42 no provider/jobs/glossary
+43 no adapter integration
+44 no Practice changes
+45 security/privacy
+46 multilingual readiness
+47 microservice extraction
+48 unit tests
+49 integration tests
+50 DB e2e/migration tests
+51 existing regression
+52 pristine quality:full
+53 Docker
+54 commands
+55 validation matrix
+56 known/deferred
+57 out-of-scope
+58 LOCALIZATION #003 readiness
+59 prompt count
+60 commit recommendation
+
+Explicit PASS/FAIL
+------------------
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker
+- no cycle
+- no forwardRef
+- LocalizationService exported
+- LocaleResolutionService exported
+- no entity/repo export
+- preferredLocale nullable
+- defaultLocale nullable
+- valid locale normalize
+- invalid locale reject
+- Accept-Language q parsing
+- system fallback vi-VN
+- exactly translation_resources + translation_revisions
+- no jobs table
+- no glossary table
+- resource unique identity
+- no cross-parish reuse
+- revision unique numbering
+- immutable revision payload
+- approval integrity
+- stale derived from hash mismatch
+- target != source
+- payload ISJSON
+- payload size bounded
+- source hash validation
+- app-generated UUID
+- no DB UUID defaults
+- no Practice changes
+- no CurriculumDelivery localization behavior change
+- no provider integration
+- prior regression
+- Git compliance
+
+#003 Readiness
+--------------
+Only if no unresolved BLOCKER/HIGH.
+
+Recommend:
+LOCALIZATION #003/6 —
+PROVIDER ABSTRACTION + DB JOBS + CATHOLIC GLOSSARY FOUNDATION
+
+Do not auto-proceed.
+
+Prompt Count
+------------
+LOCALIZATION #002/6 complete
+approximately 4 prompts remain
+
+Final Response
+--------------
+Respond concisely:
+- LOCALIZATION #002 status
+- locale preferences PASS/FAIL
+- locale resolution PASS/FAIL
+- resource/revision persistence PASS/FAIL
+- stale/version model PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- report path
+
+Then exactly:
+git commit -m "feat(localization): add locale preferences and translation persistence foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

@@ -1,0 +1,902 @@
+CURSOR PROMPT — EXAM ENGINE / FORMAL ASSESSMENT #001/7
+DOMAIN AUDIT + OWNERSHIP + FORMAL ASSESSMENT LIFECYCLE DESIGN
+
+ROADMAP POSITION
+----------------
+Completed major backend phases:
+- Backend Foundation
+- CI/CD Foundation
+- Auth/User/RBAC
+- Parish + Academic Year + Catechism Level
+- Class + Student + Catechist + Parent + Enrollment
+- Curriculum + Topic + Lesson + Learning Content
+- Media
+- Question Bank
+- Practice Engine
+- Learning Progress
+- Localization / Content Translation Foundation
+
+Localization final state:
+- PHASE COMPLETE
+- FE Localization Admin READY
+- FE localized learner READY
+- Mobile localized content READY
+- multilingual delivery foundation READY
+- Practice translationRevisionId pinning READY
+- quality:full PASS
+- Docker PASS
+- BLOCKER/HIGH = 0
+
+Current major phase:
+EXAM ENGINE / FORMAL ASSESSMENT
+
+Provisional size:
+7 prompts
+
+Provisional sequence:
+#001/7 Domain audit + ownership + exam lifecycle/design
+#002/7 Persistence/schema + module boundary foundation
+#003/7 Exam authoring/configuration + assignment/publish lifecycle
+#004/7 Attempt generation + immutable snapshots + localized delivery
+#005/7 Answer submission + grading + submit/finalize + time/attempt controls
+#006/7 Results/review/access + Learning Progress integration + FE/Mobile hardening
+#007/7 Final audit + demo seed + Postman + quality/full + Docker + phase completion
+
+This #001 is AUDIT / DESIGN ONLY.
+DO NOT implement production code/schema/API.
+
+PERMANENT WORKFLOW / GIT RULES
+------------------------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST:
+- inspect current code deeply
+- create one detailed report under docs/
+- not modify production code/schema
+- not auto-proceed #002
+- NEVER run git add
+- NEVER run git commit
+- NEVER run git push
+- NEVER suggest git add
+
+Audit-only:
+normally no commit recommendation is needed.
+
+MANDATORY READING
+-----------------
+Read completely:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read final reports:
+docs/QUESTION_BANK_008_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/PRACTICE_006_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/LOCALIZATION_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CURRICULUM_006_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+
+Also inspect current Auth/RBAC, Enrollment/Class/Catechist/Parent reports.
+
+Inspect:
+src/modules/question-bank/
+src/modules/practice/
+src/modules/learning-progress/
+src/modules/localization/
+src/modules/curriculum/
+src/modules/curriculum-delivery/
+src/modules/enrollment/
+src/modules/class/
+src/modules/student/
+src/modules/parish/
+src/modules/auth/
+src/modules/access-control/
+src/modules/media/
+src/database/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+Inspect git status read-only.
+
+PRIMARY AUDIT OBJECTIVE
+-----------------------
+Design the Exam Engine bounded context before implementation.
+
+Answer:
+A. What makes Exam different from Practice in this platform?
+B. What must Exam own?
+C. What must remain owned by Question Bank?
+D. How are exams authored/configured?
+E. How are exams assigned to classes/enrollments?
+F. What lifecycle states are needed?
+G. How are attempts created?
+H. How are question versions frozen?
+I. How are question/option orders frozen?
+J. How are locale + translationRevisionId frozen?
+K. How are attempt time limits represented?
+L. How are max attempts represented?
+M. How are answers saved?
+N. Can answers be changed before final submission?
+O. What is auto-save vs final submit?
+P. What happens when time expires?
+Q. How is grading triggered?
+R. When are results/review revealed?
+S. How does Parent/Catechist/Parish Admin access work?
+T. How should Learning Progress consume Exam outcomes later?
+U. What must FE/Mobile receive?
+V. What is the exact 6/7/8-prompt plan?
+
+No implementation #001.
+
+CORE DOMAIN DISTINCTION — EXAM != PRACTICE
+------------------------------------------
+Practice:
+- learning-oriented
+- retry per question
+- immediate/terminal feedback
+- review wrong
+- flexible session generation
+- accuracy/progress dimensions
+
+Exam:
+- formal assessment
+- controlled attempt
+- fixed question snapshot
+- no per-question correctness feedback during active attempt
+- answers may be editable before submit
+- final submission boundary
+- attempt/time constraints
+- formal score/result
+- review/reveal policy controlled by exam configuration
+- auditable snapshot
+
+Do NOT implement Exam by copying Practice semantics blindly.
+
+EXAM BOUNDED CONTEXT
+--------------------
+Exam should likely own:
+- exam definitions
+- exam versions/configuration
+- exam assignments
+- exam attempts
+- attempt question snapshots
+- attempt answers
+- result/finalization metadata
+
+Question Bank remains owner:
+- question roots
+- question versions
+- options
+- correctness
+- grading service
+- source content
+- localization source hash
+
+Localization remains owner:
+- translation revisions
+- locale resolution
+- localized question display
+
+Learning Progress remains owner:
+- cross-learning read model
+- later Exam dimension integration only through Exam public service
+
+Do not cross-own.
+
+EXAM VERSIONING
+---------------
+Audit exact model.
+
+Strong recommendation:
+stable Exam root + immutable ExamVersion.
+
+Potential root:
+id
+parishId
+code
+status ACTIVE/INACTIVE
+
+Potential version:
+versionNumber
+title
+description
+instructions
+sourceLocale
+durationMinutes
+maxAttempts
+passingScorePercent nullable
+review policy
+publication state
+
+Lifecycle:
+DRAFT -> PUBLISHED -> ARCHIVED
+
+Rules:
+- DRAFT mutable
+- PUBLISHED/ARCHIVED immutable
+- clone published/archived -> new DRAFT
+- publishing newer version archives prior current published
+
+Audit and confirm.
+
+QUESTION CONFIGURATION
+----------------------
+Decide:
+- explicit ordered question list
+- selection rules
+- random pool
+- shuffle flags
+
+Strong conservative MVP:
+explicit ordered question configuration, optional shuffleQuestions/shuffleOptions only if justified.
+
+Attempt must persist exact:
+questionVersionId
+question order
+option order
+
+QUESTION VERSION PINNING
+------------------------
+Every attempt question pins exact QuestionBank questionVersionId.
+
+Historical attempt remains gradable if newer question version publishes later.
+
+Use QuestionBank public service only.
+
+LOCALIZATION SNAPSHOT
+---------------------
+At attempt creation:
+- resolve effective locale
+- resolve exact approved question translation
+- persist translationRevisionId nullable
+- persist deliveredLocale
+- never switch existing attempt to newer translation
+
+Future review/result uses pinned revision.
+
+ATTEMPT CONTENT SNAPSHOT DECISION
+---------------------------------
+Compare:
+A. IDs + immutable references only
+B. full rendered immutable snapshot JSON
+
+Formal auditability may justify richer snapshots.
+
+Report exact recommendation, considering:
+- reproducibility
+- storage
+- future microservice extraction
+- translation retention
+- legal/audit integrity
+
+EXAM ASSIGNMENT
+---------------
+Separate ExamVersion from assignment.
+
+Likely assignment:
+examVersionId
+classId
+opensAt
+closesAt
+status/availability metadata
+
+Assignment should control availability/scope, not mutate exam content.
+
+Audit class vs enrollment-specific assignment for MVP.
+
+AVAILABILITY / DEADLINE
+-----------------------
+Server authoritative.
+
+Potential:
+deadlineAt = min(startedAt + duration, assignment closesAt)
+
+Audit policy.
+
+Learner client timer is display only.
+
+LEARNER IDENTITY
+----------------
+Use enrollmentId, actor separate.
+
+Critical decision:
+Should linked Parent be allowed to start/answer/submit a FORMAL exam for linked child?
+
+Do NOT assume Practice policy.
+
+Report exactly one:
+PARENT EXAM ATTEMPT POLICY: ALLOWED
+PARENT EXAM ATTEMPT POLICY: DENIED
+PARENT EXAM ATTEMPT POLICY: PRODUCT DECISION REQUIRED
+
+If requirements do not support a confident answer, mark decision required with severity.
+
+STAFF POLICIES
+--------------
+Audit:
+- Catechist authoring/assignment/result scope
+- Parish Admin manage/publish/assign/result own parish
+- Super Admin global admin/read
+- none may impersonate learner answer submission by default
+
+PARENT RESULT ACCESS
+--------------------
+Linked Parent may potentially read child result according to release policy.
+Parent must never see class-wide results.
+
+RBAC DESIGN
+-----------
+Design minimal permissions, e.g.:
+exam.read
+exam.manage
+exam.publish
+exam.assign
+exam.result.read
+exam.attempt
+
+Avoid unnecessary permission explosion.
+
+ATTEMPT LIFECYCLE
+-----------------
+Audit:
+IN_PROGRESS
+SUBMITTED
+GRADED
+possibly VOIDED
+
+Prefer auto-submit reason metadata rather than separate AUTO_SUBMITTED status unless useful.
+
+ATTEMPT START
+-------------
+Validate:
+- assignment open
+- enrollment eligible
+- max attempts
+- one active attempt
+- exact examVersion
+- exact question versions
+- exact question/option ordering
+- exact locale/translation revisions
+- deadline
+- atomic persistence
+
+ONE ACTIVE ATTEMPT
+------------------
+Strong recommendation:
+max one IN_PROGRESS attempt per enrollment + assignment.
+
+Concurrent starts must be idempotent/rejected safely.
+
+START IDEMPOTENCY
+-----------------
+Use clientRequestId UUID.
+
+Same requestId/same semantics -> same attempt.
+Same requestId/conflicting semantics -> 409.
+
+TIME EXPIRY
+-----------
+Design correctness without requiring a background scheduler.
+
+Potential:
+- every mutation checks deadline
+- expired attempt is finalized/autosubmitted using saved answers
+- GET may trigger safe lazy finalization if needed
+
+Audit exact transaction model.
+
+ANSWER MODEL
+------------
+Exam differs from Practice.
+
+Need decide:
+- one current answer overwritten until submit
+- immutable answer revision history
+
+Formal audit may favor revision history.
+Mobile/idempotency may favor clientAnswerId.
+
+Audit best model.
+
+ANSWER SAVE
+-----------
+No grading feedback while active.
+
+Validate selected option IDs belong pinned question.
+
+Answer may be edited before submit if policy allows.
+
+After submit: immutable.
+
+UNANSWERED QUESTIONS
+--------------------
+Submission may include unanswered unless product explicitly requires all.
+
+Treat unanswered as zero/incorrect during grading.
+
+SUBMIT / FINALIZE
+-----------------
+Explicit submit should:
+- lock attempt
+- freeze final saved answers
+- grade server-side via QuestionBankService only
+- compute result
+- persist result snapshot
+- mark final state
+- be idempotent
+
+No direct correct-answer SQL.
+
+GRADING / SCORE
+---------------
+QuestionBank grading only.
+Current types auto-gradable.
+
+MVP likely equal weight:
+correctCount
+questionCount
+scorePercent
+
+Do not invent weighted scoring without requirement.
+
+PASS / FAIL
+-----------
+Audit whether passingScorePercent is required.
+
+If unclear, use nullable policy or defer pass/fail.
+
+Do not invent theological/behavioral grading.
+
+RESULT SNAPSHOT
+---------------
+Persist historical:
+questionCount
+correctCount
+scorePercent
+submittedAt
+gradedAt
+pass/fail only if configured
+
+Do not recompute historical result from mutable config.
+
+REVIEW / REVEAL POLICY
+----------------------
+Critical.
+
+Design configurable policy:
+- score visibility
+- correct-answer visibility
+- explanation visibility
+- release timing NONE / AFTER_SUBMIT / AFTER_ASSIGNMENT_CLOSE etc.
+
+Active attempt must never leak:
+correct answers
+correctness
+explanations that reveal answer
+score
+
+EXAM SOURCE CONTENT LOCALIZATION
+--------------------------------
+Exam title/description/instructions are themselves translatable.
+
+Need architecture that avoids cycle:
+Exam -> Localization for attempt display
+Localization -> Exam adapter would cycle
+
+Audit options:
+- Exam metadata source-only MVP
+- externally supplied Localization source snapshot
+- separate delivery composition layer
+- new adapter registration mechanism without Localization importing Exam
+
+Resolve exact design in #001.
+
+LEARNING PROGRESS INTEGRATION
+-----------------------------
+Exam must NOT write LearningProgress tables.
+
+Later LearningProgress can compose Exam public summary:
+examsCompleted
+latestScore
+other stable dimensions if defined
+
+Current LearningProgress exam field is reserved null.
+
+QUESTION BANK INTEGRATION
+-------------------------
+Use public QuestionBankService only for:
+- authoring validation
+- immutable snapshots
+- learner projection
+- grading
+
+No repo/entity imports.
+
+CURRICULUM / CLASS CONTEXT
+--------------------------
+Audit whether Exam links to curriculumId optionally.
+
+Primary assignment target likely classId.
+
+Class provides:
+parish
+academic year
+catechism level
+
+Historical attempt should retain assignment/class/enrollment context.
+
+TABLE CANDIDATES — AUDIT ONLY
+-----------------------------
+Evaluate:
+exams
+exam_versions
+exam_version_questions
+exam_assignments
+exam_attempts
+exam_attempt_questions
+exam_answer_revisions or exam_answers
+
+Determine whether result fields belong on exam_attempts rather than separate exam_results.
+
+Mark each REQUIRED / DEFERRED / REJECTED.
+
+No schema changes #001.
+
+CROSS-MODULE FK POLICY
+----------------------
+Prefer scalar IDs without ORM relation to:
+QuestionBank
+Localization
+Curriculum
+
+Within Exam-owned tables, SQL FK fine.
+
+Audit Class/Enrollment FK strategy.
+
+SECURITY / MINORS
+-----------------
+Verify design prevents:
+- Parent class-wide result view
+- unassigned Catechist result access
+- cross-parish exam access
+- admin learner impersonation
+- active-attempt answer leakage
+- client-computed score
+- client clock authority
+
+OFFLINE / MOBILE
+----------------
+Design:
+- start online
+- answer saves idempotent
+- client may cache locally
+- server deadline authoritative
+- resume returns serverTime/deadlineAt
+- final submit online
+- reconnect after expiry handled deterministically
+
+RESUME CONTRACT
+---------------
+Attempt GET should include:
+serverTime
+startedAt
+deadlineAt
+status
+questions
+saved answers
+localization metadata
+
+CONCURRENCY
+-----------
+Design for:
+- concurrent start
+- concurrent answer saves
+- answer-save vs submit
+- submit replay
+- expiry vs submit
+
+Use clear transaction/locking strategy.
+
+ABANDON / VOID
+--------------
+Do not copy Practice abandon.
+
+Audit whether learner abandon is allowed.
+Formal attempt likely should still consume attempt if abandoned.
+
+Admin void/correction can be deferred unless requirement exists.
+
+MANUAL GRADING
+--------------
+Current QB types are auto-gradable.
+No manual grading workflow in MVP.
+
+RESULT STATISTICS
+-----------------
+Avoid analytics overbuild.
+Minimal class result view may include:
+attempted/completed
+average score
+latest/best score only if policy clearly defined
+
+Audit.
+
+FE ADMIN CONTRACT
+-----------------
+Future needs:
+create/edit draft
+add/reorder questions
+configure duration/attempt/review
+publish/clone
+assign/schedule
+list attempts/results
+
+FE LEARNER CONTRACT
+-------------------
+available exams
+start/resume
+save answer
+submit
+result/review
+server deadline
+locale metadata
+
+MOBILE CONTRACT
+---------------
+idempotent start
+idempotent answer save
+resume
+server deadline
+localized pinned snapshot
+safe reconnect
+
+ERROR MODEL
+-----------
+Design:
+ExamNotFound
+ExamVersionNotFound
+ExamVersionNotDraft
+ExamVersionNotPublished
+ExamAssignmentNotFound
+ExamAssignmentNotOpen
+ExamAssignmentClosed
+ExamAttemptLimitReached
+ExamAttemptAlreadyActive
+ExamAttemptNotFound
+ExamAttemptNotInProgress
+ExamAttemptExpired
+ExamAnswerInvalid
+ExamSubmitConflict
+ExamAccessDenied
+ExamReviewNotAvailable
+
+LOGGING / PRIVACY
+-----------------
+Log IDs/status transitions only.
+Do not log answer content/correct answers/question content.
+
+TIMEZONE
+--------
+DB timestamps UTC.
+Locale != timezone.
+FE formats local time.
+
+DEMO / POSTMAN FUTURE
+---------------------
+Final phase should demonstrate:
+draft/publish
+assignment
+learner start
+localized snapshot
+answer save/resume
+submit/grade
+result
+attempt retry if allowed
+review policy
+staff/parent access
+
+TEST STRATEGY
+-------------
+Plan:
+unit
+migration
+integration
+DB e2e
+concurrency
+deadline/expiry
+idempotency
+localization pinning
+security
+no answer leakage
+grading regression
+
+Use fake clock where practical.
+
+FINAL PROMPT COUNT
+------------------
+Recommend exact:
+6 / 7 / 8
+
+Provisional = 7.
+
+STRICT NO IMPLEMENTATION
+------------------------
+Do NOT create/modify production:
+entities
+migrations
+controllers
+services
+permissions
+seeds
+Postman
+Docker
+dependencies
+
+Only audit/report.
+
+VALIDATION
+----------
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+REQUIRED REPORT
+---------------
+Create:
+docs/EXAM_001_DOMAIN_AUDIT_AND_FORMAL_ASSESSMENT_DESIGN_REPORT.md
+
+Required sections:
+1 Objective
+2 Current roadmap position
+3 Existing reusable foundations
+4 Practice vs Exam distinction
+5 Exam bounded context
+6 What Exam must NOT own
+7 Exam root identity
+8 Exam version model
+9 Root lifecycle
+10 Version lifecycle
+11 Authoring mutation rules
+12 Question configuration model
+13 Randomization decision
+14 Question version pinning
+15 Option order snapshot
+16 Locale resolution
+17 Question translation pinning
+18 Exam metadata localization architecture
+19 Attempt content snapshot decision
+20 Assignment model
+21 Assignment target decision
+22 Assignment scheduling
+23 Assignment lifecycle
+24 Enrollment/learner identity
+25 Parent exam-taking policy
+26 Catechist policy
+27 Parish Admin policy
+28 Super Admin policy
+29 Parent result access
+30 RBAC permissions
+31 Attempt lifecycle
+32 Attempt start flow
+33 One-active-attempt policy
+34 Attempt numbering
+35 Max-attempt policy
+36 Start idempotency
+37 Duration/deadline model
+38 Assignment close vs active attempt
+39 Time expiry/autosubmit
+40 Answer persistence model
+41 Answer edit/history decision
+42 Answer save idempotency
+43 Submit/finalize flow
+44 Submit concurrency
+45 Unanswered behavior
+46 Grading integration
+47 Score model
+48 Passing threshold
+49 Result snapshot
+50 Review/reveal policy
+51 Active attempt leakage prevention
+52 Result/review DTO concept
+53 Question Bank integration
+54 Localization integration
+55 Learning Progress integration
+56 Curriculum linkage
+57 Class/academic context
+58 Historical stability
+59 Table candidates
+60 Final table ownership plan
+61 Cross-module FK policy
+62 Module dependency graph
+63 Microservice extraction
+64 Security/minors
+65 Offline/mobile
+66 Resume/server-time contract
+67 Concurrency strategy
+68 Abandon policy
+69 Void/manual correction
+70 Exam statistics
+71 FE admin contract
+72 FE learner contract
+73 Mobile contract
+74 Error model
+75 Logging/privacy
+76 Timezone
+77 Demo/Postman plan
+78 Test strategy
+79 Risks/open questions
+80 BLOCKER/HIGH/MEDIUM/LOW
+81 Files created
+82 Files modified
+83 Commands
+84 Validation
+85 Out-of-scope
+86 Final prompt count
+87 EXAM #002 readiness
+88 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+EXAM DOMAIN DESIGN READY: YES/NO
+EXAM VERSIONING MODEL READY: YES/NO
+QUESTION SNAPSHOT MODEL READY: YES/NO
+LOCALIZATION SNAPSHOT MODEL READY: YES/NO
+ASSIGNMENT MODEL READY: YES/NO
+ATTEMPT LIFECYCLE READY: YES/NO
+TIME/EXPIRY MODEL READY: YES/NO
+ANSWER/SUBMISSION MODEL READY: YES/NO
+GRADING/RESULT MODEL READY: YES/NO
+REVIEW/REVEAL POLICY READY: YES/NO
+PARENT/STAFF ACCESS MODEL READY: YES/NO
+LEARNING PROGRESS INTEGRATION MODEL READY: YES/NO
+FE/MOBILE EXAM CONTRACT FOUNDATION READY: YES/NO
+PERSISTENCE REQUIRED NOW: YES/NO
+FINAL RECOMMENDED PROMPT COUNT: 6 / 7 / 8
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+CRITICAL GATE — PARENT EXAM POLICY
+----------------------------------
+Report exactly one:
+PARENT EXAM ATTEMPT POLICY: ALLOWED
+PARENT EXAM ATTEMPT POLICY: DENIED
+PARENT EXAM ATTEMPT POLICY: PRODUCT DECISION REQUIRED
+
+Do not hide ambiguity.
+
+If product requirements do not support a confident choice, mark PRODUCT DECISION REQUIRED with severity.
+
+#002 READINESS
+--------------
+Only if no unresolved BLOCKER/HIGH and critical policies are ready.
+
+Likely:
+EXAM #002 —
+PERSISTENCE + MODULE BOUNDARY + VERSION/ASSIGNMENT/ATTEMPT SCHEMA FOUNDATION
+
+Do not auto-proceed.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- EXAM #001 status
+- Exam vs Practice boundary
+- Parent Exam policy
+- Exam versioning decision
+- assignment model
+- attempt/time model
+- answer/submit model
+- localization snapshot model
+- recommended prompt count
+- BLOCKER/HIGH
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed automatically.

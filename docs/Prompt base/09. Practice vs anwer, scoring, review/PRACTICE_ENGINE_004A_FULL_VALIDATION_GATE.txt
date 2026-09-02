@@ -1,0 +1,287 @@
+CURSOR PROMPT — PRACTICE ENGINE #004A
+VALIDATION GATE: FULL DB / E2E / DOCKER COMPLETION FOR #004
+
+Context
+-------
+PRACTICE ENGINE #004/6 implementation is complete for:
+- answer submission
+- Question Bank grading
+- retry/finalization
+- feedback reveal
+- auto-completion
+- review-wrong child sessions
+- idempotency
+
+However the #004 report could not complete:
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full
+- Docker production build
+
+because MSSQL/Docker was unavailable in the agent environment.
+
+This prompt is a VALIDATION/CORRECTIVE GATE only.
+
+Do NOT implement PRACTICE #005 progress/statistics yet.
+Do NOT broaden feature scope unless validation exposes a real bug.
+
+Permanent rules
+---------------
+Workflow:
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+Cursor MUST NEVER run:
+git add
+git commit
+git push
+
+Cursor MUST NOT suggest git add.
+
+If tracked fixes are required, final response may print exactly ONE line:
+
+git commit -m "fix(practice): stabilize answer review validation"
+
+Do not execute it.
+
+Mandatory reading
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/PRACTICE_004_ANSWER_GRADING_RETRY_REVIEW_REPORT.md
+docs/PRACTICE_003_GENERATION_SESSION_DELIVERY_REPORT.md
+docs/PRACTICE_002_SCHEMA_ENTITIES_MIGRATIONS_REPORT.md
+
+Inspect current git status read-only.
+
+Primary objective
+-----------------
+Run the missing validation gates in the user's real local environment and close PRACTICE #004 only if they pass.
+
+Required:
+1. MSSQL reachable
+2. pristine DB reset
+3. migrations
+4. integration tests
+5. DB e2e
+6. one clean quality:full
+7. Docker production build
+
+If any command fails:
+- diagnose exact root cause
+- fix only if it is a code/test/config issue within current scope
+- rerun the relevant gate
+- do not hide or relabel failures
+
+Do not modify feature behavior unless validation proves a real bug.
+
+Environment check
+-----------------
+Before changing code, inspect:
+
+node --version
+npm --version
+
+Check local MSSQL/Docker status using project conventions.
+
+Use WSL Docker command style already used successfully in previous phases.
+
+Do not introduce Docker Desktop.
+
+Expected DB port:
+use the actual project config; previous local stack commonly used MSSQL published port 14330.
+
+Do not hard-code if current env differs.
+
+Validation sequence
+-------------------
+Run:
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+Then:
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Finally:
+
+npm run test:db:prepare -- --reset
+npm run quality:full
+
+Require:
+ONE CLEAN quality:full exit code 0.
+
+Docker
+------
+Run:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:practice-answer-review ."
+
+Use the actual repository path.
+Do not copy an incorrect placeholder literally.
+
+Require PASS.
+
+Targeted validation
+-------------------
+Make sure the full DB-backed suites actually execute the #004 scenarios:
+
+- answer submission happy path
+- linked Parent submit
+- Catechist denied
+- Parish Admin denied
+- idempotent answer replay
+- answer id mismatch conflict
+- retry/finalization
+- auto-completion
+- feedback reveal
+- review-wrong create
+- review no-wrong
+- review replay
+- archived-version grading/feedback compatibility
+
+If the written tests are not being discovered, fix test naming/config rather than calling PASS.
+
+Environment-only failure
+------------------------
+If Docker/MSSQL genuinely cannot be started in the user's local environment:
+- do NOT claim PASS
+- document exact command/output
+- mark PRACTICE #004 NOT ACCEPTED
+- do not recommend #005
+
+Do not use "environment issue" as a blanket excuse without checking actual availability.
+
+No feature expansion
+--------------------
+Do NOT implement:
+- progress API
+- progress statistics
+- aggregate progress tables
+- Exam
+- STUDENT role
+- teacher-assigned practice
+
+Those belong later.
+
+Required report
+---------------
+Create:
+
+docs/PRACTICE_004A_FULL_VALIDATION_GATE_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited from #004
+3 Environment audit
+4 MSSQL availability
+5 Docker availability
+6 Files changed
+7 Validation fixes if any
+8 Unit result
+9 DB-free e2e result
+10 pristine DB reset
+11 migration result
+12 integration result
+13 DB e2e result
+14 quality:full clean run
+15 Docker production build
+16 #004 targeted scenario verification
+17 Existing regression
+18 Security regression
+19 Known/deferred
+20 PRACTICE #004 acceptance decision
+21 PRACTICE #005 readiness
+22 Commands
+23 Git compliance
+24 Commit recommendation
+
+Explicit PASS/FAIL
+------------------
+Report:
+- format
+- lint
+- typecheck
+- unit
+- DB-free e2e
+- build
+- npm audit
+- quality
+- MSSQL reachable
+- pristine DB reset
+- migrations
+- integration
+- DB e2e
+- quality:full ONE CLEAN RUN
+- Docker build
+- answer flow DB-backed
+- retry DB-backed
+- feedback DB-backed
+- auto-complete DB-backed
+- review-wrong DB-backed
+- answer idempotency DB-backed
+- archived grading/feedback regression
+- Practice #003 regression
+- Question Bank regression
+- no #005 scope added
+- Git rule compliance
+
+Acceptance gate
+---------------
+Only if:
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- Docker PASS
+- no unresolved BLOCKER/HIGH
+
+Then state:
+
+PRACTICE ENGINE #004/6 ACCEPTED
+
+PRACTICE #005 READY: YES
+
+Otherwise:
+
+PRACTICE ENGINE #004/6 NOT ACCEPTED
+
+PRACTICE #005 READY: NO
+
+and list blockers.
+
+Final response
+--------------
+Respond concisely:
+- PRACTICE #004A status
+- MSSQL PASS/FAIL
+- integration PASS/FAIL
+- DB e2e PASS/FAIL
+- quality:full PASS/FAIL
+- Docker PASS/FAIL
+- unresolved BLOCKER/HIGH
+- PRACTICE #004 ACCEPTED YES/NO
+- #005 READY YES/NO
+- report path
+
+If tracked code fixes exist, print exactly one line:
+git commit -m "fix(practice): stabilize answer review validation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed to #005 automatically.
