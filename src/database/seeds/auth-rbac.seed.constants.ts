@@ -218,6 +218,21 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Manage learning progress',
     description: 'Local sample permission to update linked learner lesson progress.',
   },
+  {
+    code: 'localization.read',
+    name: 'Read localization',
+    description: 'Local sample permission to read translation resources and revisions.',
+  },
+  {
+    code: 'localization.manage',
+    name: 'Manage localization',
+    description: 'Local sample permission to request and review translations.',
+  },
+  {
+    code: 'localization.approve',
+    name: 'Approve localization',
+    description: 'Local sample permission to approve translations for learner delivery.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -256,6 +271,9 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'questions.publish',
     'practice.read',
     'learning-progress.read',
+    'localization.read',
+    'localization.manage',
+    'localization.approve',
   ],
   CATECHIST: [
     'classes.read',
@@ -273,6 +291,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'questions.read',
     'practice.read',
     'learning-progress.read',
+    'localization.read',
   ],
   PARENT: [
     'classes.read',

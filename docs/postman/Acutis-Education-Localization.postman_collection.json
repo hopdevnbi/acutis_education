@@ -1,0 +1,624 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-localization-collection",
+    "name": "Acutis Education — Localization",
+    "description": "Local manual verification for localization admin workflow, RBAC, glossary governance, and learner localized delivery.\n\nPrerequisites (run in order on dev DB):\n1. npm run migration:run\n2. npm run seed:auth-rbac\n3. npm run seed:parish-academic\n4. npm run seed:class-enrollment\n5. npm run seed:curriculum-demo\n6. npm run seed:question-bank-demo\n7. npm run seed:localization-demo\n8. npm run start:dev\n\nDemo actors: admin@local.catechism.test, catechist@local.catechism.test, parent@local.catechism.test, superadmin@local.catechism.test (password {{adminPassword}}).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "adminEmail", "value": "admin@local.catechism.test" },
+    { "key": "adminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "catechistPassword", "value": "LocalDev!Sample2026" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "parentPassword", "value": "LocalDev!Sample2026" },
+    { "key": "superAdminEmail", "value": "superadmin@local.catechism.test" },
+    { "key": "accessToken", "value": "" },
+    { "key": "parishId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "translationResourceId", "value": "" },
+    { "key": "revisionId", "value": "" },
+    { "key": "jobId", "value": "" },
+    { "key": "glossaryVersionId", "value": "" },
+    { "key": "glossaryTermId", "value": "" },
+    { "key": "practiceSessionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Setup",
+      "item": [
+        {
+          "name": "Health check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('health 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin login 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve demo parish",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/parishes?search=demo-parish&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const parish = (body.items || []).find((p) => p.code === 'demo-parish');",
+                  "if (parish) pm.collectionVariables.set('parishId', parish.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve demo class",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/parishes/{{parishId}}/classes?search=demo-class-a&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const cls = (body.items || []).find((c) => c.code === 'demo-class-a');",
+                  "if (cls) pm.collectionVariables.set('classId', cls.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve demo enrollment (parent)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{parentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List parent enrollments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/me/enrollments?limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if ((body.items || []).length > 0) pm.collectionVariables.set('enrollmentId', body.items[0].id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Admin — Resources",
+      "item": [
+        {
+          "name": "List translation resources",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?parishId={{parishId}}&limit=20"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/auth/login',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ email: pm.collectionVariables.get('adminEmail'), password: pm.collectionVariables.get('adminPassword') }) }",
+                  "}, (err, res) => { pm.collectionVariables.set('accessToken', res.json().accessToken); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List resources with targetLocale",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?parishId={{parishId}}&targetLocale=en-US&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if ((body.items || []).length > 0) pm.collectionVariables.set('translationResourceId', body.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List APPROVED resources (page 1)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?parishId={{parishId}}&targetLocale=en-US&translationStatus=APPROVED&page=1&limit=5"
+          }
+        },
+        {
+          "name": "List APPROVED resources (page 2)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?parishId={{parishId}}&targetLocale=en-US&translationStatus=APPROVED&page=2&limit=5"
+          }
+        },
+        {
+          "name": "Get resource detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources/{{translationResourceId}}?targetLocale=en-US"
+          }
+        },
+        {
+          "name": "Preview localized resource",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources/{{translationResourceId}}/preview?locale=en-US"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Admin — Jobs and revisions",
+      "item": [
+        {
+          "name": "Request translation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"targetLocale\": \"en-US\"\n}" },
+            "url": "{{baseUrl}}/localization/resources/{{translationResourceId}}/translations"
+          }
+        },
+        {
+          "name": "List translation jobs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/jobs?limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if ((body.items || []).length > 0) pm.collectionVariables.set('jobId', body.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/jobs/{{jobId}}"
+          }
+        },
+        {
+          "name": "List MACHINE_TRANSLATED resources",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?parishId={{parishId}}&targetLocale=en-US&translationStatus=MACHINE_TRANSLATED&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const item = (body.items || [])[0];",
+                  "if (item && item.latestRevisionId) pm.collectionVariables.set('revisionId', item.latestRevisionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get revision detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/revisions/{{revisionId}}"
+          }
+        },
+        {
+          "name": "Review revision",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"question\": {\n      \"prompt\": \"Reviewed English prompt (demo)\"\n    }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/localization/revisions/{{revisionId}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('revisionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve revision",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/revisions/{{revisionId}}/approve"
+          }
+        },
+        {
+          "name": "Bulk request translations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetLocale\": \"en-US\",\n  \"translationResourceIds\": [\"{{translationResourceId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/localization/bulk-translations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 RBAC",
+      "item": [
+        {
+          "name": "Parent denied localization list",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/resources?limit=5"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/auth/login',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ email: pm.collectionVariables.get('parentEmail'), password: pm.collectionVariables.get('parentPassword') }) }",
+                  "}, (err, res) => { pm.collectionVariables.set('accessToken', res.json().accessToken); });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('parent denied', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Catechist denied request translation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"targetLocale\": \"en-US\"\n}" },
+            "url": "{{baseUrl}}/localization/resources/{{translationResourceId}}/translations"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/auth/login',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ email: pm.collectionVariables.get('catechistEmail'), password: pm.collectionVariables.get('catechistPassword') }) }",
+                  "}, (err, res) => { pm.collectionVariables.set('accessToken', res.json().accessToken); });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('catechist denied', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Glossary (super admin)",
+      "item": [
+        {
+          "name": "Super admin login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create glossary draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceLocale\": \"vi-VN\",\n  \"targetLocale\": \"en-US\"\n}"
+            },
+            "url": "{{baseUrl}}/localization/glossaries"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('glossaryVersionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add glossary term",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceTerm\": \"Thiên Chúa\",\n  \"targetTerm\": \"God\",\n  \"notes\": \"Demo glossary term\"\n}"
+            },
+            "url": "{{baseUrl}}/localization/glossaries/{{glossaryVersionId}}/terms"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('glossaryTermId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List glossary terms",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/glossaries/{{glossaryVersionId}}/terms"
+          }
+        },
+        {
+          "name": "Publish glossary",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/localization/glossaries/{{glossaryVersionId}}/publish"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Learner localized delivery",
+      "item": [
+        {
+          "name": "Parent login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{parentPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get localized curriculum tree",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Accept-Language", "value": "en-US" }
+            ],
+            "url": "{{baseUrl}}/classes/{{classId}}/curriculum-tree"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('localized tree', () => pm.expect(pm.response.json().resolvedLocale).to.eql('en-US'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create localized practice session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locale\": \"en-US\",\n  \"questionCount\": 1,\n  \"questionTypes\": [\"SINGLE_CHOICE\"]\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/practice-sessions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('practiceSessionId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get practice session (pinned locale)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/practice-sessions/{{practiceSessionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('delivered locale', () => pm.expect(body.deliveredLocale).to.eql('en-US'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

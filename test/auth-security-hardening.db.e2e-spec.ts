@@ -80,6 +80,8 @@ describe('Auth security hardening (db e2e)', () => {
 describe('Auth login rate limiting (db e2e)', () => {
   let application: INestApplication;
   let userAccountService: UserAccountService;
+  const originalLoginThrottleLimit = process.env['AUTH_LOGIN_THROTTLE_LIMIT'];
+  const originalLoginThrottleTtlMs = process.env['AUTH_LOGIN_THROTTLE_TTL_MS'];
 
   beforeAll(async () => {
     process.env['AUTH_LOGIN_THROTTLE_LIMIT'] = '2';
@@ -107,6 +109,18 @@ describe('Auth login rate limiting (db e2e)', () => {
 
   afterAll(async () => {
     await application.close();
+
+    if (originalLoginThrottleLimit === undefined) {
+      delete process.env['AUTH_LOGIN_THROTTLE_LIMIT'];
+    } else {
+      process.env['AUTH_LOGIN_THROTTLE_LIMIT'] = originalLoginThrottleLimit;
+    }
+
+    if (originalLoginThrottleTtlMs === undefined) {
+      delete process.env['AUTH_LOGIN_THROTTLE_TTL_MS'];
+    } else {
+      process.env['AUTH_LOGIN_THROTTLE_TTL_MS'] = originalLoginThrottleTtlMs;
+    }
   });
 
   it('returns 429 when login attempts exceed the configured limit', async () => {

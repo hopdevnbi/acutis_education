@@ -1,7 +1,10 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AccessControlModule } from '../access-control/access-control.module';
+import { AuthModule } from '../auth/auth.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
 import { LearningContentModule } from '../learning-content/learning-content.module';
+import { ParishModule } from '../parish/parish.module';
 import { QuestionBankModule } from '../question-bank/question-bank.module';
 import {
   CurriculumLessonTranslationAdapter,
@@ -12,6 +15,8 @@ import {
 import { LearningContentDocumentTranslationAdapter } from './adapters/learning-content-resource.adapter';
 import { QuestionBankVersionTranslationAdapter } from './adapters/question-bank-resource.adapter';
 import { TranslationConfigService } from './config/translation-config.service';
+import { LocalizationController } from './controllers/localization.controller';
+import { LocalizationGlossaryController } from './controllers/localization-glossary.controller';
 import { CatholicGlossaryTermEntity } from './entities/catholic-glossary-term.entity';
 import { CatholicGlossaryVersionEntity } from './entities/catholic-glossary-version.entity';
 import { TranslationJobEntity } from './entities/translation-job.entity';
@@ -23,6 +28,8 @@ import { TranslationProviderRegistry } from './providers/translation-provider-re
 import { CatholicGlossaryService } from './services/catholic-glossary.service';
 import { LocaleResolutionService } from './services/locale-resolution.service';
 import { LocalizedResourceResolutionService } from './services/localized-resource-resolution.service';
+import { LocalizationAccessService } from './services/localization-access.service';
+import { LocalizationAdminService } from './services/localization-admin.service';
 import { LocalizationService } from './services/localization.service';
 import { TranslationJobProcessorService } from './services/translation-job-processor.service';
 import { TranslationJobService } from './services/translation-job.service';
@@ -40,10 +47,14 @@ import { TranslationSourceRegistryService } from './services/translation-source-
       CatholicGlossaryVersionEntity,
       CatholicGlossaryTermEntity,
     ]),
+    AccessControlModule,
+    AuthModule,
+    ParishModule,
     CurriculumModule,
     LearningContentModule,
     QuestionBankModule,
   ],
+  controllers: [LocalizationController, LocalizationGlossaryController],
   providers: [
     TranslationConfigService,
     LocaleResolutionService,
@@ -55,6 +66,8 @@ import { TranslationSourceRegistryService } from './services/translation-source-
     TranslationSourceRegistryService,
     TranslationSourceRegistryBootstrapService,
     LocalizedResourceResolutionService,
+    LocalizationAccessService,
+    LocalizationAdminService,
     CurriculumMetadataTranslationAdapter,
     CurriculumVersionTranslationAdapter,
     CurriculumTopicTranslationAdapter,

@@ -184,3 +184,91 @@ export interface CatholicGlossaryTermSnapshot {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
+
+export interface TranslationResourceListFilter {
+  readonly resourceType?: string;
+  readonly sourceLocale?: string;
+  readonly targetLocale?: string;
+  readonly translationStatus?: string;
+  readonly parishIds?: readonly string[] | null;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface TranslationResourceListItem {
+  readonly id: string;
+  readonly resourceType: string;
+  readonly resourceId: string;
+  readonly parishId: string | null;
+  readonly sourceLocale: string;
+  readonly targetLocale: string | null;
+  readonly effectiveStatus: string | null;
+  readonly currentSourceContentHash: string | null;
+  readonly latestRevisionId: string | null;
+  readonly latestRevisionStatus: string | null;
+  readonly latestRevisionNumber: number | null;
+  readonly latestRevisionSourceContentHash: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface TranslationResourceListResult {
+  readonly items: readonly TranslationResourceListItem[];
+  readonly page: number;
+  readonly limit: number;
+  readonly total: number;
+}
+
+export interface TranslationResourceDetail {
+  readonly resource: TranslationResourceSnapshot;
+  readonly targetLocale: string | null;
+  readonly effectiveStatus: string | null;
+  readonly currentSourceContentHash: string | null;
+  readonly currentSourceVersionKey: string | null;
+  readonly latestRevision: TranslationRevisionSnapshot | null;
+  readonly latestJob: TranslationJobSnapshot | null;
+}
+
+export interface TranslationRevisionDetail {
+  readonly revision: TranslationRevisionSnapshot;
+  readonly resource: TranslationResourceSnapshot;
+  readonly payload: Record<string, unknown>;
+  readonly effectiveStatus: string;
+  readonly isStale: boolean;
+  readonly currentSourceContentHash: string | null;
+}
+
+export interface TranslationJobListFilter {
+  readonly translationResourceId?: string;
+  readonly targetLocale?: string;
+  readonly status?: string;
+  readonly parishIds?: readonly string[] | null;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface TranslationJobListResult {
+  readonly items: readonly TranslationJobSnapshot[];
+  readonly page: number;
+  readonly limit: number;
+  readonly total: number;
+}
+
+export interface SyncTranslationResourceInput {
+  readonly resourceType: string;
+  readonly resourceId: string;
+}
+
+export interface RequestTranslationResult {
+  readonly kind: 'queued' | 'existing_active' | 'short_circuit_revision';
+  readonly job?: TranslationJobSnapshot;
+  readonly revision?: TranslationRevisionSnapshot;
+  readonly httpStatus: 200 | 201;
+}
+
+export interface BulkTranslationResult {
+  readonly queuedCount: number;
+  readonly existingCount: number;
+  readonly skippedCount: number;
+  readonly results: readonly RequestTranslationResult[];
+}

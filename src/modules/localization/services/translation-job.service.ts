@@ -1,13 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { parseLocale } from '../../../common/locale';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import {
+  LOCALIZATION_LIST_DEFAULT_LIMIT,
+  LOCALIZATION_LIST_DEFAULT_PAGE,
+  LOCALIZATION_LIST_MAX_LIMIT,
+} from '../constants/localization-admin.constants';
 import { TranslationConfigService } from '../config/translation-config.service';
 import { TranslationJobEntity } from '../entities/translation-job.entity';
 import { TranslationResourceEntity } from '../entities/translation-resource.entity';
 import { TranslationRevisionEntity } from '../entities/translation-revision.entity';
 import {
   isActiveTranslationJobStatus,
+  isTranslationJobStatus,
   TranslationJobStatus,
 } from '../enums/translation-job-status.enum';
 import { TranslationRevisionStatus } from '../enums/translation-revision-status.enum';
@@ -19,6 +26,8 @@ import {
 import type {
   QueueTranslationJobInput,
   QueueTranslationJobResult,
+  TranslationJobListFilter,
+  TranslationJobListResult,
   TranslationJobSnapshot,
   TranslationRevisionSnapshot,
 } from '../interfaces/localization.interface';
@@ -320,6 +329,88 @@ export class TranslationJobService {
       .execute();
 
     return result.affected ?? 0;
+  }
+
+  async listJobs(filter: TranslationJobListFilter): Promise<TranslationJobListResult> {
+    const page = Math.max(LOCALIZATION_LIST_DEFAULT_PAGE, filter.page);
+    const limit = Math.min(
+      LOCALIZATION_LIST_MAX_LIMIT,
+      Math.max(1, filter.limit ?? LOCALIZATION_LIST_DEFAULT_LIMIT),
+    );
+    const offset = (page - 1) * limit;
+    const queryBuilder = this.translationJobRepository
+      .createQueryBuilder('job')
+      .innerJoin(TranslationResourceEntity, 'resource', 'resource.id = job.translationResourceId')
+      .orderBy('job.createdAt', 'DESC');
+
+    if (filter.translationResourceId !== undefined) {
+      queryBuilder.andWhere('job.translationResourceId = :translationResourceId', {
+        translationResourceId: this.parseTranslationResourceId(filter.translationResourceId),
+      });
+    }
+
+    if (filter.targetLocale !== undefined) {
+      queryBuilder.andWhere('job.targetLocale = :targetLocale', {
+        targetLocale: parseLocale(filter.targetLocale),
+      });
+    }
+
+    if (filter.status !== undefined) {
+      if (!isTranslationJobStatus(filter.status)) {
+        return { items: [], page, limit, total: 0 };
+      }
+
+      queryBuilder.andWhere('job.status = :status', { status: filter.status });
+    }
+
+    if (filter.parishIds !== null && filter.parishIds !== undefined) {
+      if (filter.parishIds.length === 0) {
+        return { items: [], page, limit, total: 0 };
+      }
+
+      queryBuilder.andWhere('resource.parishId IN (:...parishIds)', {
+        parishIds: filter.parishIds.map((parishId) => normalizeUuid(parishId)),
+      });
+    }
+
+    const total = await queryBuilder.getCount();
+    const jobs = await queryBuilder.skip(offset).take(limit).getMany();
+
+    return {
+      items: jobs.map((job) => toTranslationJobSnapshot(job)),
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getJobById(
+    jobId: string,
+    parishIds?: readonly string[] | null,
+  ): Promise<TranslationJobSnapshot> {
+    const normalizedJobId = this.parseJobId(jobId);
+    const queryBuilder = this.translationJobRepository
+      .createQueryBuilder('job')
+      .innerJoin(TranslationResourceEntity, 'resource', 'resource.id = job.translationResourceId')
+      .where('job.id = :jobId', { jobId: normalizedJobId });
+
+    if (parishIds !== null && parishIds !== undefined) {
+      if (parishIds.length === 0) {
+        throw new TranslationJobNotFoundError();
+      }
+
+      queryBuilder.andWhere('resource.parishId IN (:...parishIds)', {
+        parishIds: parishIds.map((parishId) => normalizeUuid(parishId)),
+      });
+    }
+
+    const job = await queryBuilder.getOne();
+
+    if (job === null) {
+      throw new TranslationJobNotFoundError();
+    }
+
+    return toTranslationJobSnapshot(job);
   }
 
   private async findShortCircuitRevision(

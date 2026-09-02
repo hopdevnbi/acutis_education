@@ -407,6 +407,26 @@ Query filters: `curriculumId`, `canonicalLessonKey` (requires `curriculumId`). N
 
 Postman collection: `docs/postman/Acutis-Education-Learning-Progress.postman_collection.json`
 
+## Localization API
+
+Parish-scoped translation resource registry, async machine-translation jobs, human review/approval workflow, and learner localized delivery for curriculum and practice content. Learner GET routes never call translation providers or auto-create registry rows — only `APPROVED` revisions with a matching current source hash are served.
+
+**Permissions:** `localization.read`, `localization.manage`, `localization.approve` (parish admin has all three; catechist read-only). Catholic glossary mutations are **super admin only** under `/api/v1/localization/glossaries/*`.
+
+**Admin routes (prefix `/api/v1/localization`):** list/detail/sync resources, request/bulk translation, jobs list/detail/retry, revision detail/review/approve, localized preview (DB-only).
+
+**Learner localized delivery:** Curriculum Delivery and Practice expose `requestedLocale`, `resolvedLocale`, `sourceLocale`, `translationStatus`, `isFallback`, and (where applicable) pinned `translationRevisionId`. Practice sessions snapshot the approved revision at create time.
+
+Optional local localization demo seed (APPROVED en-US curriculum tree + one approved and one machine-translated demo question):
+
+```powershell
+npm run seed:localization-demo
+```
+
+**Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → `seed:question-bank-demo` → `seed:localization-demo`.
+
+Postman collection: `docs/postman/Acutis-Education-Localization.postman_collection.json`
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

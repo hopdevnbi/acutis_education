@@ -5,17 +5,29 @@ import { parseLocale } from '../../../common/locale';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { TranslationResourceEntity } from '../entities/translation-resource.entity';
 import { TranslationRevisionEntity } from '../entities/translation-revision.entity';
+import { deriveAdminTranslationEffectiveStatus } from '../enums/admin-translation-effective-status.enum';
 import { TranslationRevisionStatus } from '../enums/translation-revision-status.enum';
+import {
+  LocalizationRevisionNotApprovableError,
+  LocalizationRevisionStaleError,
+} from '../errors/localization-admin.errors';
 import {
   TranslationResourceNotFoundError,
   TranslationRevisionNotFoundError,
+  UnsupportedTranslationResourceError,
 } from '../errors/localization.errors';
 import type {
   CreateTranslationRevisionInput,
   LatestApprovedTranslationRevisionResult,
+  TranslationResourceSnapshot,
+  TranslationRevisionDetail,
   TranslationRevisionSnapshot,
 } from '../interfaces/localization.interface';
-import { toTranslationRevisionSnapshot } from '../mappers/localization.mapper';
+import type { TranslationSourceSnapshot } from '../interfaces/translation-source-adapter.interface';
+import {
+  toTranslationResourceSnapshot,
+  toTranslationRevisionSnapshot,
+} from '../mappers/localization.mapper';
 import { deriveTranslationReadStatus } from '../utils/derive-translation-read-status.util';
 import {
   assertApprovedRevisionMetadata,
@@ -25,6 +37,9 @@ import {
   assertTranslationPayload,
   normalizeOptionalUuid,
 } from '../utils/localization-validation.util';
+import { parseTranslationPayloadJson } from '../utils/parse-translation-payload.util';
+import { validateTranslationPayloadWithAdapter } from '../utils/validate-translation-payload-with-adapter.util';
+import { TranslationSourceRegistryService } from './translation-source-registry.service';
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   if (!(error instanceof QueryFailedError)) {
@@ -45,6 +60,7 @@ export class TranslationRevisionService {
     private readonly translationResourceRepository: Repository<TranslationResourceEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly translationSourceRegistryService: TranslationSourceRegistryService,
   ) {}
 
   async createRevision(
@@ -182,6 +198,108 @@ export class TranslationRevisionService {
     return toTranslationRevisionSnapshot(revision);
   }
 
+  async getRevisionDetail(revisionId: string): Promise<TranslationRevisionDetail> {
+    const revision = await this.getRevisionById(revisionId);
+    const resource = await this.findResourceById(revision.translationResourceId);
+    const resourceSnapshot = toTranslationResourceSnapshot(resource);
+    const payload = parseTranslationPayloadJson(revision.payloadJson);
+    const sourceSnapshot = await this.resolveSourceSnapshot(resourceSnapshot);
+    const currentSourceContentHash = sourceSnapshot?.sourceContentHash ?? null;
+    const effectiveStatus = deriveAdminTranslationEffectiveStatus({
+      revision,
+      currentSourceContentHash: currentSourceContentHash ?? revision.sourceContentHash,
+    });
+    const isStale =
+      currentSourceContentHash !== null && revision.sourceContentHash !== currentSourceContentHash;
+
+    return {
+      revision,
+      resource: resourceSnapshot,
+      payload,
+      effectiveStatus,
+      isStale,
+      currentSourceContentHash,
+    };
+  }
+
+  async createReviewedRevisionFromRevision(input: {
+    readonly revisionId: string;
+    readonly payload: Record<string, unknown>;
+    readonly createdByUserId?: string | null;
+  }): Promise<TranslationRevisionSnapshot> {
+    const baseRevision = await this.getRevisionById(input.revisionId);
+    const resource = await this.findResourceById(baseRevision.translationResourceId);
+    const resourceSnapshot = toTranslationResourceSnapshot(resource);
+    const sourceSnapshot = await this.requireSourceSnapshot(resourceSnapshot);
+
+    if (
+      baseRevision.status !== TranslationRevisionStatus.MachineTranslated &&
+      baseRevision.status !== TranslationRevisionStatus.Reviewed
+    ) {
+      throw new LocalizationRevisionNotApprovableError();
+    }
+
+    assertTranslationPayload(input.payload);
+
+    const adapter = this.translationSourceRegistryService.getAdapter(resource.resourceType);
+    validateTranslationPayloadWithAdapter(adapter, sourceSnapshot, input.payload);
+
+    return this.createRevision({
+      translationResourceId: baseRevision.translationResourceId,
+      targetLocale: baseRevision.targetLocale,
+      sourceContentHash: baseRevision.sourceContentHash,
+      sourceVersionKey: baseRevision.sourceVersionKey,
+      status: TranslationRevisionStatus.Reviewed,
+      payload: input.payload,
+      providerId: baseRevision.providerId,
+      providerModel: baseRevision.providerModel,
+      glossaryVersionId: baseRevision.glossaryVersionId,
+      createdByUserId: input.createdByUserId ?? null,
+    });
+  }
+
+  async approveRevision(input: {
+    readonly revisionId: string;
+    readonly approvedByUserId: string;
+  }): Promise<TranslationRevisionSnapshot> {
+    const baseRevision = await this.getRevisionById(input.revisionId);
+    const resource = await this.findResourceById(baseRevision.translationResourceId);
+    const resourceSnapshot = toTranslationResourceSnapshot(resource);
+    const sourceSnapshot = await this.requireSourceSnapshot(resourceSnapshot);
+
+    if (
+      baseRevision.status !== TranslationRevisionStatus.MachineTranslated &&
+      baseRevision.status !== TranslationRevisionStatus.Reviewed
+    ) {
+      throw new LocalizationRevisionNotApprovableError();
+    }
+
+    if (baseRevision.sourceContentHash !== sourceSnapshot.sourceContentHash) {
+      throw new LocalizationRevisionStaleError();
+    }
+
+    const payload = parseTranslationPayloadJson(baseRevision.payloadJson);
+    const adapter = this.translationSourceRegistryService.getAdapter(resource.resourceType);
+    validateTranslationPayloadWithAdapter(adapter, sourceSnapshot, payload);
+
+    const approvedAt = new Date();
+
+    return this.createRevision({
+      translationResourceId: baseRevision.translationResourceId,
+      targetLocale: baseRevision.targetLocale,
+      sourceContentHash: baseRevision.sourceContentHash,
+      sourceVersionKey: baseRevision.sourceVersionKey,
+      status: TranslationRevisionStatus.Approved,
+      payload,
+      providerId: baseRevision.providerId,
+      providerModel: baseRevision.providerModel,
+      glossaryVersionId: baseRevision.glossaryVersionId,
+      createdByUserId: baseRevision.createdByUserId,
+      approvedByUserId: input.approvedByUserId,
+      approvedAt,
+    });
+  }
+
   async findLatestApprovedRevisionsForResources(input: {
     readonly translationResourceIds: readonly string[];
     readonly targetLocale: string;
@@ -266,6 +384,35 @@ export class TranslationRevisionService {
     }
 
     return resource;
+  }
+
+  private async resolveSourceSnapshot(
+    resource: TranslationResourceSnapshot,
+  ): Promise<TranslationSourceSnapshot | null> {
+    try {
+      return await this.translationSourceRegistryService.resolveSource(
+        resource.resourceType,
+        resource.resourceId,
+      );
+    } catch (error: unknown) {
+      if (error instanceof UnsupportedTranslationResourceError) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  private async requireSourceSnapshot(
+    resource: TranslationResourceSnapshot,
+  ): Promise<TranslationSourceSnapshot> {
+    const sourceSnapshot = await this.resolveSourceSnapshot(resource);
+
+    if (sourceSnapshot === null) {
+      throw new UnsupportedTranslationResourceError();
+    }
+
+    return sourceSnapshot;
   }
 
   private parseTranslationResourceId(rawTranslationResourceId: string): string {
