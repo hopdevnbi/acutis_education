@@ -23,3 +23,7 @@ export const CLASS_ENROLLMENT_SEED_CATECHIST_EMAIL =
 export const CLASS_ENROLLMENT_SEED_PARENT_EMAIL =
   AUTH_RBAC_SEED_USERS.find((user) => user.roleCode === 'PARENT')?.email ??
   `parent@${AUTH_RBAC_SAMPLE_DOMAIN}`;
+
+export const CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL =
+  AUTH_RBAC_SEED_USERS.find((user) => user.roleCode === 'STUDENT')?.email ??
+  `student-alpha@${AUTH_RBAC_SAMPLE_DOMAIN}`;

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { normalizeUuid } from '../../database/uuid-v4.util';
 import { AcademicYearStatus } from '../../modules/academic-structure/enums/academic-year-status.enum';
 import { AcademicYearService } from '../../modules/academic-structure/services/academic-year.service';
 import { CatechismLevelService } from '../../modules/academic-structure/services/catechism-level.service';
@@ -36,6 +37,7 @@ import {
   CLASS_ENROLLMENT_DEMO_LEVEL_CODE,
   CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME,
   CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME,
+  CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL,
   CLASS_ENROLLMENT_SEED_ADMIN_EMAIL,
   CLASS_ENROLLMENT_SEED_CATECHIST_EMAIL,
   CLASS_ENROLLMENT_SEED_PARENT_EMAIL,
@@ -62,6 +64,8 @@ export interface ClassEnrollmentSeedSummary {
   catechistAssignmentsExisting: number;
   enrollmentsCreated: number;
   enrollmentsExisting: number;
+  studentUserLinksCreated: number;
+  studentUserLinksExisting: number;
   transferHistoryEnsured: boolean;
 }
 
@@ -98,6 +102,8 @@ export class ClassEnrollmentSeedService {
       catechistAssignmentsExisting: 0,
       enrollmentsCreated: 0,
       enrollmentsExisting: 0,
+      studentUserLinksCreated: 0,
+      studentUserLinksExisting: 0,
       transferHistoryEnsured: false,
     };
 
@@ -114,6 +120,10 @@ export class ClassEnrollmentSeedService {
     );
     const parentUser = await this.requireSeedUser(
       CLASS_ENROLLMENT_SEED_PARENT_EMAIL,
+      'npm run seed:auth-rbac',
+    );
+    const studentAlphaUser = await this.requireSeedUser(
+      CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL,
       'npm run seed:auth-rbac',
     );
 
@@ -159,6 +169,8 @@ export class ClassEnrollmentSeedService {
       CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME,
       summary,
     );
+
+    await this.ensureStudentUserLink(studentAlpha, studentAlphaUser.id, summary);
 
     await this.ensureGuardianLink(studentAlpha.id, parentUser.id, summary);
     await this.ensureGuardianLink(studentBeta.id, parentUser.id, summary);
@@ -356,6 +368,36 @@ export class ClassEnrollmentSeedService {
     const exactMatch = listResult.items.find((snapshot) => snapshot.fullName === fullName);
 
     return exactMatch ?? null;
+  }
+
+  private async ensureStudentUserLink(
+    student: StudentSnapshot,
+    userId: string,
+    summary: ClassEnrollmentSeedSummary,
+  ): Promise<void> {
+    if (student.userId !== null && normalizeUuid(student.userId) === normalizeUuid(userId)) {
+      summary.studentUserLinksExisting += 1;
+      this.logger.log(
+        `Demo student "${student.fullName}" already linked to ${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL}.`,
+      );
+
+      return;
+    }
+
+    if (student.userId !== null) {
+      summary.studentUserLinksExisting += 1;
+      this.logger.warn(
+        `Demo student "${student.fullName}" is linked to a different user; leaving link unchanged.`,
+      );
+
+      return;
+    }
+
+    await this.studentService.updateStudent(student.id, { userId });
+    summary.studentUserLinksCreated += 1;
+    this.logger.log(
+      `Linked demo student "${student.fullName}" to ${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL}.`,
+    );
   }
 
   private async ensureGuardianLink(

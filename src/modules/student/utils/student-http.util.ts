@@ -20,6 +20,7 @@ import {
 import {
   StudentAccessDeniedError,
   StudentManageAccessDeniedError,
+  LearnerSelfScopeDeniedError,
 } from '../errors/student-access.errors';
 
 export function rethrowStudentServiceError(error: unknown): never {
@@ -66,6 +67,7 @@ export function rethrowStudentServiceError(error: unknown): never {
   if (
     error instanceof StudentAccessDeniedError ||
     error instanceof StudentManageAccessDeniedError ||
+    error instanceof LearnerSelfScopeDeniedError ||
     error instanceof ParishScopeAccessDeniedError ||
     error instanceof ClassScopeAccessDeniedError
   ) {

@@ -8,6 +8,7 @@ import {
   CLASS_ENROLLMENT_DEMO_CLASS_B_CODE,
   CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME,
   CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME,
+  CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL,
   CLASS_ENROLLMENT_SEED_ADMIN_EMAIL,
   CLASS_ENROLLMENT_SEED_CATECHIST_EMAIL,
   CLASS_ENROLLMENT_SEED_PARENT_EMAIL,
@@ -482,6 +483,12 @@ describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
       enrollmentAccessService.assertCanReadStudent(parentUser!.id, alphaStudent!.id),
     ).resolves.toBeUndefined();
 
+    const studentAlphaUser = await userAccountService.findAccountSnapshotByEmail(
+      CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_EMAIL,
+    );
+    expect(studentAlphaUser).not.toBeNull();
+    expect(alphaStudent!.userId).toBe(studentAlphaUser!.id);
+
     const betaStudent = (
       await studentService.listStudents({
         page: 1,
@@ -520,6 +527,7 @@ describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
     expect(secondSummary.studentsExisting).toBe(2);
     expect(secondSummary.guardianLinksExisting).toBe(2);
     expect(secondSummary.catechistAssignmentsExisting).toBe(2);
+    expect(secondSummary.studentUserLinksExisting).toBe(1);
     expect(secondSummary.transferHistoryEnsured).toBe(true);
   });
 });

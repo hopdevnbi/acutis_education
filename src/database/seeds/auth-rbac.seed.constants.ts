@@ -40,6 +40,11 @@ export const AUTH_RBAC_SEED_ROLES: readonly AuthRbacSeedRoleDefinition[] = [
     name: 'Parent',
     description: 'Local sample parent role.',
   },
+  {
+    code: 'STUDENT',
+    name: 'Student',
+    description: 'Local sample linked learner account for formal self-scoped actions.',
+  },
 ] as const;
 
 export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefinition[] = [
@@ -233,6 +238,12 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Approve localization',
     description: 'Local sample permission to approve translations for learner delivery.',
   },
+  {
+    code: 'learner.self.read',
+    name: 'Read own learner context',
+    description:
+      'Resolve linked student profile and active enrollments for the authenticated user.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -308,6 +319,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'learning-progress.read',
     'learning-progress.manage',
   ],
+  STUDENT: ['learner.self.read', 'curricula.read', 'lesson-content.read', 'learning-progress.read'],
 };
 
 export const AUTH_RBAC_SEED_USERS: readonly AuthRbacSeedUserDefinition[] = [
@@ -326,5 +338,9 @@ export const AUTH_RBAC_SEED_USERS: readonly AuthRbacSeedUserDefinition[] = [
   {
     email: `parent@${AUTH_RBAC_SAMPLE_DOMAIN}`,
     roleCode: 'PARENT',
+  },
+  {
+    email: `student-alpha@${AUTH_RBAC_SAMPLE_DOMAIN}`,
+    roleCode: 'STUDENT',
   },
 ] as const;

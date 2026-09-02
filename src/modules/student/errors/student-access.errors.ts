@@ -11,3 +11,10 @@ export class StudentManageAccessDeniedError extends Error {
     this.name = 'StudentManageAccessDeniedError';
   }
 }
+
+export class LearnerSelfScopeDeniedError extends Error {
+  constructor() {
+    super('You may only act as the linked student account for this learner action.');
+    this.name = 'LearnerSelfScopeDeniedError';
+  }
+}

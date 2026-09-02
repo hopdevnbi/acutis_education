@@ -10,6 +10,7 @@ import { StudentGuardianEntity } from './entities/student-guardian.entity';
 import { StudentEntity } from './entities/student.entity';
 import { StudentGuardianService } from './services/student-guardian.service';
 import { StudentAccessService } from './services/student-access.service';
+import { LearnerSelfScopeService } from './services/learner-self-scope.service';
 import { StudentService } from './services/student.service';
 
 @Module({
@@ -21,7 +22,12 @@ import { StudentService } from './services/student.service';
     AccessControlModule,
   ],
   controllers: [StudentController, StudentGuardianController],
-  providers: [StudentService, StudentGuardianService, StudentAccessService],
-  exports: [StudentService, StudentGuardianService, StudentAccessService],
+  providers: [
+    StudentService,
+    StudentGuardianService,
+    StudentAccessService,
+    LearnerSelfScopeService,
+  ],
+  exports: [StudentService, StudentGuardianService, StudentAccessService, LearnerSelfScopeService],
 })
 export class StudentModule {}

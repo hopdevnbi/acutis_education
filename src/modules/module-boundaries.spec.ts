@@ -46,6 +46,7 @@ import { LocaleResolutionService } from './localization/services/locale-resoluti
 import { QuestionBankModule } from './question-bank/question-bank.module';
 import { QuestionBankService } from './question-bank/services/question-bank.service';
 import { StudentAccessService } from './student/services/student-access.service';
+import { LearnerSelfScopeService } from './student/services/learner-self-scope.service';
 import { StudentGuardianService } from './student/services/student-guardian.service';
 import { StudentService } from './student/services/student.service';
 import { UserAccountService } from './users/services/user-account.service';
@@ -110,13 +111,14 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('exports StudentService, StudentGuardianService, and StudentAccessService from StudentModule', () => {
+  it('exports StudentService, StudentGuardianService, StudentAccessService, and LearnerSelfScopeService from StudentModule', () => {
     const exports = resolveModuleExports(StudentModule);
 
-    expect(exports).toHaveLength(3);
+    expect(exports).toHaveLength(4);
     expect(exports).toContain(StudentService);
     expect(exports).toContain(StudentGuardianService);
     expect(exports).toContain(StudentAccessService);
+    expect(exports).toContain(LearnerSelfScopeService);
     expect(exports).not.toContain(TypeOrmModule);
   });
 
