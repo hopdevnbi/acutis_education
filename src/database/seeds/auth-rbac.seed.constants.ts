@@ -244,6 +244,36 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     description:
       'Resolve linked student profile and active enrollments for the authenticated user.',
   },
+  {
+    code: 'exam.read',
+    name: 'Read exams',
+    description: 'Local sample permission to read exam definitions, versions, and assignments.',
+  },
+  {
+    code: 'exam.manage',
+    name: 'Manage exams',
+    description: 'Local sample permission to author draft exams and versions.',
+  },
+  {
+    code: 'exam.publish',
+    name: 'Publish exams',
+    description: 'Local sample permission to publish exam versions.',
+  },
+  {
+    code: 'exam.assign',
+    name: 'Assign exams',
+    description: 'Local sample permission to create and manage class exam assignments.',
+  },
+  {
+    code: 'exam.attempt',
+    name: 'Attempt exams',
+    description: 'Local sample permission to start and submit formal exam attempts.',
+  },
+  {
+    code: 'exam.result.read',
+    name: 'Read exam results',
+    description: 'Local sample permission to read formal exam attempt results.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -285,6 +315,11 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'localization.read',
     'localization.manage',
     'localization.approve',
+    'exam.read',
+    'exam.manage',
+    'exam.publish',
+    'exam.assign',
+    'exam.result.read',
   ],
   CATECHIST: [
     'classes.read',
@@ -303,6 +338,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'practice.read',
     'learning-progress.read',
     'localization.read',
+    'exam.read',
+    'exam.result.read',
   ],
   PARENT: [
     'classes.read',
