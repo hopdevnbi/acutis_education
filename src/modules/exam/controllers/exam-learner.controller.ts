@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -27,12 +28,15 @@ import { EXAM_ATTEMPT_PERMISSION } from '../constants/exam-permissions.constants
 import {
   ExamAttemptResponseDto,
   LearnerExamAssignmentListResponseDto,
+  SaveExamAnswerRequestDto,
   StartExamAttemptRequestDto,
 } from '../dto/exam-attempt.dto';
 import {
   toExamAttemptResponseDto,
   toLearnerExamAssignmentListResponseDto,
 } from '../mappers/exam-attempt-response.mapper';
+import { ExamAttemptAnswerService } from '../services/exam-attempt-answer.service';
+import { ExamAttemptFinalizationService } from '../services/exam-attempt-finalization.service';
 import { ExamAttemptGenerationService } from '../services/exam-attempt-generation.service';
 import { ExamAttemptQueryService } from '../services/exam-attempt-query.service';
 import { ExamLearnerAssignmentService } from '../services/exam-learner-assignment.service';
@@ -47,6 +51,8 @@ export class ExamLearnerController {
     private readonly examLearnerAssignmentService: ExamLearnerAssignmentService,
     private readonly examAttemptGenerationService: ExamAttemptGenerationService,
     private readonly examAttemptQueryService: ExamAttemptQueryService,
+    private readonly examAttemptAnswerService: ExamAttemptAnswerService,
+    private readonly examAttemptFinalizationService: ExamAttemptFinalizationService,
   ) {}
 
   @Get('enrollments/:enrollmentId/exam-assignments')
@@ -112,6 +118,56 @@ export class ExamLearnerController {
     @Param('attemptId', ParseUUIDPipe) attemptId: string,
   ): Promise<ExamAttemptResponseDto> {
     try {
+      const snapshot = await this.examAttemptQueryService.getAttemptDelivery(
+        attemptId,
+        authenticatedUser.userId,
+      );
+
+      return toExamAttemptResponseDto(snapshot);
+    } catch (error: unknown) {
+      rethrowExamServiceError(error);
+    }
+  }
+
+  @Put('exam-attempts/:attemptId/questions/:examAttemptQuestionId/answer')
+  @RequirePermissions(EXAM_ATTEMPT_PERMISSION)
+  @ApiOperation({ summary: 'Save or update an answer for an in-progress exam attempt' })
+  @ApiOkResponse({ type: ExamAttemptResponseDto })
+  async saveExamAnswer(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('attemptId', ParseUUIDPipe) attemptId: string,
+    @Param('examAttemptQuestionId', ParseUUIDPipe) examAttemptQuestionId: string,
+    @Body() request: SaveExamAnswerRequestDto,
+  ): Promise<ExamAttemptResponseDto> {
+    try {
+      const snapshot = await this.examAttemptAnswerService.saveAnswer({
+        examAttemptId: attemptId,
+        examAttemptQuestionId,
+        actorUserId: authenticatedUser.userId,
+        clientAnswerId: request.clientAnswerId,
+        selectedOptionIds: request.selectedOptionIds,
+      });
+
+      return toExamAttemptResponseDto(snapshot);
+    } catch (error: unknown) {
+      rethrowExamServiceError(error);
+    }
+  }
+
+  @Post('exam-attempts/:attemptId/submit')
+  @RequirePermissions(EXAM_ATTEMPT_PERMISSION)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit and grade an in-progress exam attempt' })
+  @ApiOkResponse({ type: ExamAttemptResponseDto })
+  async submitExamAttempt(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('attemptId', ParseUUIDPipe) attemptId: string,
+  ): Promise<ExamAttemptResponseDto> {
+    try {
+      await this.examAttemptQueryService.getAttemptDelivery(attemptId, authenticatedUser.userId);
+
+      await this.examAttemptFinalizationService.submitAttempt(attemptId);
+
       const snapshot = await this.examAttemptQueryService.getAttemptDelivery(
         attemptId,
         authenticatedUser.userId,

@@ -22,6 +22,8 @@ import { ExamVersionEntity } from './entities/exam-version.entity';
 import { ExamEntity } from './entities/exam.entity';
 import { ExamAssignmentService } from './services/exam-assignment.service';
 import { ExamAttemptAccessService } from './services/exam-attempt-access.service';
+import { ExamAttemptAnswerService } from './services/exam-attempt-answer.service';
+import { ExamAttemptFinalizationService } from './services/exam-attempt-finalization.service';
 import { ExamAttemptGenerationService } from './services/exam-attempt-generation.service';
 import { ExamAttemptQueryService } from './services/exam-attempt-query.service';
 import { ExamLearnerAssignmentService } from './services/exam-learner-assignment.service';
@@ -60,6 +62,8 @@ import { ExamService } from './services/exam.service';
     ExamVersionOrchestrationService,
     ExamAssignmentService,
     ExamAttemptAccessService,
+    ExamAttemptAnswerService,
+    ExamAttemptFinalizationService,
     ExamAttemptGenerationService,
     ExamAttemptQueryService,
     ExamLearnerAssignmentService,

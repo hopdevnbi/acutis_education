@@ -54,6 +54,15 @@ export function toExamAttemptResponseDto(
       selectedOptionIds: [...answer.selectedOptionIds],
       savedAt: answer.savedAt.toISOString(),
     })),
+    result:
+      snapshot.result === null
+        ? null
+        : {
+            correctCount: snapshot.result.correctCount,
+            scorePercent: snapshot.result.scorePercent,
+            passed: snapshot.result.passed,
+            autoSubmitReason: snapshot.result.autoSubmitReason,
+          },
   };
 }
 

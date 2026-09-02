@@ -19,9 +19,13 @@ import {
   ExamAssignmentUpdateRequiresFieldsError,
   ExamAssignmentVersionNotPublishedError,
   ExamAccessDeniedError,
+  ExamAnswerIdempotencyConflictError,
+  ExamAnswerInvalidError,
   ExamAttemptLimitReachedError,
   ExamAttemptNotFoundError,
+  ExamAttemptNotInProgressError,
   ExamAttemptQuestionsNotReadyError,
+  ExamAttemptQuestionNotFoundError,
   ExamCodeAlreadyExistsError,
   ExamDraftAlreadyExistsError,
   ExamEnrollmentNotEligibleError,
@@ -42,6 +46,7 @@ import {
   InvalidExamAssignmentIdError,
   InvalidExamAssignmentWindowError,
   InvalidExamAttemptIdError,
+  InvalidExamAttemptQuestionIdError,
   InvalidExamCodeError,
   InvalidExamDescriptionError,
   InvalidExamDurationError,
@@ -82,6 +87,10 @@ export function rethrowExamServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidExamAttemptIdError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidExamAttemptQuestionIdError) {
     throw new BadRequestException(error.message);
   }
 
@@ -169,11 +178,23 @@ export function rethrowExamServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof ExamAnswerInvalidError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ExamAttemptNotInProgressError) {
+    throw new ConflictException(error.message);
+  }
+
   if (error instanceof ExamAttemptLimitReachedError) {
     throw new ConflictException(error.message);
   }
 
   if (error instanceof ExamIdempotencyConflictError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof ExamAnswerIdempotencyConflictError) {
     throw new ConflictException(error.message);
   }
 
@@ -213,6 +234,10 @@ export function rethrowExamServiceError(error: unknown): never {
   }
 
   if (error instanceof ExamAttemptNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
+  if (error instanceof ExamAttemptQuestionNotFoundError) {
     throw new NotFoundException(error.message);
   }
 

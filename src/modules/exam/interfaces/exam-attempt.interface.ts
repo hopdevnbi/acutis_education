@@ -65,9 +65,25 @@ export interface ExamAttemptQuestionOptionDelivery {
   readonly sortOrder: number;
 }
 
+export interface SaveExamAnswerInput {
+  readonly examAttemptId: string;
+  readonly examAttemptQuestionId: string;
+  readonly actorUserId: string;
+  readonly clientAnswerId: string;
+  readonly selectedOptionIds: readonly string[];
+}
+
+export interface ExamAttemptResultSnapshot {
+  readonly correctCount: number | null;
+  readonly scorePercent: string | null;
+  readonly passed: boolean | null;
+  readonly autoSubmitReason: string | null;
+}
+
 export interface ExamAttemptDeliverySnapshot extends ExamAttemptSnapshot {
   readonly questions: readonly ExamAttemptQuestionDelivery[];
   readonly answers: readonly ExamAttemptAnswerSnapshot[];
+  readonly result: ExamAttemptResultSnapshot | null;
 }
 
 export interface LearnerExamAssignmentSnapshot {

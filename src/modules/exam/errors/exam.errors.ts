@@ -293,3 +293,38 @@ export class ExamAttemptQuestionNotFoundError extends Error {
     this.name = 'ExamAttemptQuestionNotFoundError';
   }
 }
+
+export class ExamAttemptNotInProgressError extends Error {
+  constructor() {
+    super('Exam attempt is not in progress.');
+    this.name = 'ExamAttemptNotInProgressError';
+  }
+}
+
+export class ExamAnswerInvalidError extends Error {
+  constructor() {
+    super('Exam answer is invalid.');
+    this.name = 'ExamAnswerInvalidError';
+  }
+}
+
+export class ExamAnswerIdempotencyConflictError extends Error {
+  constructor() {
+    super('Exam answer idempotency conflict.');
+    this.name = 'ExamAnswerIdempotencyConflictError';
+  }
+}
+
+export class ExamSubmitConflictError extends Error {
+  constructor() {
+    super('Exam submit conflict.');
+    this.name = 'ExamSubmitConflictError';
+  }
+}
+
+export class InvalidExamAttemptQuestionIdError extends Error {
+  constructor() {
+    super('Invalid exam attempt question id.');
+    this.name = 'InvalidExamAttemptQuestionIdError';
+  }
+}

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class StartExamAttemptRequestDto {
   @ApiProperty({ format: 'uuid' })
@@ -84,6 +84,32 @@ export class ExamAttemptAnswerResponseDto {
   savedAt!: string;
 }
 
+export class SaveExamAnswerRequestDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('4')
+  clientAnswerId!: string;
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID('4', { each: true })
+  selectedOptionIds!: string[];
+}
+
+export class ExamAttemptResultResponseDto {
+  @ApiPropertyOptional({ nullable: true })
+  correctCount!: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  scorePercent!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  passed!: boolean | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  autoSubmitReason!: string | null;
+}
+
 export class ExamAttemptResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -141,6 +167,9 @@ export class ExamAttemptResponseDto {
 
   @ApiProperty({ type: [ExamAttemptAnswerResponseDto] })
   answers!: ExamAttemptAnswerResponseDto[];
+
+  @ApiPropertyOptional({ type: ExamAttemptResultResponseDto, nullable: true })
+  result!: ExamAttemptResultResponseDto | null;
 }
 
 export class LearnerExamAssignmentResponseDto {
