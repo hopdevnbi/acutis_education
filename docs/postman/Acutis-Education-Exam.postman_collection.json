@@ -1,0 +1,343 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-exam-collection",
+    "name": "Acutis Education — Exam Engine",
+    "description": "Local manual verification for formal exam authoring, learner attempt delivery, submit/grade, result/review, and RBAC.\n\nPrerequisites (run in order):\n1. npm run migration:run\n2. npm run seed:auth-rbac\n3. npm run seed:parish-academic\n4. npm run seed:class-enrollment\n5. npm run seed:curriculum-demo\n6. npm run seed:question-bank-demo\n7. npm run seed:exam-demo\n8. npm run start:dev\n\nDemo actors: admin@local.catechism.test, student-alpha@local.catechism.test, parent@local.catechism.test, catechist@local.catechism.test (password {{adminPassword}}).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "adminPassword", "value": "LocalDev!Sample2026" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "studentAccessToken", "value": "" },
+    { "key": "parentAccessToken", "value": "" },
+    { "key": "catechistAccessToken", "value": "" },
+    { "key": "parishId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "examAssignmentId", "value": "" },
+    { "key": "attemptId", "value": "" },
+    { "key": "examAttemptQuestionId", "value": "" },
+    { "key": "selectedOptionId", "value": "" },
+    { "key": "clientRequestId", "value": "11111111-1111-4111-8111-111111111111" },
+    { "key": "clientAnswerId", "value": "22222222-2222-4222-8222-222222222222" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Admin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.catechism.test\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Student login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('studentAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student-alpha@local.catechism.test\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('parentAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"parent@local.catechism.test\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('catechistAccessToken', pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"catechist@local.catechism.test\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Learner attempt",
+      "item": [
+        {
+          "name": "List exam assignments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items;",
+                  "pm.expect(items.length).to.be.above(0);",
+                  "pm.collectionVariables.set('examAssignmentId', items[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/exam-assignments"
+          }
+        },
+        {
+          "name": "Start exam attempt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('attemptId', body.id);",
+                  "pm.expect(body.questions.length).to.be.above(0);",
+                  "pm.collectionVariables.set('examAttemptQuestionId', body.questions[0].examAttemptQuestionId);",
+                  "pm.collectionVariables.set('selectedOptionId', body.questions[0].options[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept-Language", "value": "vi-VN" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examAssignmentId\": \"{{examAssignmentId}}\",\n  \"clientRequestId\": \"{{clientRequestId}}\",\n  \"locale\": \"vi-VN\"\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/exam-attempts"
+          }
+        },
+        {
+          "name": "Save answer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentAccessToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientAnswerId\": \"{{clientAnswerId}}\",\n  \"selectedOptionIds\": [\"{{selectedOptionId}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/exam-attempts/{{attemptId}}/questions/{{examAttemptQuestionId}}/answer"
+          }
+        },
+        {
+          "name": "Submit attempt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().status).to.eql('GRADED');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/exam-attempts/{{attemptId}}/submit"
+          }
+        },
+        {
+          "name": "Get attempt with result",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.result).to.be.an('object');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/exam-attempts/{{attemptId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Result and staff",
+      "item": [
+        {
+          "name": "Parent read attempt result",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/exam-attempts/{{attemptId}}/result"
+          }
+        },
+        {
+          "name": "Catechist list assignment attempt summaries",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/exam-assignments/{{examAssignmentId}}/attempt-summaries"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 RBAC denials",
+      "item": [
+        {
+          "name": "Parent denied start attempt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('status 403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examAssignmentId\": \"{{examAssignmentId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/exam-attempts"
+          }
+        }
+      ]
+    }
+  ]
+}

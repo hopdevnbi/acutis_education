@@ -394,7 +394,7 @@ Explicit lesson completion tracking for linked learner enrollments, composed wit
 | Method | Route | Permission | Notes |
 |--------|-------|------------|-------|
 | `PATCH` | `/api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress` | `learning-progress.manage` | Explicit `IN_PROGRESS` or `COMPLETED` only |
-| `GET` | `/api/v1/enrollments/:enrollmentId/learning-progress` | `learning-progress.read` | Lesson states + Practice composition + `exam: null` |
+| `GET` | `/api/v1/enrollments/:enrollmentId/learning-progress` | `learning-progress.read` | Lesson states + Practice + Exam summary |
 | `GET` | `/api/v1/classes/:classId/learning-progress` | `learning-progress.read` | Weighted class summary + paginated learner rows |
 
 **State model:** missing row = `NOT_STARTED`. Monotonic transitions only (`NOT_STARTED → IN_PROGRESS → COMPLETED`). No reopen/reset. No passive GET tracking from Curriculum Delivery.
@@ -406,6 +406,37 @@ Explicit lesson completion tracking for linked learner enrollments, composed wit
 Query filters: `curriculumId`, `canonicalLessonKey` (requires `curriculumId`). No `from`/`to` date filters on aggregate APIs (intentional MVP — lesson completion is current-state; Practice date filters remain on Practice progress routes).
 
 Postman collection: `docs/postman/Acutis-Education-Learning-Progress.postman_collection.json`
+
+## Exam API
+
+Formal summative assessment bounded context: exam roots, immutable published versions, class assignments, learner attempts with pinned localized question delivery, submit/grade, and policy-gated result/review.
+
+**Parent exam-taking policy: DENIED.** Linked parents may read released results via `exam.result.read` only.
+
+**Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → `seed:question-bank-demo` → `seed:exam-demo`.
+
+```powershell
+npm run seed:exam-demo
+```
+
+The seed prints `enrollmentId` and `examAssignmentId` for Postman variables. Demo exam code: `exam-demo-formal-001`.
+
+| Method | Route | Permission | Notes |
+|--------|-------|------------|-------|
+| `POST` | `/api/v1/parishes/:parishId/exams` | `exam.manage` | Create exam root |
+| `POST` | `/api/v1/exams/:examId/versions` | `exam.manage` | Create draft version |
+| `PUT` | `/api/v1/exam-versions/:versionId/questions` | `exam.manage` | Replace question list |
+| `POST` | `/api/v1/exam-versions/:versionId/publish` | `exam.publish` | Publish immutable version |
+| `POST` | `/api/v1/parishes/:parishId/classes/:classId/exam-assignments` | `exam.assign` | Windowed class assignment |
+| `GET` | `/api/v1/enrollments/:enrollmentId/exam-assignments` | `exam.attempt` | Linked student only |
+| `POST` | `/api/v1/enrollments/:enrollmentId/exam-attempts` | `exam.attempt` | Start/resume attempt |
+| `GET` | `/api/v1/exam-attempts/:attemptId` | `exam.attempt` | Localized delivery + saved answers |
+| `PUT` | `/api/v1/exam-attempts/:attemptId/questions/:examAttemptQuestionId/answer` | `exam.attempt` | Upsert answer (idempotent) |
+| `POST` | `/api/v1/exam-attempts/:attemptId/submit` | `exam.attempt` | Submit + grade |
+| `GET` | `/api/v1/exam-attempts/:attemptId/result` | `exam.result.read` | Result/review (student, parent, staff) |
+| `GET` | `/api/v1/exam-assignments/:assignmentId/attempt-summaries` | `exam.result.read` | Staff class summaries |
+
+Postman collection: `docs/postman/Acutis-Education-Exam.postman_collection.json`
 
 ## Localization API
 

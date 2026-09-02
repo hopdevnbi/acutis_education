@@ -44,6 +44,7 @@
     "seed:question-bank-demo": "ts-node --project tsconfig.json scripts/seed-question-bank-demo.ts",
     "seed:learning-progress-demo": "ts-node --project tsconfig.json scripts/seed-learning-progress-demo.ts",
     "seed:localization-demo": "ts-node --project tsconfig.json scripts/seed-localization-demo.ts",
+    "seed:exam-demo": "ts-node --project tsconfig.json scripts/seed-exam-demo.ts",
     "localization:process-jobs": "ts-node --project tsconfig.json scripts/localization-process-jobs.ts"
   },
   "dependencies": {
