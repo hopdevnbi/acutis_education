@@ -15,10 +15,17 @@ import { ClassNotFoundError } from '../../class/errors/class.errors';
 import {
   ExamAssignmentClassParishMismatchError,
   ExamAssignmentNotFoundError,
+  ExamAssignmentNotOpenError,
   ExamAssignmentUpdateRequiresFieldsError,
   ExamAssignmentVersionNotPublishedError,
+  ExamAccessDeniedError,
+  ExamAttemptLimitReachedError,
+  ExamAttemptNotFoundError,
+  ExamAttemptQuestionsNotReadyError,
   ExamCodeAlreadyExistsError,
   ExamDraftAlreadyExistsError,
+  ExamEnrollmentNotEligibleError,
+  ExamIdempotencyConflictError,
   ExamInactiveError,
   ExamNotFoundError,
   ExamPublishValidationError,
@@ -34,6 +41,7 @@ import {
   ExamVersionUpdateRequiresFieldsError,
   InvalidExamAssignmentIdError,
   InvalidExamAssignmentWindowError,
+  InvalidExamAttemptIdError,
   InvalidExamCodeError,
   InvalidExamDescriptionError,
   InvalidExamDurationError,
@@ -70,6 +78,10 @@ export function rethrowExamServiceError(error: unknown): never {
   }
 
   if (error instanceof InvalidExamAssignmentIdError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof InvalidExamAttemptIdError) {
     throw new BadRequestException(error.message);
   }
 
@@ -145,6 +157,26 @@ export function rethrowExamServiceError(error: unknown): never {
     throw new BadRequestException(error.message);
   }
 
+  if (error instanceof ExamAssignmentNotOpenError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ExamEnrollmentNotEligibleError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ExamAttemptQuestionsNotReadyError) {
+    throw new BadRequestException(error.message);
+  }
+
+  if (error instanceof ExamAttemptLimitReachedError) {
+    throw new ConflictException(error.message);
+  }
+
+  if (error instanceof ExamIdempotencyConflictError) {
+    throw new ConflictException(error.message);
+  }
+
   if (error instanceof ExamInactiveError) {
     throw new ConflictException(error.message);
   }
@@ -180,6 +212,10 @@ export function rethrowExamServiceError(error: unknown): never {
     throw new NotFoundException(error.message);
   }
 
+  if (error instanceof ExamAttemptNotFoundError) {
+    throw new NotFoundException(error.message);
+  }
+
   if (error instanceof ClassNotFoundError) {
     throw new NotFoundException(error.message);
   }
@@ -201,6 +237,10 @@ export function rethrowExamServiceError(error: unknown): never {
   }
 
   if (error instanceof ParishScopeAccessDeniedError) {
+    throw new ForbiddenException(error.message);
+  }
+
+  if (error instanceof ExamAccessDeniedError) {
     throw new ForbiddenException(error.message);
   }
 

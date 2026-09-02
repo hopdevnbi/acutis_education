@@ -356,7 +356,13 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'learning-progress.read',
     'learning-progress.manage',
   ],
-  STUDENT: ['learner.self.read', 'curricula.read', 'lesson-content.read', 'learning-progress.read'],
+  STUDENT: [
+    'learner.self.read',
+    'curricula.read',
+    'lesson-content.read',
+    'learning-progress.read',
+    'exam.attempt',
+  ],
 };
 
 export const AUTH_RBAC_SEED_USERS: readonly AuthRbacSeedUserDefinition[] = [

@@ -238,6 +238,13 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).not.toContain(PracticeModule);
   });
 
+  it('does not import ExamModule from LocalizationModule', () => {
+    const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, LocalizationModule);
+
+    expect(Array.isArray(imports)).toBe(true);
+    expect(imports).not.toContain(ExamModule);
+  });
+
   it('does not use forwardRef in class-domain module definitions', () => {
     const modulePaths = [
       join(__dirname, 'student/student.module.ts'),

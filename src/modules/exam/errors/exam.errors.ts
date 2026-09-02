@@ -230,3 +230,66 @@ export class ExamAssignmentVersionNotPublishedError extends Error {
     this.name = 'ExamAssignmentVersionNotPublishedError';
   }
 }
+
+export class InvalidExamAttemptIdError extends Error {
+  constructor() {
+    super('Invalid exam attempt id.');
+    this.name = 'InvalidExamAttemptIdError';
+  }
+}
+
+export class ExamAttemptNotFoundError extends Error {
+  constructor() {
+    super('Exam attempt not found.');
+    this.name = 'ExamAttemptNotFoundError';
+  }
+}
+
+export class ExamAccessDeniedError extends Error {
+  constructor() {
+    super('Exam access denied.');
+    this.name = 'ExamAccessDeniedError';
+  }
+}
+
+export class ExamAssignmentNotOpenError extends Error {
+  constructor() {
+    super('Exam assignment is not open.');
+    this.name = 'ExamAssignmentNotOpenError';
+  }
+}
+
+export class ExamEnrollmentNotEligibleError extends Error {
+  constructor() {
+    super('Enrollment is not eligible for formal exam attempts.');
+    this.name = 'ExamEnrollmentNotEligibleError';
+  }
+}
+
+export class ExamAttemptLimitReachedError extends Error {
+  constructor() {
+    super('Maximum exam attempts reached for this assignment.');
+    this.name = 'ExamAttemptLimitReachedError';
+  }
+}
+
+export class ExamAttemptQuestionsNotReadyError extends Error {
+  constructor() {
+    super('Exam version questions are not ready for attempt generation.');
+    this.name = 'ExamAttemptQuestionsNotReadyError';
+  }
+}
+
+export class ExamIdempotencyConflictError extends Error {
+  constructor() {
+    super('Exam attempt idempotency conflict.');
+    this.name = 'ExamIdempotencyConflictError';
+  }
+}
+
+export class ExamAttemptQuestionNotFoundError extends Error {
+  constructor() {
+    super('Exam attempt question not found.');
+    this.name = 'ExamAttemptQuestionNotFoundError';
+  }
+}

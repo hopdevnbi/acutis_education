@@ -1,0 +1,193 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+
+export class StartExamAttemptRequestDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('4')
+  examAssignmentId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID('4')
+  clientRequestId?: string;
+
+  @ApiPropertyOptional({ example: 'vi-VN' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  locale?: string;
+}
+
+export class ExamAttemptQuestionOptionResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  text!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  mediaAssetId!: string | null;
+
+  @ApiProperty()
+  sortOrder!: number;
+}
+
+export class ExamAttemptQuestionResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  examAttemptQuestionId!: string;
+
+  @ApiProperty()
+  sortOrder!: number;
+
+  @ApiProperty({ format: 'uuid' })
+  questionId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  questionVersionId!: string;
+
+  @ApiProperty()
+  questionType!: string;
+
+  @ApiProperty()
+  prompt!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  instruction!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  promptMediaJson!: string | null;
+
+  @ApiProperty()
+  deliveredLocale!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  translationRevisionId!: string | null;
+
+  @ApiProperty()
+  translationStatus!: string;
+
+  @ApiProperty()
+  isFallback!: boolean;
+
+  @ApiProperty({ type: [ExamAttemptQuestionOptionResponseDto] })
+  options!: ExamAttemptQuestionOptionResponseDto[];
+}
+
+export class ExamAttemptAnswerResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  examAttemptQuestionId!: string;
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  selectedOptionIds!: string[];
+
+  @ApiProperty()
+  savedAt!: string;
+}
+
+export class ExamAttemptResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examAssignmentId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  enrollmentId!: string;
+
+  @ApiProperty()
+  attemptNumber!: number;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examVersionId!: string;
+
+  @ApiProperty()
+  examTitleDelivered!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  instructionsDelivered!: string | null;
+
+  @ApiProperty()
+  deliveredLocale!: string;
+
+  @ApiProperty()
+  startedAt!: string;
+
+  @ApiProperty()
+  deadlineAt!: string;
+
+  @ApiProperty()
+  serverTime!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  submittedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  gradedAt!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  questionCount!: number | null;
+
+  @ApiProperty()
+  maxAttempts!: number;
+
+  @ApiProperty({ type: [ExamAttemptQuestionResponseDto] })
+  questions!: ExamAttemptQuestionResponseDto[];
+
+  @ApiProperty({ type: [ExamAttemptAnswerResponseDto] })
+  answers!: ExamAttemptAnswerResponseDto[];
+}
+
+export class LearnerExamAssignmentResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examVersionId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  examId!: string;
+
+  @ApiProperty()
+  examCode!: string;
+
+  @ApiProperty()
+  examTitle!: string;
+
+  @ApiProperty()
+  opensAt!: string;
+
+  @ApiProperty()
+  closesAt!: string;
+
+  @ApiProperty()
+  effectiveStatus!: string;
+
+  @ApiProperty()
+  durationMinutes!: number;
+
+  @ApiProperty()
+  maxAttempts!: number;
+
+  @ApiProperty()
+  attemptsStarted!: number;
+
+  @ApiProperty()
+  attemptsRemaining!: number;
+
+  @ApiProperty()
+  hasInProgressAttempt!: boolean;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  inProgressAttemptId!: string | null;
+}
+
+export class LearnerExamAssignmentListResponseDto {
+  @ApiProperty({ type: [LearnerExamAssignmentResponseDto] })
+  items!: LearnerExamAssignmentResponseDto[];
+}
