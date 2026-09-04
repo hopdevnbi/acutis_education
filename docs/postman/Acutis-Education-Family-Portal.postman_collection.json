@@ -1,0 +1,338 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-family-portal-collection",
+    "name": "Acutis Education — Family Portal",
+    "description": "Manual verification for Catechist + Parent Family Portal read APIs.\n\nPrerequisites:\n1. npm run migration:run\n2. npm run seed:family-portal-demo\n3. npm run start:dev\n\nDemo actors (dev sample password {{demoPassword}}):\n- catechist@local.catechism.test\n- parent@local.catechism.test\n\nNever commit live JWTs or production secrets.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "demoPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "catechistToken", "value": "" },
+    { "key": "parentToken", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "unknownEnrollmentId", "value": "99999999-9999-4999-8999-999999999999" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('accessToken present', () => pm.expect(body.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('catechistToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('accessToken present', () => pm.expect(body.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('parentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Catechist portal",
+      "item": [
+        {
+          "name": "Catechist context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 context', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('assignedClassCount is number', () => pm.expect(body.assignedClassCount).to.be.a('number'));",
+                  "pm.test('parishIds is array', () => pm.expect(body.parishIds).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/me/catechist/context"
+          }
+        },
+        {
+          "name": "Catechist classes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 classes', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items present', () => pm.expect(body.items).to.be.an('array').that.is.not.empty);",
+                  "pm.collectionVariables.set('classId', body.items[0].classId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/me/catechist/classes?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "catechist", "classes"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Catechist roster",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 roster', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('classId matches', () => pm.expect(body.classId).to.eql(pm.collectionVariables.get('classId')));",
+                  "pm.test('learners.items is array', () => pm.expect(body.learners.items).to.be.an('array'));",
+                  "if (body.learners.items.length > 0) {",
+                  "  const learner = body.learners.items[0];",
+                  "  pm.test('compact learning metrics', () => pm.expect(learner.learning).to.have.property('lessonsAssigned'));",
+                  "  pm.test('no lesson detail array on roster learner', () => pm.expect(learner).to.not.have.property('lessons'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/me/catechist/classes/{{classId}}/roster"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Parent portal",
+      "item": [
+        {
+          "name": "Parent context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 context', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('linkedChildCount', () => pm.expect(body.linkedChildCount).to.be.a('number'));",
+                  "pm.test('activeEnrollmentCount', () => pm.expect(body.activeEnrollmentCount).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/context"
+          }
+        },
+        {
+          "name": "Parent children",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 children', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items present', () => pm.expect(body.items).to.be.an('array').that.is.not.empty);",
+                  "const child = body.items[0];",
+                  "pm.collectionVariables.set('studentId', child.studentId);",
+                  "pm.test('no PII email field', () => pm.expect(child).to.not.have.property('email'));",
+                  "pm.expect(child.activeEnrollments).to.be.an('array').that.is.not.empty;",
+                  "pm.collectionVariables.set('enrollmentId', child.activeEnrollments[0].enrollmentId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/children"
+          }
+        },
+        {
+          "name": "Parent enrollment progress",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 progress', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('enrollmentId matches', () => pm.expect(body.enrollmentId).to.eql(pm.collectionVariables.get('enrollmentId')));",
+                  "pm.test('compact progress learning', () => pm.expect(body.progress.learning).to.have.property('lessonsAssigned'));",
+                  "pm.test('no lessons detail array', () => pm.expect(body.progress).to.not.have.property('lessons'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/progress"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Denial checks",
+      "item": [
+        {
+          "name": "Parent denied on catechist context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/catechist/context"
+          }
+        },
+        {
+          "name": "Catechist denied on parent context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/me/parent/context"
+          }
+        },
+        {
+          "name": "Parent denied formal exam start",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examAssignmentId\": \"00000000-0000-4000-8000-000000000001\",\n  \"clientRequestId\": \"11111111-1111-4111-8111-111111111111\"\n}"
+            },
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/exam-attempts"
+          }
+        },
+        {
+          "name": "Parent denied class-wide learning progress",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/classes/{{classId}}/learning-progress"
+          }
+        },
+        {
+          "name": "Parent unknown enrollment 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('404', () => pm.response.to.have.status(404));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/enrollments/{{unknownEnrollmentId}}/progress"
+          }
+        }
+      ]
+    }
+  ]
+}

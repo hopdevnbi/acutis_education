@@ -54,11 +54,23 @@ Inside Docker Compose, the API connects to `mssql:1433`.
 
 ## Family Portal API
 
-`FamilyPortalModule` is a stateless, zero-table read-model layer. It owns no entities,
-repositories, migrations, or business data; it composes narrow public snapshots from the owning
-Class, Enrollment, Student, Learning Progress, and Exam modules.
+`FamilyPortalModule` is a **stateless, zero-table** read-model layer. It owns no entities,
+repositories, migrations, or business data. It composes narrow public snapshots from Class,
+Enrollment, Student, Learning Progress, and Exam.
 
-Authenticated Catechist routes require the existing domain read permissions and an ACTIVE class
+### Architecture
+
+- Public export: `FamilyPortalService` only
+- No `TypeOrmModule`, no `forwardRef`, no reverse imports from owning modules
+- Permission uses existing domain read permissions (`class.read`, `enrollments.read`,
+  `learning-progress.read`, `practice.read`, `exam.result.read`) — **not** a
+  `family-portal.read` permission
+- Scope is enforced server-side: Catechist via ACTIVE class assignment; Parent via ACTIVE
+  guardian relationship
+
+### Routes (exactly six GET)
+
+Authenticated Catechist routes require existing domain read permissions and an ACTIVE class
 assignment:
 
 | Method | Route                                          | Purpose                                                                 |
@@ -67,7 +79,7 @@ assignment:
 | `GET`  | `/api/v1/me/catechist/classes`                 | Paginated assigned classes (`limit` max 50)                             |
 | `GET`  | `/api/v1/me/catechist/classes/:classId/roster` | Assigned-class roster with compact learning, practice, and exam metrics |
 
-Authenticated Parent routes require the existing domain read permissions and ACTIVE guardian
+Authenticated Parent routes require existing domain read permissions and ACTIVE guardian
 relationships:
 
 | Method | Route                                                  | Purpose                                              |
@@ -76,23 +88,60 @@ relationships:
 | `GET`  | `/api/v1/me/parent/children`                           | Linked children with active enrollment/class context |
 | `GET`  | `/api/v1/me/parent/enrollments/:enrollmentId/progress` | Compact progress for a linked child's enrollment     |
 
-Portal routes are actor-specific: Parish and Super administrators do not impersonate Catechists or
-Parents. Parents remain denied formal Exam attempts and class-wide progress aggregates. Parent
-children are unpaginated in the MVP because guardian-child count is expected to be naturally
-bounded; all potentially large Catechist collections are paginated.
+### Actor / scope rules
 
-Roster and children responses use bounded batch calls instead of per-learner queries. The roster
-reuses Learning Progress class composition and adds batch Exam, Student, and Enrollment snapshots;
-the children list batches guardian student IDs, active enrollments, students, and classes. Responses
-contain allow-listed display fields and compact metrics only—never guardian contact data or raw
-Practice/Exam answers.
+- Parish Admin and Super Admin do **not** impersonate `/me/catechist/*` or `/me/parent/*`
+- Parents are denied formal Exam attempt starts and class-wide Learning Progress aggregates
+- Parent progress is compact (learning/practice/exam metrics) — **no** per-lesson detail array
+- Parent children list is unpaginated in MVP (naturally bounded guardian-child count); Catechist
+  class/roster collections are paginated with deterministic sorting
 
-Run focused checks with `npm test -- --runInBand --testPathPattern=family-portal`, DB coverage with
-`npm run test:e2e:db`, and the full self-contained gate with `npm run quality:full`.
+### Performance
 
-Attendance, Schedule, Prayer Memorization, Notifications, and Recent Activity remain deferred to
-later product phases. The Family Portal phase is not complete until #005 final audit, demo seed, and
-Postman validation pass.
+Roster and children responses use bounded batch calls (no per-learner service loops):
+
+- Catechist roster: ≤5 orchestration-level calls
+- Parent children: ≤4 bounded batch calls
+- Parent progress: relationship resolution + one Learning Progress composition
+
+### Demo seed (dev/test only)
+
+Orchestration seed composing existing domain demos (auth → parish → class/enrollment →
+curriculum → question bank → learning progress → exam):
+
+```powershell
+npm run seed:family-portal-demo
+```
+
+Idempotent. Guarded to `catechism_api` / `catechism_api_test` and refuses `NODE_ENV=production`.
+
+| Actor     | Email                               | Password (local sample) |
+| --------- | ----------------------------------- | ----------------------- |
+| Catechist | `catechist@local.catechism.test`    | `LocalDev!Sample2026`   |
+| Parent    | `parent@local.catechism.test`       | `LocalDev!Sample2026`   |
+
+### Postman
+
+Collection: `docs/postman/Acutis-Education-Family-Portal.postman_collection.json`
+
+Covers Catechist/Parent positive flows plus Parent↔Catechist denial, Parent exam-start denial,
+Parent class-wide LP denial, and unknown enrollment 404.
+
+### Tests
+
+```powershell
+npm test -- --runInBand --testPathPattern=family-portal
+npm run test:integration -- --testPathPattern=family-portal-demo-seed
+npm run test:e2e:db
+npm run quality:full
+```
+
+### Deferred
+
+Attendance, Schedule, Prayer Memorization, Notifications, Recent Activity, and all write
+operations remain out of scope for this phase.
+
+**Family Portal backend phase is complete** for Catechist + Parent supporting read APIs.
 
 ## Quality commands
 

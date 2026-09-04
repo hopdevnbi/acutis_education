@@ -45,6 +45,7 @@
     "seed:learning-progress-demo": "ts-node --project tsconfig.json scripts/seed-learning-progress-demo.ts",
     "seed:localization-demo": "ts-node --project tsconfig.json scripts/seed-localization-demo.ts",
     "seed:exam-demo": "ts-node --project tsconfig.json scripts/seed-exam-demo.ts",
+    "seed:family-portal-demo": "ts-node --project tsconfig.json scripts/seed-family-portal-demo.ts",
     "localization:process-jobs": "ts-node --project tsconfig.json scripts/localization-process-jobs.ts"
   },
   "dependencies": {
