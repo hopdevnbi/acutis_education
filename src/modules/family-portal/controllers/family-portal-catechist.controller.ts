@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiForbiddenResponse,
   ApiOkResponse,
@@ -39,7 +40,11 @@ export class FamilyPortalCatechistController {
 
   @Get('context')
   @RequirePermissions(...FAMILY_PORTAL_CATECHIST_READ_PERMISSIONS)
-  @ApiOperation({ summary: 'Get lightweight catechist portal bootstrap context' })
+  @ApiOperation({
+    summary: 'Get lightweight catechist portal bootstrap context',
+    description:
+      'Requires classes.read, enrollments.read, and learning-progress.read. The authenticated user must hold the CATECHIST actor role; administrators are not treated as portal actors.',
+  })
   @ApiOkResponse({ type: CatechistContextResponseDto })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Caller is not a catechist actor or lacks permissions' })
@@ -57,8 +62,13 @@ export class FamilyPortalCatechistController {
 
   @Get('classes')
   @RequirePermissions(...FAMILY_PORTAL_CATECHIST_READ_PERMISSIONS)
-  @ApiOperation({ summary: 'List paginated class summaries for assigned catechist classes' })
+  @ApiOperation({
+    summary: 'List paginated class summaries for assigned catechist classes',
+    description:
+      'Requires classes.read, enrollments.read, and learning-progress.read. Returns ACTIVE catechist assignments only; there is no parish-wide or administrator fallback.',
+  })
   @ApiOkResponse({ type: CatechistClassListResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid page or limit query parameter' })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Caller is not a catechist actor or lacks permissions' })
   async listClasses(
@@ -82,8 +92,13 @@ export class FamilyPortalCatechistController {
   @RequirePermissions(...FAMILY_PORTAL_CATECHIST_READ_PERMISSIONS)
   @ApiOperation({
     summary: 'Get paginated class roster with learning, practice, and exam summaries',
+    description:
+      'Requires classes.read, enrollments.read, and learning-progress.read. Available only when the authenticated CATECHIST has an ACTIVE assignment to the requested class.',
   })
   @ApiOkResponse({ type: CatechistClassRosterResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Malformed class UUID or invalid pagination/curriculum query parameter',
+  })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({
     description: 'Caller is not assigned to this class or lacks permissions',

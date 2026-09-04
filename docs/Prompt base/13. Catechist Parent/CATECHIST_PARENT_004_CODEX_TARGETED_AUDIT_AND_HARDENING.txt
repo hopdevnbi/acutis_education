@@ -1,0 +1,946 @@
+CODEX PROMPT — CATECHIST + PARENT SUPPORTING APIs #004/5
+TARGETED AUDIT → RBAC / SECURITY / PERFORMANCE / OPENAPI / CONTRACT HARDENING
+
+IMPORTANT
+---------
+This project is being continued on a new machine and this prompt will be executed by Codex.
+
+Do NOT audit the whole repository.
+
+Audit ONLY the modules directly involved in the Family Portal scope and their public dependencies.
+
+The workflow for THIS prompt is:
+
+TARGETED AUDIT → PLAN → IMPLEMENT → TEST → REPORT
+
+Do not split into a separate audit prompt unless a BLOCKER/HIGH issue is found before implementation.
+
+CURRENT PHASE
+-------------
+Completed:
+- #001/5 Domain audit + orchestration design
+- #001A Baseline integration cleanup fix
+- #002/5 Catechist portal APIs
+- #003/5 Parent portal APIs
+- #003A Corrective validation/hardening — PASS
+
+Current:
+CATECHIST + PARENT SUPPORTING APIs #004/5
+
+Remaining after this:
+#005/5 — Final audit + demo seed + Postman + phase completion
+
+PROJECT STATE FROM PRIOR GATE
+-----------------------------
+Prior #003A verified:
+- FamilyPortal is zero-table/stateless
+- full integration PASS
+- DB e2e PASS
+- self-contained quality:full PASS
+- npm audit PASS
+- Docker PASS
+- cross-actor denial PASS
+- Catechist N+1 PASS
+- Parent N+1 PASS
+- BLOCKER=0
+- HIGH=0
+- MEDIUM=0
+
+The app is expected to already run locally with the current `.env`.
+
+Do NOT rebuild the environment unless a test/runtime command proves it is required.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+- git add
+- git commit
+- git push
+
+NEVER suggest `git add`.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "fix(family-portal): harden portal contracts and access"
+
+Do not execute it.
+
+MANDATORY PROJECT RULES
+-----------------------
+Read:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Even though these rules were originally used with Cursor, treat them as mandatory project rules.
+
+TARGETED READING ONLY
+---------------------
+Read these reports:
+
+docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+docs/CATECHIST_PARENT_002_FAMILY_PORTAL_CATECHIST_CONTEXT_CLASSES_ROSTER_REPORT.md
+docs/CATECHIST_PARENT_003_FAMILY_PORTAL_PARENT_CONTEXT_CHILDREN_PROGRESS_REPORT.md
+docs/CATECHIST_PARENT_003A_PARENT_AND_QUALITY_PERFORMANCE_CORRECTIVE_GATE_REPORT.md
+
+Then inspect ONLY:
+
+src/modules/family-portal/
+
+and the public API surfaces FamilyPortal directly depends on:
+
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/learning-progress/
+src/modules/exam/
+src/modules/auth/
+src/modules/access-control/
+
+Also inspect:
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+README.md
+package.json
+test/family-portal-*.db.e2e-spec.ts
+
+Do NOT audit unrelated modules such as:
+- Media
+- Localization internals
+- Question Bank internals
+- Curriculum internals
+- Notification
+- Schedule
+- Attendance
+- Prayer
+unless a direct FamilyPortal dependency requires a narrow check.
+
+EXPECTED FAMILY PORTAL ROUTES
+-----------------------------
+Catechist:
+
+GET /api/v1/me/catechist/context
+GET /api/v1/me/catechist/classes
+GET /api/v1/me/catechist/classes/:classId/roster
+
+Parent:
+
+GET /api/v1/me/parent/context
+GET /api/v1/me/parent/children
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Do not add more routes in #004.
+
+ARCHITECTURE INVARIANTS
+-----------------------
+FamilyPortal must remain:
+
+- stateless orchestration/read-model module
+- ZERO business tables
+- NO entities
+- NO migrations
+- NO repositories
+- NO TypeOrmModule
+- GET-only in MVP
+- FamilyPortalService is the only public export
+- no forwardRef
+- no reverse dependency from owning modules into FamilyPortal
+- no direct foreign repository/entity imports
+
+Do not violate these.
+
+==================================================
+PART A — TARGETED AUDIT BEFORE IMPLEMENTATION
+==================================================
+
+A1. FamilyPortal structure audit
+--------------------------------
+Inspect current:
+- module imports
+- public exports
+- services
+- controllers
+- DTOs
+- mappers
+- errors
+- permission constants
+- HTTP error mapping
+
+Verify the implementation still matches #001–#003A.
+
+A2. Route audit
+---------------
+Confirm exact six routes exist and no accidental duplicates exist.
+
+For each route record:
+- controller method
+- permissions
+- actor check
+- relationship/scope check
+- response DTO
+- domain services called
+
+A3. Public dependency audit
+---------------------------
+Inspect ONLY public methods actually used by FamilyPortal.
+
+Expected examples:
+
+Class:
+- ClassService.getClassSnapshotsByIds
+- ClassCatechistAssignmentService
+- ClassScopeService
+
+Enrollment:
+- EnrollmentQueryService.getEnrollmentSnapshotsByIds
+- EnrollmentQueryService.countActiveEnrollmentsByClassIds
+- EnrollmentQueryService.listActiveEnrollmentsByStudentIds
+- EnrollmentAccess/Guardian scope where used
+
+Student:
+- StudentService.getStudentSnapshotsByIds
+- StudentGuardianService
+
+LearningProgress:
+- getClassLearningProgress
+- getEnrollmentLearningProgress
+
+Exam:
+- getEnrollmentExamSummariesByEnrollmentIds
+
+Do not inspect owning-module internals beyond what is required to confirm these public contracts.
+
+A4. Targeted audit verdict
+--------------------------
+Before editing production code, internally classify findings:
+
+BLOCKER
+HIGH
+MEDIUM
+LOW
+
+If BLOCKER or HIGH reveals a fundamental architecture flaw:
+STOP implementation and report it.
+
+If only MEDIUM/LOW/no findings:
+continue implementing #004 in the same task.
+
+==================================================
+PART B — HARDEN EXISTING FAMILY PORTAL CONTRACT
+==================================================
+
+B1. RBAC model
+--------------
+Do NOT add `family-portal.read`.
+
+Reuse existing domain permissions.
+
+Permission is NOT scope.
+
+Catechist:
+actor must be a valid Catechist portal actor.
+
+Parent:
+actor must be a valid Parent portal actor.
+
+Relationship scope remains authoritative.
+
+B2. Catechist scope
+-------------------
+Verify/fix:
+
+- context uses active/current assigned classes only
+- class list uses assigned classes only
+- roster checks assignment BEFORE loading learner data
+- no parish-wide escalation
+- no client-controlled actor/user ID
+- no admin fallback
+
+Catechist scope source must remain owning-domain public services.
+
+B3. Parent scope
+---------------
+Verify/fix:
+
+- ACTIVE guardian links only
+- ACTIVE enrollments only
+- progress loads enrollment first
+- studentId is derived server-side
+- guardian relationship checked before Learning Progress composition
+- no class-wide Parent aggregate
+- no arbitrary child/student scope from client
+
+B4. Admin impersonation
+-----------------------
+SUPER_ADMIN and PARISH_ADMIN must NOT automatically gain:
+
+/me/catechist/*
+/me/parent/*
+
+These are actor-specific portal routes.
+
+Admins use existing admin/domain routes.
+
+B5. Cross-actor denial
+----------------------
+Verify all:
+
+PARENT:
+- parent routes yes
+- catechist routes 403
+- class-wide aggregate denied
+- exam attempt denied
+
+CATECHIST:
+- assigned catechist routes yes
+- parent routes 403
+- learner exam attempt denied
+
+STUDENT:
+- parent portal 403
+- catechist portal 403
+
+PARISH_ADMIN:
+- no portal impersonation
+
+SUPER_ADMIN:
+- no portal impersonation
+
+B6. Data minimization
+---------------------
+Catechist roster allow-list:
+
+studentId
+enrollmentId
+displayName
+enrollmentStatus
+learning
+practice
+exam
+lastLearningActivityAt
+
+Parent children allow-list:
+
+studentId
+displayName
+studentStatus
+active enrollment/class context
+
+Parent progress:
+compact learning/practice/exam summaries only.
+
+Never return:
+
+DOB
+address
+phone
+email
+guardian contact data
+siblings
+pastoral/private notes
+raw Practice answers
+raw Exam answers
+correct answers
+explanations
+internal auth/session fields
+
+B7. DTO ownership
+-----------------
+All controller responses must use FamilyPortal-owned DTOs.
+
+Do not directly expose:
+- TypeORM entities
+- owning-domain entities
+- owning-domain internal DTOs
+
+Public service snapshots may be composed internally, but map to portal DTOs before HTTP response.
+
+B8. Error contract
+------------------
+Normalize:
+
+400
+- malformed UUID
+- invalid pagination/query
+
+401
+- unauthenticated
+
+403
+- wrong actor
+- foreign enrollment
+- unassigned class
+- relationship denial
+
+404
+- truly unknown enrollment/class where safe and consistent
+
+Expected:
+unknown enrollment => 404
+existing foreign enrollment => 403
+unassigned class => 403
+
+No raw DB errors.
+
+B9. Pagination
+-------------
+Catechist class list:
+- page
+- limit
+- max 50
+
+Catechist roster:
+- reuse Learning Progress bounds
+
+Parent children:
+- unpaginated MVP accepted because guardian count is bounded
+- document this assumption
+
+Verify stable pagination metadata:
+page
+limit
+total
+items
+
+B10. Deterministic sorting
+--------------------------
+Ensure deterministic sorting for:
+
+- context parishIds
+- catechist classes
+- roster rows
+- parent children
+- active enrollments within each child
+
+Do not rely on implicit database order.
+
+Use a stable business ordering already available.
+If no product ordering exists, choose deterministic ID/name ordering and document it.
+
+B11. N+1 verification
+---------------------
+Re-prove:
+
+Catechist roster:
+<= 5 orchestration-level calls
+
+Expected:
+1 scope/access
+1 LearningProgress class composition
+1 Exam batch
+1 Student batch
+1 Enrollment batch if needed
+
+Parent children:
+<= 4 bounded calls
+
+Expected:
+1 guardian student IDs
+1 active enrollment batch
+1 student batch
+1 class batch
+
+Parent progress:
+bounded enrollment/guardian resolution + one LearningProgress composition
+
+Do not call public domain service once per learner/child if a batch method exists.
+
+B12. Batch public contracts
+---------------------------
+Audit and harden if necessary:
+
+ClassService.getClassSnapshotsByIds
+
+EnrollmentQueryService.getEnrollmentSnapshotsByIds
+
+EnrollmentQueryService.countActiveEnrollmentsByClassIds
+
+EnrollmentQueryService.listActiveEnrollmentsByStudentIds
+
+ExamService.getEnrollmentExamSummariesByEnrollmentIds
+
+Each should have:
+
+- empty-input behavior
+- input dedupe
+- narrow snapshots
+- stable missing-ID semantics
+- no FamilyPortal-specific type dependency
+- no entity leakage
+
+Do not broaden these APIs unnecessarily.
+
+B13. Learning Progress delegation
+---------------------------------
+Catechist roster must reuse:
+LearningProgressService.getClassLearningProgress
+
+Parent progress must reuse:
+LearningProgressService.getEnrollmentLearningProgress
+
+Do not duplicate:
+- completion logic
+- practice calculations
+- exam calculations
+- activity timestamps
+
+B14. Exam summary semantics
+---------------------------
+FamilyPortal only needs:
+
+assignmentsAvailable
+attemptsCompleted
+latestScorePercent
+
+No raw Exam attempt/review/answer data.
+
+Batch semantics must stay aligned with existing single-enrollment Exam summary semantics.
+
+B15. Locale/time
+----------------
+FamilyPortal should return:
+
+- stable IDs
+- stable enum codes
+- numeric metrics
+- human names from domain snapshots
+- ISO 8601 UTC timestamps
+
+Do not translate enum/status labels in backend.
+
+Do not import LocalizationModule merely for portal metadata.
+
+==================================================
+PART C — OPENAPI / README / CONTRACT READINESS
+==================================================
+
+C1. OpenAPI
+-----------
+Harden all six routes.
+
+Each must accurately document:
+
+- operation summary
+- auth requirement
+- permission requirement
+- actor scope
+- path/query parameters
+- pagination
+- response DTO
+- 400
+- 401
+- 403
+- 404
+
+Clearly state:
+
+Catechist roster:
+assigned-class only
+
+Parent progress:
+enrollment-scoped linked-child only
+
+Do not document unavailable features.
+
+C2. README
+----------
+Add/update a focused Family Portal section.
+
+Document:
+
+- purpose
+- zero-table/stateless design
+- Catechist routes
+- Parent routes
+- assignment/guardian scope
+- Parent formal exam attempt denied
+- Parent class-wide aggregate denied
+- N+1/batching approach
+- test commands
+- deferred features
+
+Deferred:
+Attendance
+Schedule
+Prayer Memorization
+Notifications
+Recent Activity
+
+Do NOT claim phase complete yet.
+
+C3. FE contract
+--------------
+Validate that Web FE can render:
+
+Catechist:
+- context/bootstrap
+- assigned class list
+- roster
+- compact learning/practice/exam metrics
+
+Parent:
+- context/bootstrap
+- linked children
+- active enrollment/class context
+- compact progress
+- existing Exam result detail route when policy allows
+
+Required report verdicts:
+
+FE CATECHIST CONTRACT READY: YES/NO
+FE PARENT CONTRACT READY: YES/NO
+
+C4. Mobile contract
+-------------------
+Validate:
+
+- bounded payloads
+- stable IDs
+- stable enum strings
+- ISO UTC
+- pagination for large lists
+- no per-learner follow-up storm
+- no excessive nested response
+
+Required:
+
+MOBILE CATECHIST CONTRACT READY: YES/NO
+MOBILE PARENT CONTRACT READY: YES/NO
+
+==================================================
+PART D — SECURITY / MODULE BOUNDARY
+==================================================
+
+D1. Logging/privacy
+-------------------
+Search only FamilyPortal and directly related request logging paths.
+
+Do not log:
+
+- full child objects
+- roster payloads
+- progress payloads
+- guardian relations
+- raw answers
+
+IDs in normal request logs are acceptable under existing project rules.
+
+D2. Module boundaries
+---------------------
+Update/verify module-boundaries tests.
+
+Require:
+
+FamilyPortal:
+- no TypeOrmModule
+- no repositories/entities
+- FamilyPortalService only export
+- no forwardRef
+- only necessary module imports
+
+Owning domain modules must not import FamilyPortal.
+
+D3. God-module prevention
+-------------------------
+Audit actual FamilyPortalModule imports.
+
+Remove unused imports.
+
+Do not add:
+PracticeModule directly if LearningProgress already composes it.
+LocalizationModule.
+CurriculumModule.
+MediaModule.
+NotificationModule.
+
+unless current runtime code genuinely requires one.
+
+==================================================
+PART E — TESTS
+==================================================
+
+E1. Unit tests
+-------------
+Add/fix focused tests for:
+
+- actor scope
+- admin impersonation denial
+- error mapping
+- pagination validation
+- stable sorting
+- no-PII mapping
+- Parent class-wide leakage
+- N+1 call budgets
+- batch empty/dedupe behavior
+- DTO mapping
+
+E2. Integration
+---------------
+Use real MSSQL.
+
+Cover FamilyPortal and narrow dependency contracts only:
+
+- all six service flows
+- active-only assignments/guardian links
+- zero assignment
+- zero guardian link
+- multiple assigned classes
+- multiple children if fixtures support
+- foreign scope denial
+- batch API parity
+
+Do not add unrelated module test work.
+
+E3. DB e2e
+----------
+Ensure coverage includes:
+
+Catechist:
+- context
+- classes
+- roster
+- unassigned class 403
+
+Parent:
+- context
+- children
+- linked enrollment progress
+- foreign enrollment 403
+- unknown enrollment 404
+
+Cross actor:
+- Parent -> catechist 403
+- Catechist -> parent 403
+- Student -> both 403
+- ParishAdmin no impersonation
+- SuperAdmin no impersonation
+
+Other:
+- bad UUID 400
+- bad pagination 400
+- unauthenticated 401
+- Parent class-wide denial
+- Parent Exam attempt 403
+- Catechist Exam attempt 403
+- PII fields absent
+
+==================================================
+PART F — VALIDATION
+==================================================
+
+F1. Fast validation first
+-------------------------
+Run:
+
+node --version
+npm --version
+
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+
+Run targeted FamilyPortal unit tests.
+
+Run targeted FamilyPortal DB e2e if convenient.
+
+If failures occur:
+fix before running full suite.
+
+F2. Full regression
+-------------------
+Run:
+
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+Then DB:
+
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then final self-contained:
+
+npm run quality:full
+
+It must PASS without manual pre-reset immediately before the command.
+
+F3. Docker
+----------
+Run:
+
+docker build --target production -t catechism-api:family-portal-hardened .
+
+If the repository requires WSL invocation from Windows, use the appropriate WSL equivalent.
+
+Do not hardcode an old machine path.
+
+Docker PASS required.
+
+==================================================
+PART G — STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- Attendance
+- Schedule/Calendar
+- Prayer memorization
+- Notifications
+- Push/email/in-app notification system
+- Recent activity feed
+- class-materials domain
+- write APIs
+- new business tables
+- cache persistence
+- Parent history UI
+- Catechist attendance UI
+
+==================================================
+PART H — REPORT
+==================================================
+
+Create:
+
+docs/CATECHIST_PARENT_004_RBAC_SECURITY_PERFORMANCE_OPENAPI_CONTRACT_HARDENING_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Targeted audit scope
+3. Audit findings before implementation
+4. Files created
+5. Files modified
+6. Final route inventory
+7. FamilyPortal architecture
+8. RBAC audit
+9. Actor identity
+10. Admin impersonation
+11. Catechist scope
+12. Parent scope
+13. Cross-actor denial
+14. Parent class-wide leakage
+15. Data minimization
+16. DTO boundaries
+17. Error contract
+18. Unknown vs foreign resource semantics
+19. Pagination
+20. Deterministic sorting
+21. N+1 verification
+22. Batch API contracts
+23. Performance budget
+24. LearningProgress delegation
+25. Exam summary semantics
+26. Locale/time contract
+27. OpenAPI
+28. README
+29. FE Catechist contract
+30. FE Parent contract
+31. Mobile Catechist contract
+32. Mobile Parent contract
+33. Security logging
+34. Module boundaries
+35. God-module guard
+36. Unit tests
+37. Integration tests
+38. DB e2e
+39. Regression
+40. quality:full
+41. npm audit
+42. Docker
+43. Commands
+44. Validation matrix
+45. Risks/deferred
+46. BLOCKER/HIGH/MEDIUM/LOW
+47. #005 readiness
+48. Prompt count
+49. Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+FAMILY PORTAL ARCHITECTURE READY: YES/NO
+RBAC MODEL READY: YES/NO
+CATECHIST SCOPE SAFE: YES/NO
+PARENT SCOPE SAFE: YES/NO
+ADMIN IMPERSONATION SAFE: YES/NO
+PARENT CLASS-WIDE LEAKAGE SAFE: YES/NO
+DATA MINIMIZATION READY: YES/NO
+ERROR CONTRACT READY: YES/NO
+PAGINATION/SORTING READY: YES/NO
+N+1/PERFORMANCE READY: YES/NO
+BATCH API CONTRACTS READY: YES/NO
+OPENAPI READY: YES/NO
+README READY: YES/NO
+FE CATECHIST CONTRACT READY: YES/NO
+FE PARENT CONTRACT READY: YES/NO
+MOBILE CATECHIST CONTRACT READY: YES/NO
+MOBILE PARENT CONTRACT READY: YES/NO
+ZERO-TABLE MODULE BOUNDARY READY: YES/NO
+FULL INTEGRATION: PASS/FAIL
+DB E2E: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#005 GATE
+---------
+Proceed to #005 only if:
+
+- BLOCKER=0
+- HIGH=0
+- architecture ready
+- Catechist scope safe
+- Parent scope safe
+- no PII leak
+- no Parent class-wide leak
+- N+1/performance ready
+- OpenAPI ready
+- README ready
+- FE/Mobile contracts ready
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- Docker PASS
+
+Then recommend exactly:
+
+CATECHIST + PARENT SUPPORTING APIs #005/5 —
+FINAL AUDIT + DEMO SEED + POSTMAN + PHASE COMPLETION
+
+Do not auto-proceed.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #004 status
+- targeted audit findings
+- RBAC/scope
+- PII/leakage
+- performance/N+1
+- OpenAPI/README
+- FE/Mobile contracts
+- integration/DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #005 readiness
+- report path
+
+Then exactly:
+
+git commit -m "fix(family-portal): harden portal contracts and access"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.

@@ -225,12 +225,24 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
-  it('does not import EnrollmentModule from FamilyPortalModule', () => {
+  it('imports only the public modules required by FamilyPortalModule', () => {
     const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, FamilyPortalModule);
 
     expect(Array.isArray(imports)).toBe(true);
-    expect(imports).toContain(EnrollmentModule);
+    expect(imports).toEqual([
+      AuthModule,
+      AccessControlModule,
+      ClassModule,
+      EnrollmentModule,
+      StudentModule,
+      LearningProgressModule,
+      ExamModule,
+    ]);
     expect(imports).not.toContain(TypeOrmModule);
+    expect(imports).not.toContain(PracticeModule);
+    expect(imports).not.toContain(CurriculumModule);
+    expect(imports).not.toContain(LocalizationModule);
+    expect(imports).not.toContain(MediaModule);
   });
 
   it('exports LocalizationService and LocaleResolutionService only from LocalizationModule', () => {

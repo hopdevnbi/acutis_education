@@ -35,6 +35,22 @@ describe('EnrollmentQueryService batch helpers', () => {
     expect(enrollmentRepository.find).not.toHaveBeenCalled();
   });
 
+  it('returns no enrollment snapshots without querying for empty input', async () => {
+    await expect(enrollmentQueryService.getEnrollmentSnapshotsByIds([])).resolves.toEqual([]);
+
+    expect(enrollmentRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates enrollment snapshot IDs before querying', async () => {
+    enrollmentRepository.find.mockResolvedValue([]);
+
+    await enrollmentQueryService.getEnrollmentSnapshotsByIds([enrollmentId, enrollmentId]);
+
+    expect(enrollmentRepository.find).toHaveBeenCalledWith({
+      where: { id: In([enrollmentId]) },
+    });
+  });
+
   it('loads active enrollments in one bounded query', async () => {
     const enrolledAt = new Date('2026-01-01T00:00:00.000Z');
     const enrollmentEntity = {
@@ -63,7 +79,7 @@ describe('EnrollmentQueryService batch helpers', () => {
         studentId: In([studentId]),
         status: EnrollmentStatus.Active,
       },
-      order: { enrolledAt: 'DESC' },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
     });
     expect(snapshots).toEqual([toEnrollmentSnapshot(enrollmentEntity)]);
   });

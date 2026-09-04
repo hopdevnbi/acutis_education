@@ -189,6 +189,7 @@ export class EnrollmentService {
     this.applyScope(dataQueryBuilder, scope);
     this.applyListFilters(dataQueryBuilder, input);
     dataQueryBuilder.orderBy(`enrollment.${input.sortBy}`, input.sort);
+    dataQueryBuilder.addOrderBy('enrollment.id', 'ASC');
     dataQueryBuilder.skip((input.page - 1) * input.limit);
     dataQueryBuilder.take(input.limit);
 

@@ -15,6 +15,30 @@ export async function cleanupAuthRbacSeedDomainDependencies(
   await deleteExamEngineRowsForParishCode(dataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
 
   await dataSource.query(`
+    UPDATE question_versions
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id IN (
+      SELECT id FROM users WHERE email LIKE '%@${safeDomain}'
+    )
+  `);
+
+  await dataSource.query(`
+    UPDATE question_versions
+    SET published_by_user_id = NULL
+    WHERE published_by_user_id IN (
+      SELECT id FROM users WHERE email LIKE '%@${safeDomain}'
+    )
+  `);
+
+  await dataSource.query(`
+    UPDATE questions
+    SET created_by_user_id = NULL
+    WHERE created_by_user_id IN (
+      SELECT id FROM users WHERE email LIKE '%@${safeDomain}'
+    )
+  `);
+
+  await dataSource.query(`
     DELETE FROM practice_sessions
     WHERE enrollment_id IN (
       SELECT e.id FROM enrollments e

@@ -36,8 +36,9 @@ export class CatechistPortalService {
   async getContext(rawActorUserId: string): Promise<CatechistPortalContextSnapshot> {
     await this.familyPortalAccessService.assertCatechistActor(rawActorUserId);
 
-    const assignedClassIds =
-      await this.classCatechistAssignmentService.listAssignedClassIds(rawActorUserId);
+    const assignedClassIds = (
+      await this.classCatechistAssignmentService.listAssignedClassIds(rawActorUserId)
+    ).toSorted();
 
     if (assignedClassIds.length === 0) {
       return {
@@ -48,7 +49,9 @@ export class CatechistPortalService {
     }
 
     const classSnapshots = await this.classService.getClassSnapshotsByIds(assignedClassIds);
-    const parishIds = [...new Set(classSnapshots.map((classSnapshot) => classSnapshot.parishId))];
+    const parishIds = [
+      ...new Set(classSnapshots.map((classSnapshot) => classSnapshot.parishId)),
+    ].toSorted();
 
     return {
       actorUserId: rawActorUserId,
@@ -65,9 +68,9 @@ export class CatechistPortalService {
       input.limit ?? FAMILY_PORTAL_CATECHIST_CLASSES_DEFAULT_LIMIT,
       FAMILY_PORTAL_CATECHIST_CLASSES_MAX_LIMIT,
     );
-    const assignedClassIds = await this.classCatechistAssignmentService.listAssignedClassIds(
-      input.actorUserId,
-    );
+    const assignedClassIds = (
+      await this.classCatechistAssignmentService.listAssignedClassIds(input.actorUserId)
+    ).toSorted();
     const total = assignedClassIds.length;
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
     const offset = (page - 1) * limit;

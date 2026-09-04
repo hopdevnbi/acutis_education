@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -39,7 +40,11 @@ export class FamilyPortalParentController {
 
   @Get('context')
   @RequirePermissions(...FAMILY_PORTAL_PARENT_READ_PERMISSIONS)
-  @ApiOperation({ summary: 'Get lightweight parent portal bootstrap context' })
+  @ApiOperation({
+    summary: 'Get lightweight parent portal bootstrap context',
+    description:
+      'Requires enrollments.read, learning-progress.read, practice.read, and exam.result.read. The authenticated user must hold the PARENT actor role; administrators are not treated as portal actors.',
+  })
   @ApiOkResponse({ type: ParentContextResponseDto })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Caller is not a parent actor or lacks permissions' })
@@ -57,7 +62,11 @@ export class FamilyPortalParentController {
 
   @Get('children')
   @RequirePermissions(...FAMILY_PORTAL_PARENT_READ_PERMISSIONS)
-  @ApiOperation({ summary: 'List linked active children with active enrollments' })
+  @ApiOperation({
+    summary: 'List linked active children with active enrollments',
+    description:
+      'Requires the Parent portal permission set. Returns children from ACTIVE guardian relationships and ACTIVE enrollment/class context only. The unpaginated MVP payload assumes a naturally bounded guardian-child count.',
+  })
   @ApiOkResponse({ type: ParentChildrenResponseDto })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({ description: 'Caller is not a parent actor or lacks permissions' })
@@ -75,8 +84,15 @@ export class FamilyPortalParentController {
 
   @Get('enrollments/:enrollmentId/progress')
   @RequirePermissions(...FAMILY_PORTAL_PARENT_READ_PERMISSIONS)
-  @ApiOperation({ summary: 'Get composed learning progress for a linked child enrollment' })
+  @ApiOperation({
+    summary: 'Get composed learning progress for a linked child enrollment',
+    description:
+      'Requires the Parent portal permission set. The enrollment is resolved first, its student ID is derived server-side, and an ACTIVE guardian relationship is required before progress composition.',
+  })
   @ApiOkResponse({ type: ParentEnrollmentProgressResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Malformed enrollment UUID or invalid curriculum query parameter',
+  })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiForbiddenResponse({
     description: 'Caller is not linked to the enrollment student or lacks permissions',

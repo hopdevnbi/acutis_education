@@ -137,6 +137,96 @@ describe('ParentPortalService', () => {
     });
   });
 
+  it('sorts children and each child active enrollment deterministically', async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const secondStudentId = '22222222-2222-4222-8222-222222222221';
+    const secondEnrollmentId = '33333333-3333-4333-8333-333333333332';
+    const secondClassId = '44444444-4444-4444-8444-444444444443';
+    const academicYearId = '66666666-6666-4666-8666-666666666666';
+    const catechismLevelId = '77777777-7777-4777-8777-777777777777';
+
+    enrollmentQueryService.listStudentIdsForGuardian.mockResolvedValue([
+      studentId,
+      secondStudentId,
+    ]);
+    studentService.getStudentSnapshotsByIds.mockResolvedValue([
+      {
+        id: studentId,
+        userId: null,
+        fullName: 'Beta Child',
+        status: StudentStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: secondStudentId,
+        userId: null,
+        fullName: 'Alpha Child',
+        status: StudentStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    enrollmentQueryService.listActiveEnrollmentsByStudentIds.mockResolvedValue([
+      {
+        id: enrollmentId,
+        studentId,
+        classId,
+        parishId,
+        academicYearId,
+        status: EnrollmentStatus.Active,
+        enrolledAt: now,
+        leftAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: secondEnrollmentId,
+        studentId,
+        classId: secondClassId,
+        parishId,
+        academicYearId,
+        status: EnrollmentStatus.Active,
+        enrolledAt: now,
+        leftAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    classService.getClassSnapshotsByIds.mockResolvedValue([
+      {
+        id: classId,
+        parishId,
+        academicYearId,
+        catechismLevelId,
+        code: 'z-class',
+        name: 'Z Class',
+        status: ClassStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: secondClassId,
+        parishId,
+        academicYearId,
+        catechismLevelId,
+        code: 'a-class',
+        name: 'A Class',
+        status: ClassStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const snapshot = await parentPortalService.listChildren(actorUserId);
+
+    expect(snapshot.items.map((child) => child.displayName)).toEqual(['Alpha Child', 'Beta Child']);
+    expect(snapshot.items[1]?.activeEnrollments.map((enrollment) => enrollment.className)).toEqual([
+      'A Class',
+      'Z Class',
+    ]);
+  });
+
   it('uses bounded batch queries for children list composition', async () => {
     enrollmentQueryService.listStudentIdsForGuardian.mockResolvedValue([studentId]);
     studentService.getStudentSnapshotsByIds.mockResolvedValue([]);

@@ -288,7 +288,7 @@ export class EnrollmentQueryService {
         studentId: In(uniqueStudentIds),
         status: EnrollmentStatus.Active,
       },
-      order: { enrolledAt: 'DESC' },
+      order: { enrolledAt: 'DESC', id: 'ASC' },
     });
 
     return enrollmentEntities.map((enrollmentEntity) => toEnrollmentSnapshot(enrollmentEntity));

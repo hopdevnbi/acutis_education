@@ -41,33 +41,75 @@ Optional helper: `.\scripts\docker.ps1 compose up -d` (uses the default WSL dist
 
 ## URLs
 
-| Service | URL |
-|---------|-----|
-| API | `http://localhost:3000/api/v1` |
-| Health (liveness) | `http://localhost:3000/api/v1/health` |
-| Swagger (when enabled) | `http://localhost:3000/api/docs` |
-| MSSQL (host) | `localhost:14330` (default publish port) |
+| Service                | URL                                      |
+| ---------------------- | ---------------------------------------- |
+| API                    | `http://localhost:3000/api/v1`           |
+| Health (liveness)      | `http://localhost:3000/api/v1/health`    |
+| Swagger (when enabled) | `http://localhost:3000/api/docs`         |
+| MSSQL (host)           | `localhost:14330` (default publish port) |
 
 Host-side tools use `DB_HOST=localhost`. When `DB_PORT=1433` and `MSSQL_PUBLISH_PORT=14330` are set in `.env`, npm CLI and TypeORM resolve the published Docker port automatically.
 
 Inside Docker Compose, the API connects to `mssql:1433`.
 
+## Family Portal API
+
+`FamilyPortalModule` is a stateless, zero-table read-model layer. It owns no entities,
+repositories, migrations, or business data; it composes narrow public snapshots from the owning
+Class, Enrollment, Student, Learning Progress, and Exam modules.
+
+Authenticated Catechist routes require the existing domain read permissions and an ACTIVE class
+assignment:
+
+| Method | Route                                          | Purpose                                                                 |
+| ------ | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| `GET`  | `/api/v1/me/catechist/context`                 | Assigned-class count and deterministic parish IDs                       |
+| `GET`  | `/api/v1/me/catechist/classes`                 | Paginated assigned classes (`limit` max 50)                             |
+| `GET`  | `/api/v1/me/catechist/classes/:classId/roster` | Assigned-class roster with compact learning, practice, and exam metrics |
+
+Authenticated Parent routes require the existing domain read permissions and ACTIVE guardian
+relationships:
+
+| Method | Route                                                  | Purpose                                              |
+| ------ | ------------------------------------------------------ | ---------------------------------------------------- |
+| `GET`  | `/api/v1/me/parent/context`                            | Linked-child and active-enrollment counts            |
+| `GET`  | `/api/v1/me/parent/children`                           | Linked children with active enrollment/class context |
+| `GET`  | `/api/v1/me/parent/enrollments/:enrollmentId/progress` | Compact progress for a linked child's enrollment     |
+
+Portal routes are actor-specific: Parish and Super administrators do not impersonate Catechists or
+Parents. Parents remain denied formal Exam attempts and class-wide progress aggregates. Parent
+children are unpaginated in the MVP because guardian-child count is expected to be naturally
+bounded; all potentially large Catechist collections are paginated.
+
+Roster and children responses use bounded batch calls instead of per-learner queries. The roster
+reuses Learning Progress class composition and adds batch Exam, Student, and Enrollment snapshots;
+the children list batches guardian student IDs, active enrollments, students, and classes. Responses
+contain allow-listed display fields and compact metrics only—never guardian contact data or raw
+Practice/Exam answers.
+
+Run focused checks with `npm test -- --runInBand --testPathPattern=family-portal`, DB coverage with
+`npm run test:e2e:db`, and the full self-contained gate with `npm run quality:full`.
+
+Attendance, Schedule, Prayer Memorization, Notifications, and Recent Activity remain deferred to
+later product phases. The Family Portal phase is not complete until #005 final audit, demo seed, and
+Postman validation pass.
+
 ## Quality commands
 
-| Command | Purpose |
-|---------|---------|
-| `npm run quality` | format, lint, typecheck, unit tests, DB-free e2e, build |
+| Command                | Purpose                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| `npm run quality`      | format, lint, typecheck, unit tests, DB-free e2e, build                               |
 | `npm run quality:full` | `quality` + DB migration validation, integration tests, DB-aware e2e (requires MSSQL) |
 
 ## Continuous integration
 
 Bitbucket Pipelines (`bitbucket-pipelines.yml`) uses Node `22.23.1-bookworm-slim`.
 
-| Trigger | Steps |
-|---------|-------|
-| Pull requests | Quality — `npm ci`, `npm run quality`, `npm audit --audit-level=moderate` |
-| `master` | Quality → Database Tests → Docker Build |
-| Custom `full-ci` | Same three gates as `master` (manual validation) |
+| Trigger          | Steps                                                                     |
+| ---------------- | ------------------------------------------------------------------------- |
+| Pull requests    | Quality — `npm ci`, `npm run quality`, `npm audit --audit-level=moderate` |
+| `master`         | Quality → Database Tests → Docker Build                                   |
+| Custom `full-ci` | Same three gates as `master` (manual validation)                          |
 
 Database Tests attach an MSSQL service container, wait for readiness, then run migration validation, integration tests, and DB-aware e2e against `catechism_api_test`. Docker Build validates `docker build --target production`.
 
@@ -77,25 +119,25 @@ The pipeline runs when the repository is hosted on Bitbucket. There is no deploy
 
 ## Test layers
 
-| Command | Database |
-|---------|----------|
-| `npm test` | No (unit) |
-| `npm run test:e2e` | No (infrastructure e2e) |
+| Command                    | Database                   |
+| -------------------------- | -------------------------- |
+| `npm test`                 | No (unit)                  |
+| `npm run test:e2e`         | No (infrastructure e2e)    |
 | `npm run test:integration` | Yes (`catechism_api_test`) |
-| `npm run test:e2e:db` | Yes (`catechism_api_test`) |
+| `npm run test:e2e:db`      | Yes (`catechism_api_test`) |
 
 Integration tests use a dedicated test database (`catechism_api_test`). The development database (`catechism_api`) is protected by safety guards in test tooling.
 
 ## Migrations
 
-| Command | Purpose |
-|---------|---------|
-| `npm run migration:create -- DescriptiveName` | Create an empty migration file |
+| Command                                         | Purpose                                |
+| ----------------------------------------------- | -------------------------------------- |
+| `npm run migration:create -- DescriptiveName`   | Create an empty migration file         |
 | `npm run migration:generate -- DescriptiveName` | Generate migration from entity changes |
-| `npm run migration:run` | Apply pending migrations (dev DB) |
-| `npm run migration:show` | List migration status |
-| `npm run migration:revert` | Revert last migration |
-| `npm run test:db:migrations` | Validate migrations against test DB |
+| `npm run migration:run`                         | Apply pending migrations (dev DB)      |
+| `npm run migration:show`                        | List migration status                  |
+| `npm run migration:revert`                      | Revert last migration                  |
+| `npm run test:db:migrations`                    | Validate migrations against test DB    |
 
 TypeORM uses `synchronize=false` and `migrationsRun=false` in all environments.
 
@@ -139,12 +181,12 @@ This command is manual, development-only, idempotent, and uses public module ser
 
 Authenticated parish endpoints (require JWT + RBAC):
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/parishes` | `parishes.manage` |
-| `GET` | `/api/v1/parishes` | `parishes.read` |
-| `GET` | `/api/v1/parishes/:id` | `parishes.read` |
-| `PATCH` | `/api/v1/parishes/:id` | `parishes.manage` |
+| Method  | Route                         | Permission        |
+| ------- | ----------------------------- | ----------------- |
+| `POST`  | `/api/v1/parishes`            | `parishes.manage` |
+| `GET`   | `/api/v1/parishes`            | `parishes.read`   |
+| `GET`   | `/api/v1/parishes/:id`        | `parishes.read`   |
+| `PATCH` | `/api/v1/parishes/:id`        | `parishes.manage` |
 | `PATCH` | `/api/v1/parishes/:id/status` | `parishes.manage` |
 
 List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
@@ -153,18 +195,18 @@ List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, opt
 
 Authenticated academic year and catechism level endpoints (require JWT + RBAC):
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/parishes/:parishId/academic-years` | `academic-years.manage` |
-| `GET` | `/api/v1/parishes/:parishId/academic-years` | `academic-years.read` |
-| `GET` | `/api/v1/academic-years/:id` | `academic-years.read` |
-| `PATCH` | `/api/v1/academic-years/:id` | `academic-years.manage` |
-| `PATCH` | `/api/v1/academic-years/:id/status` | `academic-years.manage` |
-| `POST` | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.manage` |
-| `GET` | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.read` |
-| `GET` | `/api/v1/catechism-levels/:id` | `catechism-levels.read` |
-| `PATCH` | `/api/v1/catechism-levels/:id` | `catechism-levels.manage` |
-| `PATCH` | `/api/v1/catechism-levels/:id/status` | `catechism-levels.manage` |
+| Method  | Route                                         | Permission                |
+| ------- | --------------------------------------------- | ------------------------- |
+| `POST`  | `/api/v1/parishes/:parishId/academic-years`   | `academic-years.manage`   |
+| `GET`   | `/api/v1/parishes/:parishId/academic-years`   | `academic-years.read`     |
+| `GET`   | `/api/v1/academic-years/:id`                  | `academic-years.read`     |
+| `PATCH` | `/api/v1/academic-years/:id`                  | `academic-years.manage`   |
+| `PATCH` | `/api/v1/academic-years/:id/status`           | `academic-years.manage`   |
+| `POST`  | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.manage` |
+| `GET`   | `/api/v1/parishes/:parishId/catechism-levels` | `catechism-levels.read`   |
+| `GET`   | `/api/v1/catechism-levels/:id`                | `catechism-levels.read`   |
+| `PATCH` | `/api/v1/catechism-levels/:id`                | `catechism-levels.manage` |
+| `PATCH` | `/api/v1/catechism-levels/:id/status`         | `catechism-levels.manage` |
 
 List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, optional `search`.
 
@@ -172,13 +214,13 @@ List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `status`, opt
 
 Authenticated class endpoints (require JWT + RBAC):
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/parishes/:parishId/classes` | `classes.manage` |
-| `GET` | `/api/v1/parishes/:parishId/classes` | `classes.read` |
-| `GET` | `/api/v1/classes/:id` | `classes.read` |
-| `PATCH` | `/api/v1/classes/:id` | `classes.manage` |
-| `PATCH` | `/api/v1/classes/:id/status` | `classes.manage` |
+| Method  | Route                                | Permission       |
+| ------- | ------------------------------------ | ---------------- |
+| `POST`  | `/api/v1/parishes/:parishId/classes` | `classes.manage` |
+| `GET`   | `/api/v1/parishes/:parishId/classes` | `classes.read`   |
+| `GET`   | `/api/v1/classes/:id`                | `classes.read`   |
+| `PATCH` | `/api/v1/classes/:id`                | `classes.manage` |
+| `PATCH` | `/api/v1/classes/:id/status`         | `classes.manage` |
 
 List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `academicYearId`, optional `catechismLevelId`, optional `status`, optional `search`.
 
@@ -188,37 +230,37 @@ Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activati
 
 Authenticated student and guardian endpoints (require JWT + RBAC):
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/students` | `students.manage` |
-| `GET` | `/api/v1/students` | `students.read` |
-| `GET` | `/api/v1/students/:id` | `students.read` |
-| `PATCH` | `/api/v1/students/:id` | `students.manage` |
-| `GET` | `/api/v1/parishes/:parishId/students` | `students.read` |
-| `POST` | `/api/v1/students/:studentId/guardians` | `student-guardians.manage` |
-| `GET` | `/api/v1/students/:studentId/guardians` | `student-guardians.read` |
-| `PATCH` | `/api/v1/student-guardians/:id/status` | `student-guardians.manage` |
+| Method  | Route                                   | Permission                 |
+| ------- | --------------------------------------- | -------------------------- |
+| `POST`  | `/api/v1/students`                      | `students.manage`          |
+| `GET`   | `/api/v1/students`                      | `students.read`            |
+| `GET`   | `/api/v1/students/:id`                  | `students.read`            |
+| `PATCH` | `/api/v1/students/:id`                  | `students.manage`          |
+| `GET`   | `/api/v1/parishes/:parishId/students`   | `students.read`            |
+| `POST`  | `/api/v1/students/:studentId/guardians` | `student-guardians.manage` |
+| `GET`   | `/api/v1/students/:studentId/guardians` | `student-guardians.read`   |
+| `PATCH` | `/api/v1/student-guardians/:id/status`  | `student-guardians.manage` |
 
 Parish student list returns distinct profiles with at least one **ACTIVE** enrollment in the parish (optional `academicYearId`, `search` filters).
 
 ## Catechist Assignment API
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/classes/:classId/catechists` | `class-catechists.manage` |
-| `GET` | `/api/v1/classes/:classId/catechists` | `class-catechists.read` |
+| Method  | Route                                            | Permission                |
+| ------- | ------------------------------------------------ | ------------------------- |
+| `POST`  | `/api/v1/classes/:classId/catechists`            | `class-catechists.manage` |
+| `GET`   | `/api/v1/classes/:classId/catechists`            | `class-catechists.read`   |
 | `PATCH` | `/api/v1/class-catechist-assignments/:id/status` | `class-catechists.manage` |
 
 ## Enrollment API
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `POST` | `/api/v1/classes/:classId/enrollments` | `enrollments.manage` |
-| `GET` | `/api/v1/classes/:classId/enrollments` | `enrollments.read` |
-| `GET` | `/api/v1/students/:studentId/enrollments` | `enrollments.read` |
-| `GET` | `/api/v1/enrollments/:id` | `enrollments.read` |
-| `PATCH` | `/api/v1/enrollments/:id/status` | `enrollments.manage` |
-| `POST` | `/api/v1/enrollments/:id/transfer` | `enrollments.manage` |
+| Method  | Route                                     | Permission           |
+| ------- | ----------------------------------------- | -------------------- |
+| `POST`  | `/api/v1/classes/:classId/enrollments`    | `enrollments.manage` |
+| `GET`   | `/api/v1/classes/:classId/enrollments`    | `enrollments.read`   |
+| `GET`   | `/api/v1/students/:studentId/enrollments` | `enrollments.read`   |
+| `GET`   | `/api/v1/enrollments/:id`                 | `enrollments.read`   |
+| `PATCH` | `/api/v1/enrollments/:id/status`          | `enrollments.manage` |
+| `POST`  | `/api/v1/enrollments/:id/transfer`        | `enrollments.manage` |
 
 Enrollment requires an **ACTIVE** student and **ACTIVE** class. One ACTIVE enrollment per student per parish and academic year. Transfer closes the source row as `TRANSFERRED` and creates a new ACTIVE row in the target class (same parish and year).
 
@@ -226,12 +268,12 @@ Enrollment requires an **ACTIVE** student and **ACTIVE** class. One ACTIVE enrol
 
 Global permissions (`classes.read`, `students.read`, etc.) express capability. **Resource scope** is enforced server-side in addition to permissions:
 
-| Role | Scope evidence |
-|------|----------------|
-| `SUPER_ADMIN` | Bypass (all parishes/resources) |
-| `PARISH_ADMIN` | Active `parish_memberships` row for the parish |
-| `CATECHIST` | Active `class_catechist_assignments` for the class (roster reads) |
-| `PARENT` | Active `student_guardians` link (student/enrollment reads for linked children) |
+| Role           | Scope evidence                                                                 |
+| -------------- | ------------------------------------------------------------------------------ |
+| `SUPER_ADMIN`  | Bypass (all parishes/resources)                                                |
+| `PARISH_ADMIN` | Active `parish_memberships` row for the parish                                 |
+| `CATECHIST`    | Active `class_catechist_assignments` for the class (roster reads)              |
+| `PARENT`       | Active `student_guardians` link (student/enrollment reads for linked children) |
 
 List endpoints filter results to accessible resources (e.g. `GET /students` no longer returns all students globally for scoped roles).
 
@@ -248,12 +290,12 @@ See Swagger at `/api/docs` when enabled.
 
 Default provider is **local filesystem** — no AWS credentials required for Compose.
 
-| Setting | Purpose |
-|---------|---------|
-| `MEDIA_STORAGE_PROVIDER` | `local` (default), `s3`, or `auto` (non-production only) |
-| `MEDIA_LOCAL_ROOT` | Upload directory (`./storage/uploads` locally; `/app/storage/uploads` in Docker) |
-| `MEDIA_MAX_IMAGE_BYTES` | 10 MiB default |
-| `MEDIA_MAX_DOCUMENT_BYTES` | 25 MiB default |
+| Setting                    | Purpose                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `MEDIA_STORAGE_PROVIDER`   | `local` (default), `s3`, or `auto` (non-production only)                         |
+| `MEDIA_LOCAL_ROOT`         | Upload directory (`./storage/uploads` locally; `/app/storage/uploads` in Docker) |
+| `MEDIA_MAX_IMAGE_BYTES`    | 10 MiB default                                                                   |
+| `MEDIA_MAX_DOCUMENT_BYTES` | 25 MiB default                                                                   |
 
 **Enabled upload types (MVP):** JPEG, PNG, WebP, PDF. **AUDIO/VIDEO upload disabled** until streaming upload and HTTP Range support exist.
 
@@ -263,12 +305,12 @@ Default provider is **local filesystem** — no AWS credentials required for Com
 
 ### Media HTTP routes
 
-| Audience | Route | Permission |
-|----------|-------|------------|
-| Admin | `POST /api/v1/media/assets` | `media.upload` |
-| Admin | `GET /api/v1/media/assets/:id` | `media.read` |
-| Admin | `GET /api/v1/media/assets/:id/content` | `media.read` |
-| Learner (class) | `GET /api/v1/classes/:classId/lessons/:lessonId/media/:assetId/content` | `lesson-content.read` + scope |
+| Audience             | Route                                                                            | Permission                    |
+| -------------------- | -------------------------------------------------------------------------------- | ----------------------------- |
+| Admin                | `POST /api/v1/media/assets`                                                      | `media.upload`                |
+| Admin                | `GET /api/v1/media/assets/:id`                                                   | `media.read`                  |
+| Admin                | `GET /api/v1/media/assets/:id/content`                                           | `media.read`                  |
+| Learner (class)      | `GET /api/v1/classes/:classId/lessons/:lessonId/media/:assetId/content`          | `lesson-content.read` + scope |
 | Learner (enrollment) | `GET /api/v1/enrollments/:enrollmentId/lessons/:lessonId/media/:assetId/content` | `lesson-content.read` + scope |
 
 Learner lesson content responses enrich `image_ref` / `video_ref` blocks with a derived `mediaContentPath` (not stored in lesson JSON).
@@ -293,12 +335,12 @@ Bounded context for parish-scoped assessment content: question roots, immutable 
 
 ### RBAC matrix
 
-| Role | Read | Manage | Publish |
-|------|------|--------|---------|
-| `SUPER_ADMIN` | all parishes | all parishes | all parishes |
-| `PARISH_ADMIN` | own parish | own parish | own parish |
-| `CATECHIST` | own parish | denied | denied |
-| `PARENT` | denied | denied | denied |
+| Role           | Read         | Manage       | Publish      |
+| -------------- | ------------ | ------------ | ------------ |
+| `SUPER_ADMIN`  | all parishes | all parishes | all parishes |
+| `PARISH_ADMIN` | own parish   | own parish   | own parish   |
+| `CATECHIST`    | own parish   | denied       | denied       |
+| `PARENT`       | denied       | denied       | denied       |
 
 All by-id routes resolve parish scope server-side.
 
@@ -344,10 +386,10 @@ Creates stable demo codes: `qb-demo-single-001`, `qb-demo-multi-001`, `qb-demo-t
 
 Authenticated question bank endpoints (require JWT + RBAC + parish scope for parish-scoped routes):
 
-| Method | Route | Permission |
-|--------|-------|------------|
-| `GET` | `/api/v1/parishes/:parishId/questions` | `questions.read` |
-| `GET` | `/api/v1/question-versions/:versionId/export` | `questions.read` |
+| Method | Route                                                  | Permission         |
+| ------ | ------------------------------------------------------ | ------------------ |
+| `GET`  | `/api/v1/parishes/:parishId/questions`                 | `questions.read`   |
+| `GET`  | `/api/v1/question-versions/:versionId/export`          | `questions.read`   |
 | `POST` | `/api/v1/parishes/:parishId/question-imports/validate` | `questions.manage` |
 
 List query parameters: `page`, `limit`, `sortBy` (`updatedAt` default), `sort`, optional `status`, `sourceLocale`, `code`, `search`, `questionType`, `difficulty`, `versionStatus`, `hasDraft`, `hasPublished`, `tagId`, `tagCode`, `curriculumId`, `canonicalLessonKey` (requires `curriculumId`).
@@ -368,16 +410,16 @@ Learner practice sessions for linked enrollments. Question selection uses publis
 
 **Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → `seed:question-bank-demo`.
 
-| Method | Route | Permission | Notes |
-|--------|-------|------------|-------|
-| `POST` | `/api/v1/enrollments/:enrollmentId/practice-sessions` | `practice.manage` | Create STANDARD session |
-| `GET` | `/api/v1/practice-sessions/:sessionId` | `practice.read` | Resume snapshot |
-| `POST` | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/answers` | `practice.manage` | Submit attempt; idempotent `clientAnswerId` |
-| `POST` | `/api/v1/practice-sessions/:sessionId/review-wrong` | `practice.manage` | Create REVIEW_WRONG from completed source |
-| `PATCH` | `/api/v1/practice-sessions/:sessionId/abandon` | `practice.manage` | Abandon in-progress session |
-| `GET` | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/media/:assetId/content` | `practice.read` | Contextual media stream |
-| `GET` | `/api/v1/enrollments/:enrollmentId/practice/progress` | `practice.read` | Derived metrics (no answer leakage) |
-| `GET` | `/api/v1/classes/:classId/practice/progress` | `practice.read` | Class summary + paginated learners |
+| Method  | Route                                                                                      | Permission        | Notes                                       |
+| ------- | ------------------------------------------------------------------------------------------ | ----------------- | ------------------------------------------- |
+| `POST`  | `/api/v1/enrollments/:enrollmentId/practice-sessions`                                      | `practice.manage` | Create STANDARD session                     |
+| `GET`   | `/api/v1/practice-sessions/:sessionId`                                                     | `practice.read`   | Resume snapshot                             |
+| `POST`  | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/answers`                | `practice.manage` | Submit attempt; idempotent `clientAnswerId` |
+| `POST`  | `/api/v1/practice-sessions/:sessionId/review-wrong`                                        | `practice.manage` | Create REVIEW_WRONG from completed source   |
+| `PATCH` | `/api/v1/practice-sessions/:sessionId/abandon`                                             | `practice.manage` | Abandon in-progress session                 |
+| `GET`   | `/api/v1/practice-sessions/:sessionId/questions/:sessionQuestionId/media/:assetId/content` | `practice.read`   | Contextual media stream                     |
+| `GET`   | `/api/v1/enrollments/:enrollmentId/practice/progress`                                      | `practice.read`   | Derived metrics (no answer leakage)         |
+| `GET`   | `/api/v1/classes/:classId/practice/progress`                                               | `practice.read`   | Class summary + paginated learners          |
 
 **Scoped access:** linked parent/guardian may manage learner sessions and read enrollment progress. Parish admin and assigned catechist may read enrollment progress and class progress. **Parent is denied class progress** even when linked to a learner in the class. Permissions alone are insufficient — server-side relationship scope is enforced.
 
@@ -391,11 +433,11 @@ Explicit lesson completion tracking for linked learner enrollments, composed wit
 
 **Prerequisites (dev demo, run in order):** `seed:auth-rbac` → `seed:parish-academic` → `seed:class-enrollment` → `seed:curriculum-demo` → (`seed:question-bank-demo` + Practice sessions optional for non-zero Practice block) → `seed:learning-progress-demo`.
 
-| Method | Route | Permission | Notes |
-|--------|-------|------------|-------|
-| `PATCH` | `/api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress` | `learning-progress.manage` | Explicit `IN_PROGRESS` or `COMPLETED` only |
-| `GET` | `/api/v1/enrollments/:enrollmentId/learning-progress` | `learning-progress.read` | Lesson states + Practice + Exam summary |
-| `GET` | `/api/v1/classes/:classId/learning-progress` | `learning-progress.read` | Weighted class summary + paginated learner rows |
+| Method  | Route                                                                    | Permission                 | Notes                                           |
+| ------- | ------------------------------------------------------------------------ | -------------------------- | ----------------------------------------------- |
+| `PATCH` | `/api/v1/enrollments/:enrollmentId/lessons/:canonicalLessonKey/progress` | `learning-progress.manage` | Explicit `IN_PROGRESS` or `COMPLETED` only      |
+| `GET`   | `/api/v1/enrollments/:enrollmentId/learning-progress`                    | `learning-progress.read`   | Lesson states + Practice + Exam summary         |
+| `GET`   | `/api/v1/classes/:classId/learning-progress`                             | `learning-progress.read`   | Weighted class summary + paginated learner rows |
 
 **State model:** missing row = `NOT_STARTED`. Monotonic transitions only (`NOT_STARTED → IN_PROGRESS → COMPLETED`). No reopen/reset. No passive GET tracking from Curriculum Delivery.
 
@@ -421,20 +463,20 @@ npm run seed:exam-demo
 
 The seed prints `enrollmentId` and `examAssignmentId` for Postman variables. Demo exam code: `exam-demo-formal-001`.
 
-| Method | Route | Permission | Notes |
-|--------|-------|------------|-------|
-| `POST` | `/api/v1/parishes/:parishId/exams` | `exam.manage` | Create exam root |
-| `POST` | `/api/v1/exams/:examId/versions` | `exam.manage` | Create draft version |
-| `PUT` | `/api/v1/exam-versions/:versionId/questions` | `exam.manage` | Replace question list |
-| `POST` | `/api/v1/exam-versions/:versionId/publish` | `exam.publish` | Publish immutable version |
-| `POST` | `/api/v1/parishes/:parishId/classes/:classId/exam-assignments` | `exam.assign` | Windowed class assignment |
-| `GET` | `/api/v1/enrollments/:enrollmentId/exam-assignments` | `exam.attempt` | Linked student only |
-| `POST` | `/api/v1/enrollments/:enrollmentId/exam-attempts` | `exam.attempt` | Start/resume attempt |
-| `GET` | `/api/v1/exam-attempts/:attemptId` | `exam.attempt` | Localized delivery + saved answers |
-| `PUT` | `/api/v1/exam-attempts/:attemptId/questions/:examAttemptQuestionId/answer` | `exam.attempt` | Upsert answer (idempotent) |
-| `POST` | `/api/v1/exam-attempts/:attemptId/submit` | `exam.attempt` | Submit + grade |
-| `GET` | `/api/v1/exam-attempts/:attemptId/result` | `exam.result.read` | Result/review (student, parent, staff) |
-| `GET` | `/api/v1/exam-assignments/:assignmentId/attempt-summaries` | `exam.result.read` | Staff class summaries |
+| Method | Route                                                                      | Permission         | Notes                                  |
+| ------ | -------------------------------------------------------------------------- | ------------------ | -------------------------------------- |
+| `POST` | `/api/v1/parishes/:parishId/exams`                                         | `exam.manage`      | Create exam root                       |
+| `POST` | `/api/v1/exams/:examId/versions`                                           | `exam.manage`      | Create draft version                   |
+| `PUT`  | `/api/v1/exam-versions/:versionId/questions`                               | `exam.manage`      | Replace question list                  |
+| `POST` | `/api/v1/exam-versions/:versionId/publish`                                 | `exam.publish`     | Publish immutable version              |
+| `POST` | `/api/v1/parishes/:parishId/classes/:classId/exam-assignments`             | `exam.assign`      | Windowed class assignment              |
+| `GET`  | `/api/v1/enrollments/:enrollmentId/exam-assignments`                       | `exam.attempt`     | Linked student only                    |
+| `POST` | `/api/v1/enrollments/:enrollmentId/exam-attempts`                          | `exam.attempt`     | Start/resume attempt                   |
+| `GET`  | `/api/v1/exam-attempts/:attemptId`                                         | `exam.attempt`     | Localized delivery + saved answers     |
+| `PUT`  | `/api/v1/exam-attempts/:attemptId/questions/:examAttemptQuestionId/answer` | `exam.attempt`     | Upsert answer (idempotent)             |
+| `POST` | `/api/v1/exam-attempts/:attemptId/submit`                                  | `exam.attempt`     | Submit + grade                         |
+| `GET`  | `/api/v1/exam-attempts/:attemptId/result`                                  | `exam.result.read` | Result/review (student, parent, staff) |
+| `GET`  | `/api/v1/exam-assignments/:assignmentId/attempt-summaries`                 | `exam.result.read` | Staff class summaries                  |
 
 Postman collection: `docs/postman/Acutis-Education-Exam.postman_collection.json`
 

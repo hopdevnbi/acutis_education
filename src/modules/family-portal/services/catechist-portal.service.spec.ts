@@ -93,6 +93,43 @@ describe('CatechistPortalService', () => {
     expect(classService.getClassSnapshotsByIds).not.toHaveBeenCalled();
   });
 
+  it('returns deterministic class and parish ordering', async () => {
+    const lowerClassId = '22222222-2222-4222-8222-222222222221';
+    const lowerParishId = '55555555-5555-4555-8555-555555555554';
+    const now = new Date('2026-01-01T00:00:00.000Z');
+
+    classCatechistAssignmentService.listAssignedClassIds.mockResolvedValue([classId, lowerClassId]);
+    classService.getClassSnapshotsByIds.mockResolvedValue([
+      {
+        id: lowerClassId,
+        parishId,
+        academicYearId: '66666666-6666-4666-8666-666666666666',
+        catechismLevelId: '77777777-7777-4777-8777-777777777777',
+        code: 'class-a',
+        name: 'Class A',
+        status: ClassStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: classId,
+        parishId: lowerParishId,
+        academicYearId: '66666666-6666-4666-8666-666666666666',
+        catechismLevelId: '77777777-7777-4777-8777-777777777777',
+        code: 'class-b',
+        name: 'Class B',
+        status: ClassStatus.Active,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const snapshot = await catechistPortalService.getContext(actorUserId);
+
+    expect(classService.getClassSnapshotsByIds).toHaveBeenCalledWith([lowerClassId, classId]);
+    expect(snapshot.parishIds).toEqual([lowerParishId, parishId]);
+  });
+
   it('lists paginated assigned class summaries', async () => {
     classCatechistAssignmentService.listAssignedClassIds.mockResolvedValue([classId]);
     classService.getClassSnapshotsByIds.mockResolvedValue([

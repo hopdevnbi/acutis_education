@@ -124,6 +124,17 @@ describe('ExamService enrollment summaries', () => {
     });
   });
 
+  it('returns an empty summary map without exam queries for empty input', async () => {
+    enrollmentQueryService.getEnrollmentSnapshotsByIds.mockResolvedValue([]);
+
+    const summaries = await examService.getEnrollmentExamSummariesByEnrollmentIds([]);
+
+    expect(summaries.size).toBe(0);
+    expect(enrollmentQueryService.getEnrollmentSnapshotsByIds).toHaveBeenCalledWith([]);
+    expect(examAssignmentRepository.createQueryBuilder).not.toHaveBeenCalled();
+    expect(examAttemptRepository.find).not.toHaveBeenCalled();
+  });
+
   it('keeps single-enrollment summary behavior via shared builder', async () => {
     const summary = await examService.getEnrollmentExamSummary(enrollmentId);
 

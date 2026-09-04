@@ -12,6 +12,18 @@ interface BuildParentPortalChildrenSnapshotInput {
   readonly classSnapshotsById: ReadonlyMap<string, ClassSnapshot>;
 }
 
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
+}
+
 export function buildParentPortalChildrenSnapshot(
   input: BuildParentPortalChildrenSnapshotInput,
 ): ParentPortalChildrenSnapshot {
@@ -24,28 +36,38 @@ export function buildParentPortalChildrenSnapshot(
   }
 
   return {
-    items: input.studentSnapshots.map((studentSnapshot) => ({
-      studentId: studentSnapshot.id,
-      displayName: studentSnapshot.fullName,
-      studentStatus: studentSnapshot.status,
-      activeEnrollments: (enrollmentsByStudentId.get(studentSnapshot.id) ?? [])
-        .map((enrollment): ParentPortalChildEnrollmentSnapshot | null => {
-          const classSnapshot = input.classSnapshotsById.get(enrollment.classId);
+    items: input.studentSnapshots
+      .toSorted(
+        (left, right) =>
+          compareStrings(left.fullName, right.fullName) || compareStrings(left.id, right.id),
+      )
+      .map((studentSnapshot) => ({
+        studentId: studentSnapshot.id,
+        displayName: studentSnapshot.fullName,
+        studentStatus: studentSnapshot.status,
+        activeEnrollments: (enrollmentsByStudentId.get(studentSnapshot.id) ?? [])
+          .map((enrollment): ParentPortalChildEnrollmentSnapshot | null => {
+            const classSnapshot = input.classSnapshotsById.get(enrollment.classId);
 
-          if (classSnapshot === undefined) {
-            return null;
-          }
+            if (classSnapshot === undefined) {
+              return null;
+            }
 
-          return {
-            enrollmentId: enrollment.id,
-            classId: enrollment.classId,
-            className: classSnapshot.name,
-            parishId: enrollment.parishId,
-            academicYearId: enrollment.academicYearId,
-            catechismLevelId: classSnapshot.catechismLevelId,
-          };
-        })
-        .filter((item): item is ParentPortalChildEnrollmentSnapshot => item !== null),
-    })),
+            return {
+              enrollmentId: enrollment.id,
+              classId: enrollment.classId,
+              className: classSnapshot.name,
+              parishId: enrollment.parishId,
+              academicYearId: enrollment.academicYearId,
+              catechismLevelId: classSnapshot.catechismLevelId,
+            };
+          })
+          .filter((item): item is ParentPortalChildEnrollmentSnapshot => item !== null)
+          .sort(
+            (left, right) =>
+              compareStrings(left.className, right.className) ||
+              compareStrings(left.enrollmentId, right.enrollmentId),
+          ),
+      })),
   };
 }

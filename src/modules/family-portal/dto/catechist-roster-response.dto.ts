@@ -1,12 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EnrollmentStatus } from '../../enrollment/enums/enrollment-status.enum';
-import {
-  ClassLearningProgressSummaryDto,
-  CompactLearningDimensionMetricsDto,
-  LearningProgressExamResponseDto,
-  LearningProgressFiltersDto,
-  LearningProgressPracticeResponseDto,
-} from '../../learning-progress/dto/learning-progress-response.dto';
 import type { EnrollmentExamSummarySnapshot } from '../../exam/interfaces/exam.interface';
 import type {
   CatechistPortalClassRosterSnapshot,
@@ -17,6 +10,13 @@ import type {
   LearningProgressFilters,
   LearningProgressPracticeSnapshot,
 } from '../../learning-progress/interfaces/learning-progress.interface';
+import {
+  FamilyPortalClassProgressSummaryDto,
+  FamilyPortalCompactLearningMetricsDto,
+  FamilyPortalExamMetricsDto,
+  FamilyPortalPracticeMetricsDto,
+  FamilyPortalProgressFiltersDto,
+} from './family-portal-progress-response.dto';
 
 export class CatechistRosterLearnerResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -31,14 +31,14 @@ export class CatechistRosterLearnerResponseDto {
   @ApiProperty({ enum: EnrollmentStatus })
   enrollmentStatus!: EnrollmentStatus;
 
-  @ApiProperty({ type: CompactLearningDimensionMetricsDto })
-  learning!: CompactLearningDimensionMetricsDto;
+  @ApiProperty({ type: FamilyPortalCompactLearningMetricsDto })
+  learning!: FamilyPortalCompactLearningMetricsDto;
 
-  @ApiProperty({ type: LearningProgressPracticeResponseDto })
-  practice!: LearningProgressPracticeResponseDto;
+  @ApiProperty({ type: FamilyPortalPracticeMetricsDto })
+  practice!: FamilyPortalPracticeMetricsDto;
 
-  @ApiProperty({ type: LearningProgressExamResponseDto })
-  exam!: LearningProgressExamResponseDto;
+  @ApiProperty({ type: FamilyPortalExamMetricsDto })
+  exam!: FamilyPortalExamMetricsDto;
 
   @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
   lastLearningActivityAt!: string | null;
@@ -48,11 +48,11 @@ export class CatechistClassRosterResponseDto {
   @ApiProperty({ format: 'uuid' })
   classId!: string;
 
-  @ApiProperty({ type: LearningProgressFiltersDto })
-  filters!: LearningProgressFiltersDto;
+  @ApiProperty({ type: FamilyPortalProgressFiltersDto })
+  filters!: FamilyPortalProgressFiltersDto;
 
-  @ApiProperty({ type: ClassLearningProgressSummaryDto })
-  summary!: ClassLearningProgressSummaryDto;
+  @ApiProperty({ type: FamilyPortalClassProgressSummaryDto })
+  summary!: FamilyPortalClassProgressSummaryDto;
 
   @ApiProperty({
     type: 'object',
@@ -80,14 +80,14 @@ function toIsoString(value: Date | null): string | null {
   return value === null ? null : value.toISOString();
 }
 
-function toFiltersDto(filters: LearningProgressFilters): LearningProgressFiltersDto {
+function toFiltersDto(filters: LearningProgressFilters): FamilyPortalProgressFiltersDto {
   return {
     curriculumId: filters.curriculumId,
     canonicalLessonKey: filters.canonicalLessonKey,
   };
 }
 
-function toExamDto(exam: EnrollmentExamSummarySnapshot): LearningProgressExamResponseDto {
+function toExamDto(exam: EnrollmentExamSummarySnapshot): FamilyPortalExamMetricsDto {
   return {
     assignmentsAvailable: exam.assignmentsAvailable,
     attemptsCompleted: exam.attemptsCompleted,
@@ -95,9 +95,7 @@ function toExamDto(exam: EnrollmentExamSummarySnapshot): LearningProgressExamRes
   };
 }
 
-function toPracticeDto(
-  practice: LearningProgressPracticeSnapshot,
-): LearningProgressPracticeResponseDto {
+function toPracticeDto(practice: LearningProgressPracticeSnapshot): FamilyPortalPracticeMetricsDto {
   return {
     standard: { ...practice.standard },
     review: { ...practice.review },
@@ -105,7 +103,9 @@ function toPracticeDto(
   };
 }
 
-function toClassSummaryDto(summary: ClassLearningProgressSummary): ClassLearningProgressSummaryDto {
+function toClassSummaryDto(
+  summary: ClassLearningProgressSummary,
+): FamilyPortalClassProgressSummaryDto {
   return {
     learnersTotal: summary.learnersTotal,
     learnersWithLearningActivity: summary.learnersWithLearningActivity,

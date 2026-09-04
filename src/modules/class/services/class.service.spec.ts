@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError, type Repository, type SelectQueryBuilder } from 'typeorm';
+import { In, QueryFailedError, type Repository, type SelectQueryBuilder } from 'typeorm';
 import { AcademicYearStatus } from '../../academic-structure/enums/academic-year-status.enum';
 import { AcademicYearDoesNotBelongToParishError } from '../../academic-structure/errors/academic-year.errors';
 import { AcademicYearService } from '../../academic-structure/services/academic-year.service';
@@ -21,7 +21,7 @@ import { ClassService } from './class.service';
 describe('ClassService', () => {
   let classService: ClassService;
   let classRepository: jest.Mocked<
-    Pick<Repository<ClassEntity>, 'create' | 'save' | 'findOne' | 'createQueryBuilder'>
+    Pick<Repository<ClassEntity>, 'create' | 'save' | 'find' | 'findOne' | 'createQueryBuilder'>
   >;
   let parishService: jest.Mocked<Pick<ParishService, 'assertParishActive' | 'getParishById'>>;
   let academicYearService: jest.Mocked<
@@ -64,6 +64,7 @@ describe('ClassService', () => {
     classRepository = {
       create: jest.fn(),
       save: jest.fn(),
+      find: jest.fn(),
       findOne: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
     };
@@ -110,6 +111,43 @@ describe('ClassService', () => {
     }).compile();
 
     classService = moduleRef.get(ClassService);
+  });
+
+  it('returns no class snapshots without querying for empty input', async () => {
+    await expect(classService.getClassSnapshotsByIds([])).resolves.toEqual([]);
+
+    expect(classRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates class snapshot IDs and preserves first-requested order', async () => {
+    const secondClassId = '44444444-4444-4444-8444-444444444443';
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const classEntities = [classId, secondClassId].map(
+      (id, index) =>
+        ({
+          id,
+          parishId,
+          academicYearId,
+          catechismLevelId,
+          code: `class-${String(index)}`,
+          name: `Class ${String(index)}`,
+          status: ClassStatus.Active,
+          createdAt: now,
+          updatedAt: now,
+        }) satisfies ClassEntity,
+    );
+    classRepository.find.mockResolvedValue(classEntities);
+
+    const snapshots = await classService.getClassSnapshotsByIds([
+      secondClassId,
+      classId,
+      secondClassId,
+    ]);
+
+    expect(classRepository.find).toHaveBeenCalledWith({
+      where: { id: In([secondClassId, classId]) },
+    });
+    expect(snapshots.map((snapshot) => snapshot.id)).toEqual([secondClassId, classId]);
   });
 
   it('creates a class as PLANNED with normalized code', async () => {

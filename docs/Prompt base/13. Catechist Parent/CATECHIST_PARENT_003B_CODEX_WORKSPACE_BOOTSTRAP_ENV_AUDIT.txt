@@ -1,0 +1,513 @@
+CODEX PROMPT — CATECHIST + PARENT SUPPORTING APIs #003B
+NEW-MACHINE WORKSPACE BOOTSTRAP + ENVIRONMENT RECOVERY AUDIT
+AUDIT FIRST — DO NOT IMPLEMENT #004 YET
+
+CONTEXT
+-------
+We are continuing an existing NestJS backend project on a NEW COMPUTER and using Codex instead of Cursor.
+
+Completed project phase history:
+- #001/5 Domain audit + orchestration design
+- #001A Baseline cleanup fix
+- #002/5 Catechist portal
+- #003/5 Parent portal
+- #003A Corrective hardening — PASS
+
+Next planned implementation:
+#004/5 — RBAC / Security / Performance / OpenAPI / Contract Hardening
+
+BUT DO NOT RUN #004 YET.
+
+The new machine is missing the local `.env` file.
+We must first reconstruct the local development environment from repository truth and prove the repository is in the expected state.
+
+PURPOSE
+-------
+This prompt is ONLY for:
+1. repository-state audit
+2. environment/config audit
+3. `.env` reconstruction for LOCAL DEVELOPMENT
+4. Docker/MSSQL connectivity verification
+5. dependency/toolchain verification
+6. baseline test verification
+7. handoff report for GPT review
+
+DO NOT implement Family Portal #004 business/hardening changes yet.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+- git add
+- git commit
+- git push
+
+NEVER suggest `git add`.
+
+Do not change branches automatically unless explicitly required and reported first.
+
+If tracked changes exist from environment/bootstrap work, do NOT commit them.
+
+PROJECT WORKFLOW
+----------------
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+This task is AUDIT/BOOTSTRAP only.
+
+MANDATORY FIRST STEPS
+---------------------
+1. Run:
+   git status --short
+   git branch --show-current
+   git rev-parse HEAD
+   git log -5 --oneline
+
+2. Confirm repository root.
+
+3. Read completely:
+   PROJECT_RULES.md
+   AGENTS.md
+   all `.cursor/rules/*.mdc` if they exist
+
+Important:
+Although `.cursor/rules` were authored for Cursor, treat them as PROJECT RULES.
+Do not ignore them just because this task is running under Codex.
+
+4. Read existing reports:
+   docs/CATECHIST_PARENT_001_DOMAIN_AUDIT_ORCHESTRATION_DESIGN_REPORT.md
+   docs/CATECHIST_PARENT_001A_BASELINE_INTEGRATION_CLEANUP_FIX_REPORT.md
+   docs/CATECHIST_PARENT_002_FAMILY_PORTAL_CATECHIST_CONTEXT_CLASSES_ROSTER_REPORT.md
+   docs/CATECHIST_PARENT_003_FAMILY_PORTAL_PARENT_CONTEXT_CHILDREN_PROGRESS_REPORT.md
+   docs/CATECHIST_PARENT_003A_PARENT_AND_QUALITY_PERFORMANCE_CORRECTIVE_GATE_REPORT.md
+
+5. Inspect current Family Portal code:
+   src/modules/family-portal/
+   src/modules/class/
+   src/modules/enrollment/
+   src/modules/student/
+   src/modules/learning-progress/
+   src/modules/exam/
+   src/modules/auth/
+   src/modules/access-control/
+   src/modules/module-boundaries.spec.ts
+   src/app.module.ts
+   package.json
+   Dockerfile
+   docker-compose*.yml / compose*.yml if present
+   test/
+   README.md
+
+EXPECTED BUSINESS STATE
+-----------------------
+Do NOT modify this during bootstrap.
+
+Expected module:
+`family-portal`
+
+Expected MVP routes:
+
+Catechist:
+GET /api/v1/me/catechist/context
+GET /api/v1/me/catechist/classes
+GET /api/v1/me/catechist/classes/:classId/roster
+
+Parent:
+GET /api/v1/me/parent/context
+GET /api/v1/me/parent/children
+GET /api/v1/me/parent/enrollments/:enrollmentId/progress
+
+Architecture invariants:
+- FamilyPortal owns ZERO business tables
+- no TypeORM entities/repositories inside FamilyPortal
+- FamilyPortalService is the only public export
+- no forwardRef
+- no reverse domain dependency into FamilyPortal
+- Parent scope = ACTIVE guardian relationship
+- Catechist scope = active class assignment
+- Parent formal Exam attempt remains denied
+- Parent class-wide progress remains denied
+
+DO NOT CHANGE THESE IN THIS AUDIT.
+
+ENVIRONMENT RECOVERY
+--------------------
+The `.env` file is missing on this new machine.
+
+DO NOT guess variable names.
+
+Reconstruct the environment from repository evidence only.
+
+Inspect all available sources:
+- `.env.example`
+- `.env.sample`
+- `.env.template`
+- `.env.test`
+- `.env.development`
+- config/env validation source
+- ConfigModule schema
+- process.env usages
+- Docker Compose environment blocks
+- README setup instructions
+- test bootstrap config
+- package.json scripts
+- migration/seed scripts
+
+Build a complete inventory table:
+
+VARIABLE
+REQUIRED?
+SOURCE OF TRUTH
+LOCAL DEV VALUE
+TEST VALUE
+SECRET?
+NOTES
+
+ENV SAFETY RULES
+----------------
+Never invent or expose production secrets.
+
+For LOCAL development:
+- generate only safe local values
+- generated random local secrets are acceptable
+- do not reuse real production credentials
+- do not print secrets unnecessarily in report
+- do not commit `.env`
+- verify `.env` is gitignored
+
+If AWS/S3/external services are optional locally:
+prefer documented local/no-op/provider settings from repository config.
+Do not invent cloud credentials.
+
+If the project requires JWT/session secrets locally:
+generate strong random LOCAL-ONLY values if no repository-provided dev values exist.
+
+If there is a known demo MSSQL password convention in repository examples, use repository truth.
+Do not infer from old conversation memory.
+
+ENV FILE CREATION
+-----------------
+If repository evidence is sufficient:
+
+Create local:
+`.env`
+
+This is allowed even though it is untracked/gitignored.
+
+Also, ONLY if useful and missing:
+create/update `.env.example` ONLY if the repository already expects one and the existing example is demonstrably incomplete.
+
+Do NOT modify `.env.example` merely because this machine lacks `.env`.
+
+Before writing `.env`:
+report the variable names and masked intended sources.
+Then create it.
+
+After creation:
+verify:
+git status --short
+
+Expected:
+`.env` should NOT appear if correctly gitignored.
+
+If `.env` is not ignored:
+STOP and report HIGH risk before proceeding.
+
+NODE / NPM
+----------
+Expected Node from prior project state:
+v22.23.1
+
+But verify repository truth:
+- package.json engines
+- .nvmrc
+- .node-version
+- Dockerfile
+
+Run:
+node --version
+npm --version
+
+If local Node differs:
+DO NOT silently continue.
+Report exact mismatch and recommended correction.
+
+DEPENDENCIES
+------------
+Audit package manager lock file:
+- package-lock.json / npm
+- pnpm-lock.yaml / pnpm
+- yarn.lock / yarn
+
+Use repository-selected package manager only.
+
+For npm project:
+prefer:
+npm ci
+
+Do not run package upgrades.
+Do not modify dependency versions during bootstrap.
+
+DOCKER / MSSQL
+--------------
+This project is expected to use Docker CLI through WSL on Windows, not Docker Desktop.
+
+Audit actual compose files.
+
+Check:
+wsl --status
+wsl docker --version
+wsl docker compose version
+
+or appropriate equivalent from current terminal.
+
+Do NOT assume localhost DB routing.
+Read actual compose/config.
+
+Identify:
+- MSSQL container/service name
+- published host port
+- DB name
+- DB user
+- app DB host when running in container
+- DB host when running app natively on Windows/WSL
+- healthcheck
+- init service
+- test DB configuration
+
+Do not overwrite a native Windows MSSQL setup.
+
+PORT CONFLICT CHECK
+-------------------
+Audit likely ports:
+- API port
+- MSSQL host-published port
+- any Redis/other dependency ports
+
+Check whether ports are already occupied.
+
+Do not kill unrelated processes/containers automatically.
+
+DATABASE BOOTSTRAP
+------------------
+Use repository scripts.
+
+Do not manually invent SQL setup if scripts exist.
+
+Inspect and identify correct order for:
+- Docker compose up
+- database init
+- migrations
+- seeds
+- test DB prepare
+
+Do not seed production-like data unless existing dev seed scripts explicitly do so.
+
+QUALITY:FULL
+------------
+From #003A, expected `quality:full` is self-contained and resets DB appropriately.
+
+Confirm actual package.json still contains a self-contained lifecycle equivalent to:
+
+quality
+→ DB reset
+→ migrations
+→ integration
+→ DB reset
+→ migrations
+→ DB e2e
+
+Do not modify unless current repository differs or is broken.
+
+BASELINE VALIDATION
+-------------------
+After environment is reconstructed:
+
+Run:
+npm ci
+
+Then:
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+
+Then:
+npm run quality:full
+
+Do NOT manually reset immediately before the final `quality:full` unless the current repository script itself is broken.
+The purpose is to prove it is self-contained.
+
+Expected from prior state:
+- full integration PASS
+- full DB e2e PASS
+- no BLOCKER/HIGH
+
+DOCKER PRODUCTION BUILD
+-----------------------
+Run production build using the correct repository path:
+
+wsl bash -lc "cd '<actual repo path>' && docker build --target production -t catechism-api:codex-bootstrap ."
+
+If repository is already inside WSL, adapt appropriately.
+
+PASS required for #004 readiness.
+
+OPTIONAL RUNTIME SMOKE
+----------------------
+If safe and easy:
+- start required local containers
+- start API
+- call health endpoint
+- verify DB connectivity
+
+Do not leave uncontrolled background processes.
+
+If smoke test is skipped:
+state why.
+
+DO NOT IMPLEMENT #004
+---------------------
+Strictly forbidden in this prompt:
+- changing RBAC behavior
+- changing FamilyPortal business APIs
+- OpenAPI hardening
+- README Family Portal hardening
+- new tests for #004 business scope
+- new endpoints
+- new tables
+- new migrations
+- business refactors
+
+Only fix environment/bootstrap blockers if necessary.
+
+If you discover a production-code defect that blocks startup:
+DO NOT casually fix it.
+Report it as BLOCKER/HIGH for GPT review.
+
+CODEX-SPECIFIC HANDOFF
+----------------------
+Because this is a new AI agent:
+produce a concise “Codex understanding” section proving you understand:
+
+1. current phase
+2. completed prompts
+3. exact six Family Portal routes
+4. zero-table architecture
+5. Parent scope invariant
+6. Catechist scope invariant
+7. next #004 scope
+8. final #005 scope
+9. git restrictions
+
+REQUIRED REPORT
+---------------
+Create:
+
+docs/CATECHIST_PARENT_003B_CODEX_WORKSPACE_BOOTSTRAP_ENV_AUDIT_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Repository root
+3. Git branch / HEAD
+4. Git status
+5. Project rules discovered
+6. Codex understanding of current phase
+7. Family Portal current implementation inventory
+8. Expected route inventory confirmation
+9. Architecture invariant confirmation
+10. Node/npm requirement
+11. Local Node/npm actual
+12. Package manager / lockfile
+13. Dependency install result
+14. Environment source files found
+15. Environment variable inventory
+16. Missing required variables
+17. `.env` reconstruction decision
+18. `.env` created? YES/NO
+19. `.env` gitignored? YES/NO
+20. Secrets handling
+21. Docker/WSL environment
+22. MSSQL topology
+23. Local DB connection settings
+24. Test DB settings
+25. Port/conflict audit
+26. DB bootstrap/migration procedure
+27. Seed procedure
+28. quality:full current definition
+29. format/lint/typecheck/unit/e2e/build
+30. npm audit
+31. quality:full result
+32. Docker production build
+33. Runtime smoke
+34. Files created
+35. Files modified
+36. Production code changed? YES/NO
+37. Risks
+38. BLOCKER/HIGH/MEDIUM/LOW
+39. #004 readiness
+40. Recommended exact next prompt title
+41. Git recommendation
+
+REQUIRED VERDICTS
+-----------------
+REPOSITORY STATE UNDERSTOOD: YES/NO
+EXPECTED GIT BRANCH/HEAD ACCEPTABLE: YES/NO
+NODE VERSION READY: YES/NO
+DEPENDENCIES READY: YES/NO
+LOCAL ENV RECONSTRUCTED: YES/NO
+ENV GITIGNORE SAFE: YES/NO
+DOCKER/WSL READY: YES/NO
+MSSQL LOCAL READY: YES/NO
+QUALITY:FULL SELF-CONTAINED: YES/NO
+QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER PRODUCTION BUILD: PASS/FAIL
+FAMILY PORTAL CURRENT STATE MATCHES REPORTS: YES/NO
+PRODUCTION CODE CHANGED: YES/NO
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+CATECHIST + PARENT #004 READINESS: YES/NO
+
+#004 GATE
+---------
+Proceed to #004 only if:
+- repository state understood
+- Node/dependencies ready
+- `.env` safely reconstructed
+- Docker/MSSQL ready
+- Family Portal implementation matches reports
+- production code unchanged by bootstrap
+- BLOCKER=0
+- HIGH=0
+- quality:full PASS
+- Docker production build PASS
+
+If ready, recommend exactly:
+
+CATECHIST + PARENT SUPPORTING APIs #004/5 —
+RBAC / SECURITY / PERFORMANCE / OPENAPI / CONTRACT HARDENING
+
+Do NOT implement it in this prompt.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- bootstrap status
+- repo branch/HEAD
+- Node
+- `.env`
+- Docker/MSSQL
+- quality:full
+- Docker build
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

@@ -1,0 +1,330 @@
+CURSOR PROMPT — CATECHIST + PARENT SUPPORTING APIs #004A
+CORRECTIVE GATE — RESOLVE / VERIFY REMAINING NPM MODERATE ADVISORY BEFORE #005
+
+CONTEXT
+-------
+We are continuing the Family Portal phase after #004/5 was implemented by Codex.
+
+Completed:
+- #001/5 Domain audit/design
+- #001A Baseline cleanup
+- #002/5 Catechist portal
+- #003/5 Parent portal
+- #003A Corrective validation
+- #004/5 RBAC/Security/Performance/OpenAPI/Contract hardening
+
+#004 result:
+ALL Family Portal code/contract gates PASS except npm audit.
+
+Verified #004 state:
+- Architecture READY
+- RBAC READY
+- Catechist scope SAFE
+- Parent scope SAFE
+- Admin impersonation SAFE
+- Parent class-wide leakage SAFE
+- Data minimization READY
+- Error contract READY
+- Pagination/sorting READY
+- N+1/performance READY
+- Batch contracts READY
+- OpenAPI READY
+- README READY
+- FE Catechist/Parent READY
+- Mobile Catechist/Parent READY
+- zero-table boundary READY
+- Integration PASS: 236/236
+- DB e2e PASS: 150/150
+- self-contained quality:full PASS
+- Docker PASS
+
+Remaining issue:
+production dependency installation reported ONE MODERATE vulnerability.
+
+Codex could not complete:
+npm audit --audit-level=moderate
+
+Therefore:
+#005/5 is blocked only by npm audit verification/resolution.
+
+THIS PROMPT IS CORRECTIVE ONLY.
+
+Do NOT re-audit all Family Portal code.
+Do NOT implement #005.
+Do NOT add business features.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "fix(deps): resolve moderate npm advisory"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read ONLY:
+docs/CATECHIST_PARENT_003A_PARENT_AND_QUALITY_PERFORMANCE_CORRECTIVE_GATE_REPORT.md
+docs/CATECHIST_PARENT_004_RBAC_SECURITY_PERFORMANCE_OPENAPI_CONTRACT_HARDENING_REPORT.md
+
+Inspect:
+package.json
+package-lock.json
+Dockerfile
+
+Inspect other files ONLY if the advisory specifically requires understanding how a dependency is used.
+
+PRIMARY OBJECTIVE
+-----------------
+Determine exactly what the remaining moderate npm advisory is and close the #005 gate safely.
+
+Required workflow:
+1. identify advisory
+2. classify production impact
+3. identify dependency path
+4. identify safe remediation
+5. apply smallest safe dependency change if justified
+6. verify no breaking upgrade
+7. rerun relevant tests
+8. rerun npm audit
+9. rerun self-contained quality:full
+10. rerun Docker
+11. produce report
+12. do not proceed #005 automatically
+
+REPOSITORY STATE
+----------------
+Run:
+git status --short
+git branch --show-current
+git rev-parse HEAD
+
+Do not change branch.
+Document tracked changes inherited from #004.
+Do NOT revert #004 changes.
+
+EXACT AUDIT
+-----------
+Run:
+npm audit --audit-level=moderate
+
+If it hangs, try:
+npm audit --json
+
+Required details:
+- package name
+- severity
+- advisory/CVE/GHSA if available
+- dependency path
+- direct vs transitive
+- production vs dev-only
+- installed version
+- vulnerable range
+- fixed version
+- whether npm suggests `npm audit fix`
+- whether fix requires semver-major / `--force`
+
+Do not expose secrets.
+
+CLASSIFY IMPACT
+---------------
+Classify:
+A. direct production dependency
+B. transitive production dependency
+C. dev-only dependency
+D. non-applicable runtime exposure but audit still failing
+
+The project gate still requires npm audit moderate+ PASS unless the user explicitly approves an exception.
+
+Do NOT silently accept a moderate advisory.
+
+REMEDIATION POLICY
+------------------
+Preferred order:
+1. patch/minor safe upgrade within existing semver
+2. lockfile refresh if package.json already allows fixed version
+3. narrow direct dependency bump
+4. `overrides` only if technically safe and justified
+5. major dependency upgrade only if truly necessary
+
+DO NOT run:
+npm audit fix --force
+
+without explicit user approval.
+
+Do not broadly run npm update.
+
+If plain `npm audit fix` is safe and non-major, inspect diff before/after and ensure it does not broadly change unrelated dependencies.
+
+TARGETED VALIDATION
+-------------------
+After remediation run:
+
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+
+Then:
+npm audit --audit-level=moderate
+
+Required:
+PASS / 0 vulnerabilities at moderate+.
+
+FULL QUALITY
+------------
+Run:
+npm run quality:full
+
+Must PASS self-contained.
+
+DOCKER
+------
+Run:
+docker build --target production -t catechism-api:family-portal-audit-clean .
+
+Use WSL equivalent if current machine requires it.
+
+PASS required.
+
+Important:
+Docker production install must also no longer report the same moderate advisory.
+
+If Docker builds but production install still reports moderate:
+gate remains FAIL.
+
+FAMILY PORTAL REGRESSION
+------------------------
+Do not re-design Family Portal.
+Only ensure #004 remains intact:
+- six routes remain
+- zero tables
+- no new permissions
+- no Parent exam attempt
+- no admin impersonation
+- no Parent class-wide leakage
+- module boundaries pass
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT:
+- implement demo seed
+- implement Postman
+- declare phase complete
+- add routes
+- add tables/migrations
+- alter Family Portal business behavior
+- work on Attendance/Schedule/Prayer/Notifications
+- upgrade unrelated packages
+- use npm audit fix --force
+
+REQUIRED REPORT
+---------------
+Create:
+docs/CATECHIST_PARENT_004A_NPM_AUDIT_ADVISORY_RESOLUTION_GATE_REPORT.md
+
+Required sections:
+1 Objective
+2 Why #004A was required
+3 Git state
+4 Original advisory
+5 Package/advisory identifier
+6 Severity
+7 Direct/transitive classification
+8 Production/dev classification
+9 Dependency path
+10 Vulnerable installed version
+11 Fixed version/range
+12 Runtime exposure
+13 Remediation options considered
+14 Chosen remediation
+15 Why remediation is non-breaking
+16 Files modified
+17 package.json diff summary
+18 package-lock diff summary
+19 Targeted usage audit
+20 Fast regression
+21 npm audit final result
+22 quality:full
+23 Docker production build
+24 Docker production install advisory result
+25 Family Portal regression
+26 Risks/deferred
+27 BLOCKER/HIGH/MEDIUM/LOW
+28 #005 readiness
+29 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+ADVISORY IDENTIFIED: YES/NO
+ADVISORY PRODUCTION IMPACT UNDERSTOOD: YES/NO
+SAFE REMEDIATION AVAILABLE: YES/NO
+BREAKING/MAJOR UPGRADE REQUIRED: YES/NO
+DEPENDENCY REMEDIATION COMPLETE: YES/NO
+NPM AUDIT MODERATE+: PASS/FAIL
+DOCKER PRODUCTION DEPENDENCIES CLEAN AT MODERATE+: YES/NO
+FAMILY PORTAL REGRESSION: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+DOCKER BUILD: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+CATECHIST + PARENT #005 READINESS: YES/NO
+
+#005 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- MEDIUM=0 for npm advisory
+- npm audit moderate+ PASS
+- Docker production install clean at moderate+
+- Family Portal regression PASS
+- quality:full PASS
+- Docker PASS
+
+Then recommend exactly:
+
+CATECHIST + PARENT SUPPORTING APIs #005/5 —
+FINAL AUDIT + DEMO SEED + POSTMAN + PHASE COMPLETION
+
+Do NOT implement #005 automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #004A status
+- advisory package/severity
+- dependency path
+- remediation
+- breaking change required yes/no
+- npm audit
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #005 readiness
+- report path
+
+Then, only if tracked dependency changes exist, print exactly:
+
+git commit -m "fix(deps): resolve moderate npm advisory"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.

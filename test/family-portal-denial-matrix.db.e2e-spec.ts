@@ -51,6 +51,19 @@ interface ParentChildrenResponseBody {
   }>;
 }
 
+interface CatechistRosterResponseBody {
+  learners: {
+    items: Array<Record<string, unknown>>;
+  };
+}
+
+interface ParentProgressResponseBody {
+  enrollmentId: string;
+  studentId: string;
+  enrollmentStatus: string;
+  progress: Record<string, unknown>;
+}
+
 describe('Family Portal cross-actor denial matrix (db e2e)', () => {
   let application: INestApplication;
   let seedModuleRef: TestingModule;
@@ -229,6 +242,30 @@ describe('Family Portal cross-actor denial matrix (db e2e)', () => {
         .expect(403);
     });
 
+    it('returns compact progress fields without lesson or answer payloads', async () => {
+      const response = await request(getTestHttpServer(application))
+        .get(`/api/v1/me/parent/enrollments/${linkedEnrollmentId}/progress`)
+        .set('Authorization', `Bearer ${parentToken}`)
+        .expect(200);
+      const body = response.body as ParentProgressResponseBody;
+
+      expect(Object.keys(body).sort()).toEqual(
+        ['enrollmentId', 'enrollmentStatus', 'progress', 'studentId'].sort(),
+      );
+      expect(Object.keys(body.progress).sort()).toEqual(
+        [
+          'enrollmentId',
+          'exam',
+          'filters',
+          'lastLearningActivityAt',
+          'learning',
+          'practice',
+        ].sort(),
+      );
+      expect(body.progress).not.toHaveProperty('lessons');
+      expect(JSON.stringify(body)).not.toMatch(/answer|correctAnswer|explanation/i);
+    });
+
     it('returns allow-listed child fields only', async () => {
       const response = await request(getTestHttpServer(application))
         .get('/api/v1/me/parent/children')
@@ -295,6 +332,42 @@ describe('Family Portal cross-actor denial matrix (db e2e)', () => {
         .set('Authorization', `Bearer ${catechistToken}`)
         .expect(403);
     });
+
+    it('denies formal exam attempt start for catechist actors', async () => {
+      await request(getTestHttpServer(application))
+        .post(`/api/v1/enrollments/${linkedEnrollmentId}/exam-attempts`)
+        .set('Authorization', `Bearer ${catechistToken}`)
+        .send({ examAssignmentId: '99999999-9999-4999-8999-999999999999' })
+        .expect(403);
+    });
+
+    it('returns allow-listed roster learner fields only', async () => {
+      const response = await request(getTestHttpServer(application))
+        .get(`/api/v1/me/catechist/classes/${demoClassId}/roster`)
+        .set('Authorization', `Bearer ${catechistToken}`)
+        .expect(200);
+      const learner = (response.body as CatechistRosterResponseBody).learners.items[0];
+
+      if (learner === undefined) {
+        throw new Error('Expected at least one roster learner.');
+      }
+
+      expect(Object.keys(learner).sort()).toEqual(
+        [
+          'displayName',
+          'enrollmentId',
+          'enrollmentStatus',
+          'exam',
+          'lastLearningActivityAt',
+          'learning',
+          'practice',
+          'studentId',
+        ].sort(),
+      );
+      expect(JSON.stringify(learner)).not.toMatch(
+        /dateOfBirth|address|phone|email|guardian|answer|explanation/i,
+      );
+    });
   });
 
   describe('Student actor', () => {
@@ -312,18 +385,42 @@ describe('Family Portal cross-actor denial matrix (db e2e)', () => {
   });
 
   describe('Admin actors', () => {
-    it('does not impersonate parent portal routes for parish admin', async () => {
-      await request(getTestHttpServer(application))
-        .get('/api/v1/me/parent/context')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(403);
+    it('does not allow parish or super administrators to impersonate either portal actor', async () => {
+      for (const token of [adminToken, superAdminToken]) {
+        await request(getTestHttpServer(application))
+          .get('/api/v1/me/parent/context')
+          .set('Authorization', `Bearer ${token}`)
+          .expect(403);
+
+        await request(getTestHttpServer(application))
+          .get('/api/v1/me/catechist/context')
+          .set('Authorization', `Bearer ${token}`)
+          .expect(403);
+      }
+    });
+  });
+
+  describe('HTTP contract validation', () => {
+    it('requires authentication for both portal route groups', async () => {
+      await request(getTestHttpServer(application)).get('/api/v1/me/parent/context').expect(401);
+      await request(getTestHttpServer(application)).get('/api/v1/me/catechist/context').expect(401);
     });
 
-    it('does not impersonate catechist portal routes for super admin', async () => {
+    it('rejects malformed route UUIDs and invalid pagination', async () => {
       await request(getTestHttpServer(application))
-        .get('/api/v1/me/catechist/context')
-        .set('Authorization', `Bearer ${superAdminToken}`)
-        .expect(403);
+        .get('/api/v1/me/parent/enrollments/not-a-uuid/progress')
+        .set('Authorization', `Bearer ${parentToken}`)
+        .expect(400);
+
+      await request(getTestHttpServer(application))
+        .get('/api/v1/me/catechist/classes/not-a-uuid/roster')
+        .set('Authorization', `Bearer ${catechistToken}`)
+        .expect(400);
+
+      await request(getTestHttpServer(application))
+        .get('/api/v1/me/catechist/classes?page=0&limit=51')
+        .set('Authorization', `Bearer ${catechistToken}`)
+        .expect(400);
     });
   });
 });
