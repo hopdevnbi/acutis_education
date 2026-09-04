@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
+import { deleteClassOperationsRowsForParishCodePrefix } from './helpers/delete-class-operations-rows-for-parish-code.util';
 import AppDataSource from '../../src/database/data-source';
 import { generateUuidV4, normalizeUuid } from '../../src/database/uuid-v4.util';
 import { ApplicationConfigModule } from '../../src/config/config.module';
@@ -235,6 +236,8 @@ describe('Localization delivery integration (MSSQL)', () => {
     `,
       [demoEnrollmentId],
     );
+
+    await deleteClassOperationsRowsForParishCodePrefix(AppDataSource, TEST_CODE_PREFIX);
 
     await AppDataSource.query(`
       DELETE FROM translation_revisions

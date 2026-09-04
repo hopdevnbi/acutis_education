@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm';
 import { PARISH_ACADEMIC_SAMPLE_PARISH_CODE } from '../../../src/database/seeds/parish-academic.seed.constants';
+import { deleteClassOperationsRowsForParishCode } from './delete-class-operations-rows-for-parish-code.util';
 import { deleteExamEngineRowsForParishCode } from './delete-exam-engine-rows-for-parish-code.util';
 
 /**
@@ -13,6 +14,7 @@ export async function cleanupAuthRbacSeedDomainDependencies(
   const safeDomain = sampleDomain.replace(/'/g, "''");
 
   await deleteExamEngineRowsForParishCode(dataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
+  await deleteClassOperationsRowsForParishCode(dataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
 
   await dataSource.query(`
     UPDATE question_versions

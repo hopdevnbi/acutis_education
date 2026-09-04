@@ -51,6 +51,18 @@ describe('LearningProgressDemoSeedService integration (MSSQL)', () => {
     await parishAcademicSeedService.run();
     await classEnrollmentSeedService.run();
     await curriculumDemoSeedService.run();
+
+    await AppDataSource.query(`
+      DELETE FROM lesson_progress
+      WHERE enrollment_id IN (
+        SELECT e.id
+        FROM enrollments e
+        INNER JOIN students s ON s.id = e.student_id
+        INNER JOIN parishes p ON p.id = e.parish_id
+        WHERE p.code = '${PARISH_ACADEMIC_SAMPLE_PARISH_CODE}'
+          AND s.full_name = N'${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}'
+      )
+    `);
   });
 
   afterEach(async () => {

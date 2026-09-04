@@ -44,6 +44,8 @@ import { LearningProgressModule } from './learning-progress/learning-progress.mo
 import { LearningProgressService } from './learning-progress/services/learning-progress.service';
 import { FamilyPortalModule } from './family-portal/family-portal.module';
 import { FamilyPortalService } from './family-portal/family-portal.service';
+import { ClassOperationsModule } from './class-operations/class-operations.module';
+import { ClassOperationsService } from './class-operations/services/class-operations.service';
 import { LocalizationModule } from './localization/localization.module';
 import { LocalizationService } from './localization/services/localization.service';
 import { LocaleResolutionService } from './localization/services/locale-resolution.service';
@@ -225,6 +227,46 @@ describe('Auth module persistence boundaries', () => {
     expect(exports).not.toContain(TypeOrmModule);
   });
 
+  it('exports ClassOperationsService only from ClassOperationsModule', () => {
+    const exports = resolveModuleExports(ClassOperationsModule);
+
+    expect(exports).toHaveLength(1);
+    expect(exports).toContain(ClassOperationsService);
+    expect(exports).not.toContain(TypeOrmModule);
+  });
+
+  it('imports only approved modules for ClassOperationsModule', () => {
+    const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, ClassOperationsModule);
+
+    expect(Array.isArray(imports)).toBe(true);
+    expect(imports).toContain(ClassModule);
+    expect(imports).toContain(EnrollmentModule);
+    expect(imports).toContain(StudentModule);
+    expect(imports).toContain(ParishModule);
+    expect(imports).toContain(AuthModule);
+    expect(imports).toContain(AccessControlModule);
+    expect(imports).not.toContain(FamilyPortalModule);
+    expect(imports).not.toContain(LearningProgressModule);
+    expect(imports).not.toContain(PracticeModule);
+    expect(imports).not.toContain(ExamModule);
+    expect(imports).not.toContain(CurriculumModule);
+    expect(imports).not.toContain(LocalizationModule);
+    expect(imports).not.toContain(MediaModule);
+  });
+
+  it('does not import ClassOperationsModule from ClassModule or EnrollmentModule', () => {
+    const classImports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, ClassModule);
+    const enrollmentImports: unknown = Reflect.getMetadata(
+      MODULE_METADATA.IMPORTS,
+      EnrollmentModule,
+    );
+
+    expect(Array.isArray(classImports)).toBe(true);
+    expect(Array.isArray(enrollmentImports)).toBe(true);
+    expect(classImports).not.toContain(ClassOperationsModule);
+    expect(enrollmentImports).not.toContain(ClassOperationsModule);
+  });
+
   it('imports only the public modules required by FamilyPortalModule', () => {
     const imports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, FamilyPortalModule);
 
@@ -293,6 +335,7 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'localization/localization.module.ts'),
       join(__dirname, 'exam/exam.module.ts'),
       join(__dirname, 'family-portal/family-portal.module.ts'),
+      join(__dirname, 'class-operations/class-operations.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {

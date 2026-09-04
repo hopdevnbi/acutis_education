@@ -274,6 +274,26 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Read exam results',
     description: 'Local sample permission to read formal exam attempt results.',
   },
+  {
+    code: 'class-sessions.read',
+    name: 'Read class sessions',
+    description: 'Read class session occurrences and related operational session metadata.',
+  },
+  {
+    code: 'class-sessions.manage',
+    name: 'Manage class sessions',
+    description: 'Create, update, cancel, complete class sessions and refresh session rosters.',
+  },
+  {
+    code: 'attendance.read',
+    name: 'Read attendance',
+    description: 'Read attendance marks and enrollment attendance summaries.',
+  },
+  {
+    code: 'attendance.manage',
+    name: 'Manage attendance',
+    description: 'Create and update attendance marks for class sessions.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -320,6 +340,10 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'exam.publish',
     'exam.assign',
     'exam.result.read',
+    'class-sessions.read',
+    'class-sessions.manage',
+    'attendance.read',
+    'attendance.manage',
   ],
   CATECHIST: [
     'classes.read',
@@ -340,6 +364,10 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'localization.read',
     'exam.read',
     'exam.result.read',
+    'class-sessions.read',
+    'class-sessions.manage',
+    'attendance.read',
+    'attendance.manage',
   ],
   PARENT: [
     'classes.read',
@@ -356,6 +384,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'learning-progress.read',
     'learning-progress.manage',
     'exam.result.read',
+    'class-sessions.read',
+    'attendance.read',
   ],
   STUDENT: [
     'learner.self.read',
@@ -364,6 +394,8 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'learning-progress.read',
     'exam.attempt',
     'exam.result.read',
+    'class-sessions.read',
+    'attendance.read',
   ],
 };
 

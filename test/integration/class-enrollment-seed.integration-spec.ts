@@ -32,6 +32,7 @@ import { ClassService } from '../../src/modules/class/services/class.service';
 import { EnrollmentAccessService } from '../../src/modules/enrollment/services/enrollment-access.service';
 import { StudentService } from '../../src/modules/student/services/student.service';
 import { UserAccountService } from '../../src/modules/users/services/user-account.service';
+import { deleteClassOperationsRowsForParishCode } from './helpers/delete-class-operations-rows-for-parish-code.util';
 import { deleteExamEngineRowsForParishCode } from './helpers/delete-exam-engine-rows-for-parish-code.util';
 
 describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
@@ -78,8 +79,19 @@ describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
 
   afterEach(async () => {
     await deleteExamEngineRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
+    await deleteClassOperationsRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
     await AppDataSource.query(`
       DELETE FROM practice_sessions
+      WHERE enrollment_id IN (
+        SELECT id FROM enrollments
+        WHERE student_id IN (
+          SELECT id FROM students
+          WHERE full_name IN ('${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}', '${CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME}')
+        )
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM lesson_progress
       WHERE enrollment_id IN (
         SELECT id FROM enrollments
         WHERE student_id IN (
@@ -255,6 +267,17 @@ describe('ClassEnrollmentSeedService integration (MSSQL)', () => {
 
   it('refuses to run when parish-academic prerequisites are missing', async () => {
     await deleteExamEngineRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
+    await deleteClassOperationsRowsForParishCode(AppDataSource, PARISH_ACADEMIC_SAMPLE_PARISH_CODE);
+    await AppDataSource.query(`
+      DELETE FROM lesson_progress
+      WHERE enrollment_id IN (
+        SELECT id FROM enrollments
+        WHERE student_id IN (
+          SELECT id FROM students
+          WHERE full_name IN ('${CLASS_ENROLLMENT_DEMO_STUDENT_ALPHA_NAME}', '${CLASS_ENROLLMENT_DEMO_STUDENT_BETA_NAME}')
+        )
+      )
+    `);
     await AppDataSource.query(`
       DELETE FROM enrollments
       WHERE student_id IN (
