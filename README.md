@@ -965,6 +965,58 @@ The Events module (`src/modules/events/`) provides parish and community event sc
 | `POST` | `/api/v1/admin/events/:id/checkin` | Check in attendee by registrationId | `events.checkin` (Staff) |
 | `GET` | `/api/v1/admin/events/:id/registrations` | Attendee roster for check-in lookup | `events.checkin` (Staff) |
 
+## Notifications API (Recipient Fan-Out, In-App Inbox & Device Registry — #006/7)
+
+The Notifications module (`src/modules/notifications/`) provides in-app inbox delivery, unread counts, read-state management, and push device registration. It is entirely event-driven, consuming neutral communication events emitted by Announcements and Events, without any direct dependencies on source domain repositories or entities.
+
+### Bounded Context & Architecture
+
+- **Owned Tables:** `notifications`, `notification_recipients`, `notification_devices`.
+- **Public Facade:** `NotificationsService` exported exclusively.
+- **Strict Decoupling:** Does not import `AnnouncementEntity`, `EventEntity`, or their repositories. Ingestion happens solely via `CommunicationNotificationHandler` registered with `ApplicationEventBus`.
+- **Target Expansion Boundary:** `NotificationAudienceResolver` resolves scalar user IDs using exported public service methods only (`UserAccountService`, `ParishMembershipService`, `ClassCatechistAssignmentService`, `EnrollmentQueryService`, `StudentService`, `StudentGuardianService`, `AccessControlService`).
+- **Deferred Provider Delivery:** In MVP, push provider network delivery (Expo, FCM, APNs, Web Push) is deferred. The device registry serves as the schema/API foundation. Email, SMS, notification preferences, and durable outbox are deferred.
+
+### Event Consumption & Fan-Out Orchestration
+
+- **Supported Event Types:**
+  - `ANNOUNCEMENT_PUBLISHED`: fans out to `expand(targets)`.
+  - `EVENT_PUBLISHED`: fans out to `expand(targets)`.
+  - `EVENT_UPDATED`: fans out to `expand(targets) UNION registeredRecipientUserIds`.
+  - `EVENT_CANCELLED`: fans out to `expand(targets) UNION registeredRecipientUserIds` with safe `cancellationSummary` ("Event cancelled").
+- **Historical Registered-Recipient Union:** Downstream fan-out merges current target-descriptor expansion with the atomic registration snapshot (`registeredRecipientUserIds`), guaranteeing delivery to all active and attended registrants even if their class or parish membership has drifted.
+- **Idempotency & Replay:** Deduplication is enforced via `notifications.operation_key UNIQUE`. Replaying the same `operationKey` reuses the immutable header and reconciles missing recipient rows without creating duplicate headers or recipient records.
+- **Batched Fan-Out:** Recipient rows are materialized in chunks of 250 (`NOTIFICATION_RECIPIENT_BATCH_SIZE`) to prevent unbounded transaction sizes or excessive MSSQL parameters.
+- **Zero-Recipient Events:** If an event maps to zero recipients, the notification header is still persisted for audit and idempotency (`ZERO-RECIPIENT HEADER PERSISTED: YES`), materializing zero recipient rows.
+
+### Device Registry & Security
+
+- **Platform / Provider Validation:** Enforces strict compatibility (iOS: EXPO, APNS; Android: EXPO, FCM; Web: WEB_PUSH). Incompatible combinations are rejected with `400 Bad Request`.
+- **Global Token Uniqueness & Ownership Transfer:** Mobile device push tokens are globally unique (`UNIQUE(token)`). When a token is re-registered by a new user on a recycled or shared device, ownership is safely reassigned to the current caller to prevent push leakage to previous accounts.
+- **Token Privacy:** Device push tokens are strictly omitted from registration and management API responses (`NotificationDeviceResponseDto`).
+- **Soft Deactivation:** `DELETE /api/v1/me/notification-devices/:id` marks `is_active = false`. Accessing a foreign device returns `404 Not Found` to prevent existence leakage.
+
+### Route Inventory (6 Routes)
+
+| Method | Path | Description | Access / Permission |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/me/notifications` | Paginated in-app inbox for caller (self-only) | `notifications.read` (Authenticated) |
+| `GET` | `/api/v1/me/notifications/unread-count` | Unread notification count for caller | `notifications.read` (Authenticated) |
+| `POST` | `/api/v1/me/notifications/:id/read` | Mark a single notification as read | `notifications.read` (Authenticated) |
+| `POST` | `/api/v1/me/notifications/read-all` | Mark all unread notifications as read (set-based) | `notifications.read` (Authenticated) |
+| `POST` | `/api/v1/me/notification-devices` | Register or update notification device | `notifications.devices` (Authenticated) |
+| `DELETE` | `/api/v1/me/notification-devices/:id` | Deactivate notification device (soft delete) | `notifications.devices` (Authenticated) |
+
+### Community Modules Route Count Summary
+
+| Module | Route Count | Status |
+| --- | --- | --- |
+| **CMS** | 8 | Production ready (#003, #003A) |
+| **Announcements** | 8 | Production ready (#004) |
+| **Events** | 14 | Production ready (#005, #005A, #005B, #005C) |
+| **Notifications** | 6 | Production ready (#006) |
+| **Total Community Routes** | **36** | **Target Met** |
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

@@ -186,6 +186,24 @@ export class UserAccountService {
     return toUserAccountSnapshot(savedUser);
   }
 
+  async listActiveUserIds(options: { skip: number; take: number }): Promise<string[]> {
+    const rows = await this.userRepository.find({
+      where: { status: UserStatus.Active },
+      select: ['id'],
+      order: { id: 'ASC' },
+      skip: Math.max(0, options.skip),
+      take: Math.max(1, options.take),
+    });
+
+    return rows.map((row) => normalizeUuid(row.id));
+  }
+
+  async countActiveUsers(): Promise<number> {
+    return this.userRepository.count({
+      where: { status: UserStatus.Active },
+    });
+  }
+
   private async runTimingSafePasswordCheck(password: string): Promise<void> {
     const dummyHash = await this.getTimingDummyHash();
 

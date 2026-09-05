@@ -220,6 +220,25 @@ export class AccessControlService {
     return effectivePermissions.includes(permissionCode);
   }
 
+  async listUserIdsByRoleCode(rawRoleCode: string): Promise<string[]> {
+    let roleCode: string;
+    try {
+      roleCode = parseRoleCode(rawRoleCode);
+    } catch {
+      return [];
+    }
+
+    const rows = await this.userRoleRepository
+      .createQueryBuilder('userRole')
+      .innerJoin(RoleEntity, 'role', 'role.id = userRole.roleId')
+      .where('role.code = :roleCode', { roleCode })
+      .select('userRole.userId', 'userId')
+      .distinct(true)
+      .getRawMany<{ userId: string }>();
+
+    return rows.map((r) => normalizeUuid(r.userId));
+  }
+
   private async findRoleByCodeOrThrow(rawRoleCode: string): Promise<RoleEntity> {
     const roleCode = parseRoleCode(rawRoleCode);
     const role = await this.roleRepository.findOne({

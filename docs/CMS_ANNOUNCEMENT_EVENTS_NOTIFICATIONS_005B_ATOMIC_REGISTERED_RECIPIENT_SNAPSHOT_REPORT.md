@@ -193,24 +193,24 @@ Contract frozen for phase #006 Notifications engine:
 ---
 
 ### 15 Route Contract
-No route changes made. Route contract remains locked:
+No route changes made. Route contract remains locked to the authoritative 14-route inventory from #005:
 - **CMS Module**: 8 routes
 - **Announcements Module**: 8 routes
 - **Events Module**: 14 routes
-  1. `POST /api/v1/events` (admin create)
-  2. `GET /api/v1/events/admin` (admin paginated list)
-  3. `GET /api/v1/events/:id/admin` (admin detail)
-  4. `PATCH /api/v1/events/:id` (admin update)
-  5. `POST /api/v1/events/:id/publish` (admin publish)
-  6. `POST /api/v1/events/:id/cancel` (admin cancel)
-  7. `POST /api/v1/events/:id/complete` (admin complete)
-  8. `POST /api/v1/events/:id/archive` (admin archive)
-  9. `GET /api/v1/events/:id/attendees` (admin attendee roster)
-  10. `POST /api/v1/events/:id/check-in` (admin check-in)
-  11. `GET /api/v1/events` (user feed/list)
-  12. `GET /api/v1/events/:id` (user event detail)
-  13. `POST /api/v1/events/:id/registrations` (register self / child)
-  14. `GET /api/v1/me/event-registrations` (my registrations)
+  1. `GET /api/v1/events` (user feed/list)
+  2. `GET /api/v1/events/:id` (user event detail)
+  3. `POST /api/v1/events/:id/registrations` (register self / child)
+  4. `POST /api/v1/events/:id/registrations/cancel` (cancel self / child registration)
+  5. `GET /api/v1/me/event-registrations` (my registrations)
+  6. `GET /api/v1/admin/events` (admin list scoped by actor authority)
+  7. `POST /api/v1/admin/events` (admin create event draft)
+  8. `PATCH /api/v1/admin/events/:id` (admin update event)
+  9. `POST /api/v1/admin/events/:id/publish` (admin publish event)
+  10. `POST /api/v1/admin/events/:id/cancel` (admin cancel event)
+  11. `POST /api/v1/admin/events/:id/complete` (admin complete event)
+  12. `POST /api/v1/admin/events/:id/archive` (admin archive event)
+  13. `POST /api/v1/admin/events/:id/checkin` (admin check-in attendee by registrationId)
+  14. `GET /api/v1/admin/events/:id/registrations` (admin attendee roster for check-in lookup)
 - **Notifications Module Target**: 6 routes
 - **Total Community Target**: 36 routes
 

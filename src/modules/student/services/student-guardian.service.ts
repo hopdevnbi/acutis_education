@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { UserStatus } from '../../users/enums/user-status.enum';
 import { UserAccountService } from '../../users/services/user-account.service';
@@ -190,6 +190,23 @@ export class StudentGuardianService {
     }
 
     return toGuardianLinkSnapshot(guardianLink);
+  }
+
+  async listActiveGuardianUserIdsByStudentIds(studentIds: readonly string[]): Promise<string[]> {
+    const validStudentIds = Array.from(new Set(studentIds.filter(isUuidV4).map(normalizeUuid)));
+    if (validStudentIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.studentGuardianRepository.find({
+      where: {
+        studentId: In(validStudentIds),
+        status: GuardianLinkStatus.Active,
+      },
+      select: ['guardianUserId'],
+    });
+
+    return Array.from(new Set(rows.map((r) => normalizeUuid(r.guardianUserId))));
   }
 
   private async assertGuardianUserEligible(guardianUserId: string): Promise<void> {

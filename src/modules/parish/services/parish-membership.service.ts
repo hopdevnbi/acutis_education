@@ -91,4 +91,21 @@ export class ParishMembershipService {
       throw error;
     }
   }
+
+  async listActiveUserIdsByParishId(rawParishId: string): Promise<string[]> {
+    if (!isUuidV4(rawParishId)) {
+      return [];
+    }
+
+    const parishId = normalizeUuid(rawParishId);
+    const rows = await this.parishMembershipRepository.find({
+      where: {
+        parishId,
+        status: ParishMembershipStatus.Active,
+      },
+      select: ['userId'],
+    });
+
+    return Array.from(new Set(rows.map((row) => normalizeUuid(row.userId))));
+  }
 }

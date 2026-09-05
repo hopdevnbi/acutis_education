@@ -210,6 +210,23 @@ export class ClassCatechistAssignmentService {
     return assignments.map((assignment) => normalizeUuid(assignment.classId));
   }
 
+  async listActiveCatechistUserIdsByClassId(rawClassId: string): Promise<string[]> {
+    if (!isUuidV4(rawClassId)) {
+      return [];
+    }
+
+    const classId = normalizeUuid(rawClassId);
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        classId,
+        status: CatechistAssignmentStatus.Active,
+      },
+      select: ['catechistUserId'],
+    });
+
+    return Array.from(new Set(assignments.map((assignment) => normalizeUuid(assignment.catechistUserId))));
+  }
+
   private async assertCatechistUserEligible(catechistUserId: string): Promise<void> {
     const accountSnapshot = await this.userAccountService.getAccountSnapshotById(catechistUserId);
 

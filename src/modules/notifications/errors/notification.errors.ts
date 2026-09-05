@@ -32,3 +32,33 @@ export class NotificationAccessDeniedError extends Error {
     this.name = 'NotificationAccessDeniedError';
   }
 }
+
+export class NotificationEventIdentityConflictError extends Error {
+  constructor(
+    message = 'Application event identity conflicts with an existing notification operation key.',
+  ) {
+    super(message);
+    this.name = 'NotificationEventIdentityConflictError';
+  }
+}
+
+export class InvalidNotificationTargetError extends Error {
+  constructor(message = 'Invalid notification target descriptor.') {
+    super(message);
+    this.name = 'InvalidNotificationTargetError';
+  }
+}
+
+export class InvalidNotificationDeviceProviderError extends Error {
+  constructor(message = 'Invalid notification device platform/provider combination.') {
+    super(message);
+    this.name = 'InvalidNotificationDeviceProviderError';
+  }
+}
+
+export class InvalidNotificationDeviceTokenError extends Error {
+  constructor(message = 'Device token must be a valid non-empty string.') {
+    super(message);
+    this.name = 'InvalidNotificationDeviceTokenError';
+  }
+}

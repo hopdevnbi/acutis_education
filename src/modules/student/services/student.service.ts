@@ -104,6 +104,29 @@ export class StudentService {
     return students.map((student) => normalizeUuid(student.id));
   }
 
+  async listLinkedUserIdsByStudentIds(studentIds: readonly string[]): Promise<string[]> {
+    const validStudentIds = Array.from(new Set(studentIds.filter(isUuidV4).map(normalizeUuid)));
+    if (validStudentIds.length === 0) {
+      return [];
+    }
+
+    const students = await this.studentRepository.find({
+      where: {
+        id: In(validStudentIds),
+        status: StudentStatus.Active,
+      },
+      select: ['userId'],
+    });
+
+    return Array.from(
+      new Set(
+        students
+          .filter((s) => s.userId !== null)
+          .map((s) => normalizeUuid(s.userId!)),
+      ),
+    );
+  }
+
   async listStudents(input: ListStudentsInput): Promise<ListStudentsResult> {
     const countQueryBuilder = this.studentRepository.createQueryBuilder('student');
     this.applyListFilters(countQueryBuilder, input);

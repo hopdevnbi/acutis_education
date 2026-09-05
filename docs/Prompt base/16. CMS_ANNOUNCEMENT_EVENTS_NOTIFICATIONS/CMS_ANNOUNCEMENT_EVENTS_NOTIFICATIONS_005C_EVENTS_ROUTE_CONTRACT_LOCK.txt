@@ -1,0 +1,398 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #005C
+CORRECTIVE ROUTE CONTRACT LOCK
+EVENTS AUTHORITATIVE HTTP INVENTORY RECONCILIATION
+AUDIT / DOC + SOURCE ROUTE INSPECTION ONLY — FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+AUDIT / CONTRACT CORRECTION ONLY unless actual source route drift is found.
+
+DO NOT:
+- implement Notifications
+- change business behavior unless needed to restore frozen Event route contract
+- create migrations
+- run tests
+- run lint/typecheck/build
+- run DB commands
+- run migrations/seeds
+- run Docker
+- run Postman/Newman
+- run npm audit
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked production changes are genuinely required to restore the contract, print exactly:
+
+git commit -m "fix(events): restore authoritative route contract"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#005 Events
+#005A Events hardening
+#005B Atomic registered-recipient snapshot
+
+Read completely:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005A_CORRECTIVE_EVENTS_HARDENING_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005B_ATOMIC_REGISTERED_RECIPIENT_SNAPSHOT_REPORT.md
+
+Current authoritative module route counts intended:
+
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+Community total = 36
+
+==================================================
+ISSUE — #005B ROUTE INVENTORY CONTRADICTS #005
+==================================================
+
+#005 implemented and reported these 14 Event routes:
+
+1 GET /api/v1/events
+2 GET /api/v1/events/:id
+3 POST /api/v1/events/:id/registrations
+4 POST /api/v1/events/:id/registrations/cancel
+5 GET /api/v1/me/event-registrations
+6 GET /api/v1/admin/events
+7 POST /api/v1/admin/events
+8 PATCH /api/v1/admin/events/:id
+9 POST /api/v1/admin/events/:id/publish
+10 POST /api/v1/admin/events/:id/cancel
+11 POST /api/v1/admin/events/:id/complete
+12 POST /api/v1/admin/events/:id/archive
+13 POST /api/v1/admin/events/:id/checkin
+14 GET /api/v1/admin/events/:id/registrations
+
+#005B says "No route changes", but its report section 15 lists a DIFFERENT inventory including:
+
+POST /api/v1/events
+GET /api/v1/events/admin
+GET /api/v1/events/:id/admin
+GET /api/v1/events/:id/attendees
+POST /api/v1/events/:id/check-in
+
+and omits:
+POST /api/v1/events/:id/registrations/cancel
+
+This is an unacceptable contract ambiguity.
+
+==================================================
+PART A — INSPECT ACTUAL CONTROLLERS
+==================================================
+
+Inspect actual controller decorators and method paths in:
+
+src/modules/events/controllers/events.controller.ts
+src/modules/events/controllers/events-admin.controller.ts
+src/modules/events/controllers/event-registrations-me.controller.ts
+
+Do NOT infer from reports.
+
+Create the exact effective HTTP route inventory from source.
+
+Account for:
+- controller-level prefixes
+- method decorators
+- global `/api/v1` prefix conventions
+
+Required:
+ACTUAL SOURCE EVENT ROUTE INVENTORY
+
+==================================================
+PART B — AUTHORITATIVE CONTRACT
+==================================================
+
+The intended authoritative contract remains the #005 inventory:
+
+1 GET /api/v1/events
+2 GET /api/v1/events/:id
+3 POST /api/v1/events/:id/registrations
+4 POST /api/v1/events/:id/registrations/cancel
+5 GET /api/v1/me/event-registrations
+6 GET /api/v1/admin/events
+7 POST /api/v1/admin/events
+8 PATCH /api/v1/admin/events/:id
+9 POST /api/v1/admin/events/:id/publish
+10 POST /api/v1/admin/events/:id/cancel
+11 POST /api/v1/admin/events/:id/complete
+12 POST /api/v1/admin/events/:id/archive
+13 POST /api/v1/admin/events/:id/checkin
+14 GET /api/v1/admin/events/:id/registrations
+
+This includes the justified attendee-list delta added in #005.
+
+Do NOT rename:
+- `/checkin` -> `/check-in`
+- `/admin/events` -> `/events/admin`
+- `/admin/events/:id/registrations` -> `/events/:id/attendees`
+
+without explicit new product/API decision.
+
+==================================================
+PART C — SOURCE DRIFT DECISION
+==================================================
+
+If actual source already matches the authoritative 14 routes:
+- classify #005B discrepancy as documentation-only
+- correct the report/docs
+- do NOT touch production controller code
+
+If actual source differs:
+- classify as HIGH source contract drift
+- restore controller decorators/routes to authoritative 14-route contract
+- update OpenAPI/README/spec route expectations accordingly
+- do not change business semantics
+
+==================================================
+PART D — CANCEL REGISTRATION MUST EXIST
+==================================================
+
+Explicitly verify:
+
+POST /api/v1/events/:id/registrations/cancel
+
+still exists in source.
+
+It is required by the frozen registration workflow.
+
+If missing:
+restore it.
+
+Required verdict:
+REGISTRATION CANCEL ROUTE PRESENT: YES/NO
+
+==================================================
+PART E — ATTENDEE LIST MUST USE FROZEN PATH
+==================================================
+
+Explicitly verify attendee lookup path:
+
+GET /api/v1/admin/events/:id/registrations
+
+NOT:
+GET /api/v1/events/:id/attendees
+
+Required verdict:
+ATTENDEE LIST ROUTE PATH CORRECT: YES/NO
+
+==================================================
+PART F — CHECK-IN PATH MUST USE FROZEN PATH
+==================================================
+
+Verify:
+
+POST /api/v1/admin/events/:id/checkin
+
+NOT:
+POST /api/v1/events/:id/check-in
+
+Required verdict:
+CHECKIN ROUTE PATH CORRECT: YES/NO
+
+==================================================
+PART G — ADMIN ROUTE PREFIX
+==================================================
+
+Verify all management routes use:
+
+/api/v1/admin/events...
+
+not:
+- /api/v1/events/admin
+- /api/v1/events/:id/admin
+
+Required:
+ADMIN EVENT ROUTE PREFIX CORRECT: YES/NO
+
+==================================================
+PART H — OPENAPI / README / TEST CONTRACTS
+==================================================
+
+Inspect and correct any route references in:
+
+README.md
+src/modules/events/**/*.spec.ts
+test/integration/events.integration-spec.ts
+test/e2e/events-db.e2e-spec.ts
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005A_CORRECTIVE_EVENTS_HARDENING_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005B_ATOMIC_REGISTERED_RECIPIENT_SNAPSHOT_REPORT.md
+
+Do not rewrite unrelated report content.
+
+==================================================
+PART I — ROUTE COUNT LOCK
+==================================================
+
+Freeze:
+
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+
+TOTAL = 36
+
+Any future change requires explicit contract delta.
+
+==================================================
+PART J — #005B CORRECTNESS MUST REMAIN
+==================================================
+
+This route correction must NOT regress:
+
+- pessimistic capacity lock
+- atomic registeredRecipientUserIds snapshot
+- same EntityManager
+- no post-commit recipient re-query
+- safe cancellationSummary
+- no raw cancellationReason in communication event
+- post-commit event emission
+- no Notifications dependency
+
+Verify by static inspection only.
+
+==================================================
+PART K — FAST MODE COMPLIANCE
+==================================================
+
+Do not run validation commands.
+
+If `ReadLints` refers to editor/static diagnostics and requires no command execution, it may be inspected.
+Do NOT run npm lint or equivalent.
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005C_EVENTS_ROUTE_CONTRACT_LOCK_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 Inherited authoritative route contract
+4 #005B route discrepancy
+5 Actual controller route inspection
+6 Actual source route inventory before correction
+7 Source drift or documentation-only verdict
+8 Corrected authoritative 14-route inventory
+9 Registration cancel route
+10 Admin route prefix
+11 Check-in route
+12 Attendee-list route
+13 OpenAPI route contract
+14 README route contract
+15 Test/spec route contract
+16 Documentation corrections
+17 #005B concurrency correctness retained
+18 #005B recipient snapshot correctness retained
+19 #005B privacy hardening retained
+20 Final module route counts
+21 Final community route count
+22 Static inspection
+23 Risks/deferred
+24 BLOCKER/HIGH/MEDIUM/LOW
+25 #006 readiness
+26 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+EVENT AUTHORITATIVE ROUTE CONTRACT RESTORED: YES/NO
+
+ACTUAL EVENT ROUTE COUNT: 14
+
+REGISTRATION CANCEL ROUTE PRESENT: YES/NO
+ADMIN EVENT ROUTE PREFIX CORRECT: YES/NO
+CHECKIN ROUTE PATH CORRECT: YES/NO
+ATTENDEE LIST ROUTE PATH CORRECT: YES/NO
+
+NO UNPLANNED EVENT ROUTE DRIFT: YES/NO
+
+OPENAPI ROUTE CONTRACT ALIGNED: YES/NO
+README ROUTE CONTRACT ALIGNED: YES/NO
+TEST/SPEC ROUTE CONTRACT ALIGNED: YES/NO
+
+#005B CAPACITY HARDENING RETAINED: YES/NO
+#005B ATOMIC RECIPIENT SNAPSHOT RETAINED: YES/NO
+#005B PRIVACY HARDENING RETAINED: YES/NO
+
+FINAL CMS ROUTE COUNT: 8
+FINAL ANNOUNCEMENT ROUTE COUNT: 8
+FINAL EVENT ROUTE COUNT: 14
+FINAL NOTIFICATION ROUTE COUNT: 6
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#006 READINESS: YES/NO
+
+==================================================
+#006 GATE
+==================================================
+
+Proceed only if:
+
+- actual controller routes match authoritative 14-route Event contract
+- cancel registration route exists
+- admin prefix correct
+- checkin path correct
+- attendee-list path correct
+- docs/OpenAPI/specs aligned
+- #005B hardening retained
+- BLOCKER=0
+- HIGH=0
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006/7 —
+NOTIFICATIONS — RECIPIENT FAN-OUT + INBOX / READ STATE + DEVICE REGISTRATION + INTEGRATION HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #005C status
+- actual source route result
+- final Event route count
+- total Community count
+- #005B hardening retained
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Do NOT run validation commands.
+Do NOT print git add.
+Do NOT run git add/commit/push.

@@ -1,0 +1,1822 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006/7
+FAST IMPLEMENTATION MODE
+NOTIFICATIONS — RECIPIENT FAN-OUT + INBOX / READ STATE + DEVICE REGISTRATION + INTEGRATION HARDENING
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production Notifications code
+- communication event handlers
+- recipient target expansion
+- fan-out orchestration
+- inbox/read-state APIs
+- device registration APIs
+- DTOs/mappers/errors
+- integration hardening with Announcement/Event contracts
+- unit/integration/DB e2e specs
+- README/OpenAPI updates
+- report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+- push provider calls
+
+Do not mark deferred validation as failure.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+PUSH DELIVERY: NOT IMPLEMENTED — deferred by MVP contract
+
+Architecture/security/privacy/minors/modular boundaries remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(notifications): add fanout inbox and device registration"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7
+Domain audit/design
+
+#001A
+Event lifecycle + notification idempotency corrective audit
+
+#002/7
+Persistence foundation
+
+#003/7
+CMS
+
+#003A
+CMS/community route contract lock
+
+#004/7
+Announcements
+
+#005/7
+Events
+
+#005A
+Events concurrency + cancellation privacy + registered-recipient delivery hardening
+
+#005B
+Atomic registered-recipient snapshot
+
+#005C
+Events authoritative route contract lock
+
+AUTHORITATIVE ROUTE COUNTS:
+
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+
+FINAL COMMUNITY ROUTE COUNT TARGET = 36
+
+Do NOT change route counts silently.
+
+==================================================
+FROZEN NOTIFICATION PERSISTENCE
+==================================================
+
+Owned tables:
+
+1. notifications
+2. notification_recipients
+3. notification_devices
+
+notifications:
+- id
+- application_event_id
+- operation_key
+- source_type
+- source_id
+- notification_type
+- title
+- snippet
+- action_url
+- created_at
+
+Constraints:
+UNIQUE(application_event_id)
+UNIQUE(operation_key)
+
+notification_recipients:
+- id
+- notification_id
+- recipient_user_id
+- is_read
+- read_at
+- is_dismissed
+- created_at
+- updated_at
+
+Constraint:
+UNIQUE(notification_id, recipient_user_id)
+
+notification_devices:
+- id
+- user_id
+- platform
+- provider
+- token
+- is_active
+- app_version
+- locale
+- last_seen_at
+- created_at
+- updated_at
+
+Constraint:
+UNIQUE(token) globally
+
+==================================================
+FROZEN NOTIFICATION ROUTES — EXACTLY 6
+==================================================
+
+1.
+GET /api/v1/me/notifications
+
+2.
+GET /api/v1/me/notifications/unread-count
+
+3.
+POST /api/v1/me/notifications/:id/read
+
+4.
+POST /api/v1/me/notifications/read-all
+
+5.
+POST /api/v1/me/notification-devices
+
+6.
+DELETE /api/v1/me/notification-devices/:id
+
+Do NOT add/remove routes silently.
+
+==================================================
+FROZEN MVP PROVIDER SCOPE
+==================================================
+
+IN-APP NOTIFICATIONS:
+YES — fully implemented in #006
+
+DEVICE REGISTRATION:
+YES — persistence/API foundation
+
+ACTUAL PUSH DELIVERY:
+NO — deferred
+
+NOTIFICATION PREFERENCES:
+NO — deferred
+
+EMAIL:
+NO — deferred
+
+SMS:
+NO — deferred
+
+GENERIC MANUAL NOTIFICATION CREATE:
+NO
+
+Do NOT implement provider API calls.
+
+==================================================
+FROZEN COMMUNICATION EVENT HANDOFF
+==================================================
+
+AnnouncementPublishedEvent:
+Recipients =
+expand(event.targets)
+
+EventPublishedEvent:
+Recipients =
+expand(event.targets)
+
+EventUpdatedEvent:
+Recipients =
+expand(event.targets)
+UNION
+event.registeredRecipientUserIds
+
+EventCancelledEvent:
+Recipients =
+expand(event.targets)
+UNION
+event.registeredRecipientUserIds
+
+Deduplicate user IDs before persistence.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Implement Notifications MVP:
+
+1. consume neutral communication events
+2. target expansion
+3. registered-recipient union
+4. idempotent notification header creation
+5. idempotent recipient fan-out
+6. in-app inbox
+7. unread count
+8. mark one read
+9. mark all read
+10. notification device registration
+11. notification device deregistration
+12. self-only security
+13. privacy-safe notification payloads
+14. no source-module repository dependency
+15. no provider delivery
+16. tests/specs
+17. OpenAPI/README
+
+==================================================
+PART A — EXACT 6 ROUTES
+==================================================
+
+Implement exactly:
+
+1 GET /api/v1/me/notifications
+2 GET /api/v1/me/notifications/unread-count
+3 POST /api/v1/me/notifications/:id/read
+4 POST /api/v1/me/notifications/read-all
+5 POST /api/v1/me/notification-devices
+6 DELETE /api/v1/me/notification-devices/:id
+
+No:
+- admin send endpoint
+- notification detail endpoint
+- delete notification endpoint
+- dismiss endpoint
+- preferences endpoint
+- test push endpoint
+
+Required:
+FINAL NOTIFICATION ROUTE COUNT = 6
+
+==================================================
+PART B — COMMUNICATION EVENT HANDLER
+==================================================
+
+Create Notifications-owned handler, e.g.:
+
+CommunicationNotificationHandler
+implements CommunicationEventHandler
+
+Register with ApplicationEventBus.
+
+It must handle:
+
+ANNOUNCEMENT_PUBLISHED
+EVENT_PUBLISHED
+EVENT_UPDATED
+EVENT_CANCELLED
+
+Ignore unknown communication event types safely.
+
+Do NOT make Announcements or Events import NotificationsModule.
+
+==================================================
+PART C — NOTIFICATION EVENT MAPPING
+==================================================
+
+Map events:
+
+AnnouncementPublishedEvent
+-> sourceType ANNOUNCEMENT
+-> sourceId announcementId
+-> notificationType ANNOUNCEMENT_PUBLISHED
+-> actionUrl `/announcements/<id>`
+
+EventPublishedEvent
+-> sourceType EVENT
+-> sourceId eventId
+-> notificationType EVENT_PUBLISHED
+-> actionUrl `/events/<id>`
+
+EventUpdatedEvent
+-> sourceType EVENT
+-> sourceId eventId
+-> notificationType EVENT_UPDATED
+-> actionUrl `/events/<id>`
+
+EventCancelledEvent
+-> sourceType EVENT
+-> sourceId eventId
+-> notificationType EVENT_CANCELLED
+-> actionUrl `/events/<id>`
+
+Use bounded safe title/snippet only.
+
+Do not query Announcement/Event tables for content.
+
+==================================================
+PART D — NOTIFICATION PAYLOAD PRIVACY
+==================================================
+
+Notification rows may contain:
+
+title
+snippet
+actionUrl
+source metadata
+
+Must NOT contain:
+- child names
+- attendee roster
+- email
+- phone
+- DOB
+- guardian info
+- raw cancellationReason
+- pastoral/confessional data
+- arbitrary JSON payload
+
+For EventCancelledEvent:
+use only safe `cancellationSummary`.
+
+For EventUpdatedEvent:
+use bounded change summary, not raw arbitrary diff.
+
+Notification content is a hint.
+Underlying resource endpoint must re-authorize access.
+
+==================================================
+PART E — TARGET EXPANSION MODEL
+==================================================
+
+Create:
+NotificationAudienceResolver
+or equivalent.
+
+Input:
+readonly CommunicationTargetDescriptor[]
+
+Output:
+deduped user IDs.
+
+Support:
+
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+No exact database access into:
+- Announcements
+- Events
+
+Use only public APIs from:
+- User/Auth
+- Parish
+- Class
+- Enrollment
+- Student
+- AccessControl
+or existing public audience/scope facades.
+
+No foreign repos/entities.
+
+==================================================
+PART F — GLOBAL TARGET
+==================================================
+
+GLOBAL means all eligible authenticated platform users.
+
+This can be expensive.
+
+Audit existing UserService public pagination/search API.
+
+Do NOT unbounded-load all users into memory.
+
+Strong MVP requirement:
+process GLOBAL expansion in bounded batches.
+
+If existing public API cannot enumerate users safely:
+classify HIGH and design a bounded public user enumeration facade.
+Do NOT query User repository directly.
+
+Need exact batching contract.
+
+==================================================
+PART G — PARISH TARGET
+==================================================
+
+PARISH:<parishId>
+
+Recipients:
+users with active association/membership relevant to that parish.
+
+Need define exact public APIs.
+
+Include staff/parents/students according to existing parish membership semantics.
+
+Do not infer from stale historical records.
+
+Do not include disabled/deactivated users.
+
+==================================================
+PART H — CLASS TARGET
+==================================================
+
+CLASS:<classId>
+
+Recipients:
+- ACTIVE assigned Catechists
+- ACTIVE enrolled Students with user accounts
+- ACTIVE guardians/Parents of active enrolled students
+
+Need ensure:
+- no duplicate guardian users
+- no child PII in notification record
+- only user IDs returned
+
+Use set-based/batched public APIs.
+
+==================================================
+PART I — ROLE TARGET
+==================================================
+
+ROLE:<parishId>:<roleCode>
+
+Recipient must:
+- hold exact role
+- within exact parish
+- be active
+
+Do not treat global platform role as sufficient.
+
+No unscoped PARENT broadcast.
+
+==================================================
+PART J — REGISTERED RECIPIENT UNION
+==================================================
+
+For EventUpdatedEvent / EventCancelledEvent:
+
+recipientIds =
+Set(
+  expand(targets)
+  UNION
+  registeredRecipientUserIds
+)
+
+Rules:
+- normalize UUIDs
+- dedupe
+- exclude invalid/empty IDs
+- optionally filter inactive/deleted accounts if a bounded public account-status API exists
+
+Important:
+do NOT discard registered recipient solely because current target membership changed.
+
+That snapshot exists specifically to preserve historical delivery.
+
+==================================================
+PART K — IDEMPOTENT HEADER CREATION
+==================================================
+
+Critical.
+
+Use:
+notifications.operation_key UNIQUE
+
+Logical dedupe:
+same operationKey = same logical notification.
+
+applicationEventId:
+trace/replay identity also unique.
+
+Handler algorithm:
+
+1. receive event
+2. validate event contract
+3. resolve recipients
+4. create notification header idempotently
+5. create missing recipients idempotently
+
+Replay:
+same operationKey must not create second header.
+
+Need safely handle DB unique collision race.
+
+Do NOT:
+check-then-insert only without unique-error recovery.
+
+Strong design:
+attempt insert
+-> catch unique violation
+-> fetch existing by operationKey
+-> continue recipient reconciliation
+
+==================================================
+PART L — APPLICATION_EVENT_ID CONFLICT SEMANTICS
+==================================================
+
+Possible cases:
+
+A.
+same operationKey + same applicationEventId
+=> normal replay
+
+B.
+same operationKey + different applicationEventId
+=> logical replay/redelivery; reuse existing notification
+
+C.
+different operationKey + same applicationEventId
+=> suspicious contract violation
+
+For C:
+do NOT create second header.
+Log/report typed conflict internally.
+
+Define:
+NotificationEventIdentityConflictError
+or safe internal warning.
+
+Do not leak internals to users.
+
+==================================================
+PART M — RECIPIENT FAN-OUT
+==================================================
+
+Materialize one row per recipient.
+
+notification_recipients:
+UNIQUE(notificationId, recipientUserId)
+
+Batch insertion:
+- bounded chunks
+- e.g. 100/250/500 depending project convention
+
+Do not create one SQL insert per user if bulk repository patterns exist.
+
+Do not hold huge transaction for GLOBAL audience if large.
+
+Need choose bounded strategy.
+
+Strong recommendation:
+- header transaction first
+- recipient batches independently idempotent
+- handler retries safely reconcile missing recipient rows
+
+==================================================
+PART N — PARTIAL FAN-OUT FAILURE
+==================================================
+
+Important.
+
+Scenario:
+header created
+batch 1 succeeds
+batch 2 fails
+handler retry occurs
+
+Retry must:
+- reuse existing notification by operationKey
+- recompute or use event targets
+- insert only missing recipients
+- unique constraints protect duplicates
+
+This makes fan-out retry-safe without a delivery receipt table.
+
+Document.
+
+==================================================
+PART O — TRANSACTION BOUNDARY
+==================================================
+
+Do not wrap GLOBAL recipient resolution + all fan-out in one massive transaction.
+
+Preferred:
+1. validate event
+2. resolve recipient user IDs
+3. idempotently create/get notification header
+4. batch upsert/insert-ignore recipients
+
+For small target sets, transaction optional.
+
+Need ensure no externally observable duplicate.
+
+No provider calls.
+
+==================================================
+PART P — HANDLER FAILURE BEHAVIOR
+==================================================
+
+Current ApplicationEventBus communication handler dispatch is fault-isolated.
+
+Audit current behavior:
+if Notifications handler fails, source Event/Announcement command has already committed.
+
+Because no durable outbox exists, there is delivery-loss risk on process crash.
+
+Do NOT invent outbox table because 10-table/3 notification-table schema is frozen.
+
+Document as deferred architecture risk.
+
+Within current process:
+handler retry/idempotency must be safe.
+
+Required:
+DURABLE OUTBOX IN MVP: NO
+
+Mention future extraction/stabilization candidate.
+
+==================================================
+PART Q — INBOX LIST
+==================================================
+
+GET /api/v1/me/notifications
+
+Permission:
+notifications.read
+
+Self only:
+recipient_user_id = actor.userId
+
+Query:
+page
+limit max 50
+unreadOnly?
+type?
+sourceType?
+
+Sort:
+createdAt DESC
+id DESC
+
+Return notification header fields + recipient state.
+
+No source domain joins.
+
+No Announcements/Event reads.
+
+==================================================
+PART R — INBOX DTO
+==================================================
+
+NotificationListItemDto:
+
+- id (notification recipient or notification header? choose clearly)
+- notificationId
+- type
+- sourceType
+- sourceId
+- title
+- snippet
+- actionUrl
+- isRead
+- readAt
+- createdAt
+
+Strong preference:
+primary item id = notificationId
+recipient row remains internal.
+
+Do not expose:
+- recipientUserId
+- applicationEventId
+- operationKey
+- internal delivery details
+
+==================================================
+PART S — UNREAD COUNT
+==================================================
+
+GET /api/v1/me/notifications/unread-count
+
+Permission:
+notifications.read
+
+Query:
+COUNT
+WHERE recipient_user_id = actor.userId
+AND is_read = 0
+
+No N+1.
+
+Response:
+{ unreadCount: number }
+
+==================================================
+PART T — MARK ONE READ
+==================================================
+
+POST /api/v1/me/notifications/:id/read
+
+Permission:
+notifications.read
+
+`:id` should represent notificationId.
+
+Update recipient row only if:
+notification_id = id
+AND recipient_user_id = actor.userId
+
+If no matching recipient:
+404
+
+Do not allow reading another user's notification by guessing UUID.
+
+Idempotent:
+already read => 200 existing state.
+
+Set:
+isRead = true
+readAt = existing or now
+
+Do not modify header.
+
+==================================================
+PART U — MARK ALL READ
+==================================================
+
+POST /api/v1/me/notifications/read-all
+
+Permission:
+notifications.read
+
+Set-based update:
+WHERE recipient_user_id = actor.userId
+AND is_read = 0
+
+Set:
+isRead = true
+readAt = now
+updatedAt = now
+
+Response:
+{ updatedCount: number }
+
+No row-by-row loop.
+
+==================================================
+PART V — DISMISSED COLUMN
+==================================================
+
+notification_recipients has `is_dismissed`.
+
+But frozen route inventory has no dismiss endpoint.
+
+Do NOT invent one.
+
+Keep default false.
+Potential future feature.
+
+Inbox may exclude `is_dismissed = true` if any legacy/internal rows exist, but no API changes it in MVP.
+
+Document.
+
+==================================================
+PART W — DEVICE REGISTRATION
+==================================================
+
+POST /api/v1/me/notification-devices
+
+Permission:
+notifications.devices
+
+Input:
+
+platform:
+IOS | ANDROID | WEB
+
+provider:
+EXPO | FCM | APNS | WEB_PUSH
+
+token:
+bounded string
+
+appVersion?
+locale?
+
+Server derives:
+userId
+isActive = true
+lastSeenAt = now
+
+Do not accept userId.
+
+==================================================
+PART X — DEVICE PROVIDER VALIDATION
+==================================================
+
+Validate platform/provider pair.
+
+Recommended:
+
+IOS:
+EXPO or APNS
+
+ANDROID:
+EXPO or FCM
+
+WEB:
+WEB_PUSH
+
+Reject nonsensical:
+WEB + APNS
+IOS + WEB_PUSH
+etc.
+
+Do not validate token with provider network.
+
+No outbound calls.
+
+==================================================
+PART Y — GLOBAL TOKEN UNIQUENESS / OWNERSHIP TRANSFER
+==================================================
+
+Frozen:
+UNIQUE(token) globally.
+
+If token not found:
+create for actor.
+
+If token exists and belongs to same actor:
+update:
+- platform/provider
+- appVersion
+- locale
+- isActive=true
+- lastSeenAt
+
+If token exists for another user:
+reassign to current actor safely.
+
+Why:
+shared/recycled mobile device login should not keep old account receiving pushes.
+
+Use transaction or atomic update.
+
+No notification is sent.
+
+Document security rationale.
+
+==================================================
+PART Z — DEVICE DEREGISTRATION
+==================================================
+
+DELETE /api/v1/me/notification-devices/:id
+
+Permission:
+notifications.devices
+
+Only own device.
+
+Strong preference:
+soft deactivate:
+isActive = false
+
+Do NOT hard delete unless existing convention demands.
+
+Foreign device ID:
+404 preferred to avoid existence leakage.
+
+Repeated deactivation:
+idempotent 204/200 depending project convention.
+
+Choose exact response.
+
+==================================================
+PART AA — DEVICE PRIVACY
+==================================================
+
+Never return full device token in normal response if avoidable.
+
+Response may contain:
+- id
+- platform
+- provider
+- isActive
+- appVersion
+- locale
+- lastSeenAt
+
+Do NOT return token after creation/update.
+
+If product requires token echo, document risk.
+Strong preference:
+NO TOKEN ECHO.
+
+==================================================
+PART AB — NO ACTUAL PUSH DELIVERY
+==================================================
+
+Strict.
+
+Do NOT:
+- call Expo Push API
+- call FCM
+- call APNs
+- call Web Push
+- add provider credentials
+- add queue
+- add retries
+- add notification_deliveries table
+
+Device registry is foundation only.
+
+Report:
+PUSH DELIVERY IMPLEMENTED: NO — deferred by MVP contract
+
+==================================================
+PART AC — TARGET RESOLUTION PUBLIC API BOUNDARY
+==================================================
+
+Critical module architecture.
+
+Notifications must NOT import:
+- Announcement repository/entity
+- Event repository/entity
+- FamilyPortal repository
+- Enrollment repository
+- Student repository
+- Class repository
+- User repository
+
+Use exported public services only.
+
+If a needed bulk audience API is missing:
+prefer adding a narrow public facade method to the owning module rather than violating repository boundary.
+
+Examples:
+- list active user IDs for parish
+- list active audience user IDs for class
+- list users with role in parish
+- bounded active platform user page
+
+Any added public method must:
+- return scalar user IDs only where possible
+- be extraction-safe
+- avoid exposing repositories/entities
+
+==================================================
+PART AD — USER ENUMERATION FOR GLOBAL
+==================================================
+
+GLOBAL fan-out is potentially large.
+
+Need inspect user-service/module capabilities.
+
+Required strategy:
+
+- paginated bounded active-user enumeration
+- no `findAll()` unbounded
+- no loading complete user profiles
+- only user IDs
+- batch recipient persistence
+
+If existing API missing:
+add narrow:
+listActiveUserIdsPage({cursor/page, limit})
+
+to public User facade.
+
+Do NOT add Notification -> User repo access.
+
+==================================================
+PART AE — CLASS AUDIENCE RESOLUTION
+==================================================
+
+Need recipient IDs without PII.
+
+Class target expansion should ideally use:
+- Catechist assignment public API -> assigned user IDs
+- Student active enrollment public API -> student user IDs
+- Guardian relation public API -> guardian user IDs for those active students
+
+Avoid:
+fetch student snapshots then per-student guardians N+1.
+
+If no bulk guardian lookup exists:
+add narrow bulk public facade method in Student/Enrollment domain.
+
+Static N+1 gate is mandatory.
+
+==================================================
+PART AF — PARISH / ROLE AUDIENCE
+==================================================
+
+Same principle:
+resolve scalar IDs in batches.
+
+Do not leak:
+role assignment details into notification payload.
+
+Resolver output:
+Set<string> userIds only.
+
+==================================================
+PART AG — ACCOUNT STATUS FILTER
+==================================================
+
+If public User/Auth API can cheaply assert active accounts in bulk:
+filter recipient IDs to active users.
+
+If not available:
+do not violate boundaries.
+Persist user IDs from trusted active domain relationships.
+
+GLOBAL enumeration must use active users only.
+
+Document exact behavior.
+
+==================================================
+PART AH — ANNOUNCEMENT FAN-OUT
+==================================================
+
+When AnnouncementPublishedEvent arrives:
+
+1. validate operationKey:
+ANNOUNCEMENT_PUBLISHED:<announcementId>
+
+2. expand targets
+
+3. map safe header:
+sourceType ANNOUNCEMENT
+notificationType ANNOUNCEMENT_PUBLISHED
+
+4. create/get header by operationKey
+
+5. reconcile recipients
+
+No Announcement table query.
+
+No announcement read-state mutation.
+
+Announcement feed read state and notification inbox read state remain separate.
+
+==================================================
+PART AI — EVENT PUBLISHED FAN-OUT
+==================================================
+
+EventPublishedEvent:
+expand targets only.
+
+No registered recipients expected.
+
+Header:
+EVENT_PUBLISHED
+
+No Event table query.
+
+==================================================
+PART AJ — EVENT UPDATED FAN-OUT
+==================================================
+
+EventUpdatedEvent:
+
+recipients =
+target expansion
+UNION
+registeredRecipientUserIds
+
+Header:
+EVENT_UPDATED
+
+operationKey exact:
+EVENT_UPDATED:<eventId>:v<version>
+
+Multiple legitimate updates create multiple notifications because version differs.
+
+Replay same version => dedupe.
+
+==================================================
+PART AK — EVENT CANCELLED FAN-OUT
+==================================================
+
+EventCancelledEvent:
+
+recipients =
+target expansion
+UNION
+registeredRecipientUserIds
+
+Header:
+EVENT_CANCELLED
+
+operationKey:
+EVENT_CANCELLED:<eventId>
+
+Use:
+cancellationSummary
+
+Never raw reason.
+
+==================================================
+PART AL — TARGET EXPANSION SECURITY
+==================================================
+
+Target descriptors come from source modules and are server-generated.
+
+Still validate:
+- IDs are UUIDs
+- ROLE has parishId + roleCode
+- CLASS has classId
+- PARISH has parishId
+- GLOBAL no foreign fields if contract shape allows
+
+Invalid target:
+handler should fail safely and not create malformed broad fan-out.
+
+Never downgrade invalid CLASS/PARISH target into GLOBAL.
+
+==================================================
+PART AM — EMPTY RECIPIENT SET
+==================================================
+
+If valid event maps to zero recipient IDs:
+
+Should notification header exist?
+
+Strong recommendation:
+YES, header may be persisted for idempotent audit but zero recipient rows.
+
+Alternative:
+skip header entirely.
+
+Evaluate retry semantics.
+
+Preferred:
+create header only after target expansion.
+If zero recipients:
+still persist header so replay does not repeatedly re-resolve and create ambiguity.
+
+Document:
+ZERO-RECIPIENT HEADER PERSISTED: YES
+
+No user sees it.
+
+==================================================
+PART AN — NOTIFICATION HEADER IMMUTABILITY
+==================================================
+
+Once created:
+notification header is immutable.
+
+Replay must not rewrite:
+title
+snippet
+actionUrl
+
+Reason:
+historical event operation snapshot.
+
+If same operationKey arrives with different content:
+reuse existing header and optionally log a contract mismatch.
+
+Do not mutate prior notification.
+
+==================================================
+PART AO — INBOX RETENTION
+==================================================
+
+No DELETE route.
+
+Notifications retained historically.
+
+No automatic purge in MVP.
+
+Read state preserved.
+
+Device deactivation independent.
+
+==================================================
+PART AP — ERROR CONTRACT
+==================================================
+
+Domain errors:
+
+NotificationNotFoundError
+NotificationAccessDeniedError
+NotificationEventIdentityConflictError
+InvalidNotificationTargetError
+NotificationDeviceNotFoundError
+InvalidNotificationDeviceProviderError
+InvalidNotificationDeviceTokenError
+
+HTTP:
+401 auth
+403 permission if applicable
+404 self recipient/device not found
+400 invalid device input
+409 only if actual domain conflict should reach API
+
+Handler errors are internal, not HTTP.
+
+==================================================
+PART AQ — SERVICE ARCHITECTURE
+==================================================
+
+Use:
+
+NotificationInternalService
+- header persistence/idempotency
+
+NotificationRecipientService
+- fan-out/inbox/read state
+
+NotificationDeviceService
+- device lifecycle
+
+NotificationAudienceResolver
+- target -> user IDs
+
+CommunicationNotificationHandler
+- event orchestration
+
+NotificationsService
+- public facade
+
+NotificationsModule exports:
+NotificationsService only.
+
+No extra exports unless ApplicationEvents handler registration requires provider token internal only.
+
+==================================================
+PART AR — HANDLER REGISTRATION
+==================================================
+
+Register CommunicationNotificationHandler during module initialization using existing ApplicationEvents conventions.
+
+Avoid circular dependency.
+
+Potential:
+OnModuleInit:
+applicationEventBus.registerCommunicationHandler(handler)
+
+Use existing pattern.
+
+If handler unregister lifecycle exists:
+follow it.
+
+==================================================
+PART AS — PERFORMANCE
+==================================================
+
+Mandatory static gates:
+
+- inbox paginated max 50
+- unread count single COUNT
+- read-all set-based UPDATE
+- audience resolution batched
+- GLOBAL enumeration bounded
+- CLASS guardians resolved bulk
+- recipient insertion batched
+- no one INSERT per user if avoidable
+- no source-domain per-recipient query
+- no Notification -> Announcement/Event query
+
+==================================================
+PART AT — FAN-OUT BATCH SIZE
+==================================================
+
+Choose explicit batch size.
+
+Example:
+250 recipients/batch
+
+Keep as constant:
+NOTIFICATION_RECIPIENT_BATCH_SIZE
+
+Avoid huge SQL parameter count on MSSQL.
+
+Document rationale.
+
+==================================================
+PART AU — TESTS: IDEMPOTENCY
+==================================================
+
+WRITE, DO NOT RUN.
+
+Cases:
+
+- same AnnouncementPublishedEvent twice => one header
+- same operationKey different applicationEventId => one header
+- same applicationEventId different operationKey => identity conflict
+- same recipient duplicated across targets => one recipient row
+- partial fan-out then retry => fills missing recipients only
+- EventUpdated same version replay => one header
+- EventUpdated next version => new header
+- EventCancelled replay => one header
+
+==================================================
+PART AV — TESTS: AUDIENCE
+==================================================
+
+WRITE, DO NOT RUN.
+
+GLOBAL:
+- bounded pagination
+- active users only
+
+PARISH:
+- active parish members
+
+CLASS:
+- Catechists
+- Students
+- Parents
+- dedupes guardian/user overlap
+
+ROLE:
+- exact role + exact parish
+
+Invalid:
+- malformed target rejected
+- no broad fallback
+
+Registered union:
+- current target members
+- historical registered guardian outside current audience included
+- duplicates deduped
+
+==================================================
+PART AW — TESTS: INBOX
+==================================================
+
+WRITE, DO NOT RUN.
+
+- self list only
+- foreign recipient not visible
+- unreadOnly
+- type/source filters
+- max limit 50
+- ordering
+- unread count
+- mark read
+- mark read idempotent
+- foreign notification id => 404
+- read-all only self
+- updatedCount
+
+==================================================
+PART AX — TESTS: DEVICES
+==================================================
+
+WRITE, DO NOT RUN.
+
+- iOS EXPO
+- iOS APNS
+- Android EXPO
+- Android FCM
+- Web WEB_PUSH
+- invalid pair rejected
+- create token
+- same user token update
+- cross-user token reassignment
+- token globally unique
+- deregister own
+- foreign device 404
+- repeated deregister idempotent
+- token omitted from output
+
+==================================================
+PART AY — INTEGRATION SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL scenarios:
+
+1 notification operation_key unique
+2 application_event_id unique
+3 recipient unique
+4 announcement fan-out
+5 event published fan-out
+6 event updated target + registered union
+7 event cancelled target + registered union
+8 partial fan-out replay reconciliation
+9 inbox self isolation
+10 unread count
+11 read one
+12 read all
+13 global device token unique
+14 token ownership reassignment
+15 device soft deactivate
+16 no source repository coupling
+17 zero-recipient event
+18 header immutable replay
+
+==================================================
+PART AZ — DB E2E SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Actors:
+SuperAdmin
+ParishAdmin
+Catechist
+Parent
+Student
+
+Notification consumption:
+- announcement CLASS reaches exact class community
+- announcement ROLE reaches exact parish role
+- event update reaches historical registered parent despite membership drift fixture
+- cancellation same
+- unrelated user gets no row
+
+Inbox:
+- each actor sees only own
+- mark read
+- read all
+- unread count
+
+Device:
+- own token
+- reassign token to another logged-in user
+- foreign device removal blocked
+
+Privacy:
+- no raw cancellationReason
+- no child names in notification unless title itself is legitimately authored public content; ideally fixtures avoid them
+- no internal operationKey/applicationEventId in inbox DTO
+
+==================================================
+PART BA — OPENAPI
+==================================================
+
+Document all 6 routes.
+
+Tag:
+notifications
+
+Auth:
+Bearer
+
+Responses:
+200/201/204 as appropriate
+400/401/404
+
+No admin send endpoint.
+
+No push-provider claim.
+
+==================================================
+PART BB — README
+==================================================
+
+Add Notifications section:
+
+- in-app inbox
+- communication-event driven
+- source modules decoupled
+- target expansion
+- Event update/cancel registered-recipient union
+- operationKey/appEvent idempotency
+- recipient dedupe
+- partial fan-out retry
+- read/unread
+- device registry
+- global token ownership
+- actual push deferred
+- preferences deferred
+- email/SMS deferred
+- no generic manual notifications
+- durable outbox deferred
+- validation deferred
+
+Update Community route total:
+36
+
+Do not claim final whole phase complete; #007 remains.
+
+==================================================
+PART BC — MODULE BOUNDARY SPECS
+==================================================
+
+Confirm/update:
+
+NotificationsModule:
+- exports NotificationsService only
+- no foreign repos/entities
+- no AnnouncementsModule direct dependency unless absolutely required; strong preference NO
+- no EventsModule direct dependency
+- no FamilyPortal
+- no forwardRef
+
+AnnouncementsModule:
+still does not import Notifications
+
+EventsModule:
+still does not import Notifications
+
+Communication via ApplicationEvents only.
+
+==================================================
+PART BD — STATIC INSPECTION
+==================================================
+
+Before finish verify:
+
+1. exactly 6 Notification routes
+2. total Community route count remains 36
+3. all 4 communication event types handled
+4. no raw cancellationReason
+5. operationKey idempotency
+6. applicationEventId conflict semantics
+7. recipient unique handling
+8. registeredRecipientUserIds union
+9. no current membership filter removes historical registrants
+10. bounded GLOBAL expansion
+11. no unbounded all-users query
+12. no N+1 guardian expansion
+13. inbox self-only
+14. mark read self-only
+15. read-all self-only
+16. device self-only
+17. token globally unique/reassigned safely
+18. no token echo
+19. no provider calls
+20. no direct source repository imports
+21. no cycles/forwardRef
+22. tests/specs written
+23. runtime validation not run
+
+Fix obvious static defects before reporting.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- push provider sending
+- Expo API calls
+- FCM/APNs calls
+- email
+- SMS
+- notification preferences
+- notification templates
+- notification deliveries table
+- durable outbox table
+- generic manual notification create
+- notification dismiss endpoint
+- notification delete endpoint
+- delivery retries/provider queues
+- WebSocket realtime notifications
+- demo seed/Postman (#007)
+- runtime validation
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_006_NOTIFICATIONS_MODULE_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Final 6-route inventory
+7 Communication handler
+8 Event type mapping
+9 Notification payload privacy
+10 Target expansion architecture
+11 GLOBAL target expansion
+12 PARISH target expansion
+13 CLASS target expansion
+14 ROLE target expansion
+15 Registered recipient union
+16 User/account filtering
+17 Header idempotency
+18 applicationEventId semantics
+19 operationKey semantics
+20 Header unique race handling
+21 Recipient dedupe
+22 Fan-out batching
+23 Partial fan-out retry
+24 Zero-recipient behavior
+25 Header immutability
+26 Durable outbox decision
+27 AnnouncementPublished fan-out
+28 EventPublished fan-out
+29 EventUpdated fan-out
+30 EventCancelled fan-out
+31 Inbox list
+32 Inbox DTO minimization
+33 Unread count
+34 Mark one read
+35 Mark all read
+36 is_dismissed decision
+37 Device registration
+38 Platform/provider validation
+39 Token uniqueness
+40 Cross-user token reassignment
+41 Device deregistration
+42 Device response privacy
+43 Push provider scope
+44 Service architecture
+45 Handler registration
+46 Public API boundaries
+47 Global user enumeration
+48 Class audience bulk resolution
+49 Performance/N+1
+50 OpenAPI
+51 README
+52 Module boundary
+53 Unit tests written
+54 Integration tests written
+55 DB e2e tests written
+56 Tests executed
+57 DB validation
+58 quality:full
+59 Docker
+60 npm audit
+61 Push delivery execution
+62 Static inspection
+63 Risks/deferred
+64 BLOCKER/HIGH/MEDIUM/LOW
+65 #007 readiness
+66 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+NOTIFICATION ROUTE COUNT: 6
+
+COMMUNICATION HANDLER READY: YES/NO
+ANNOUNCEMENT_PUBLISHED FANOUT READY: YES/NO
+EVENT_PUBLISHED FANOUT READY: YES/NO
+EVENT_UPDATED FANOUT READY: YES/NO
+EVENT_CANCELLED FANOUT READY: YES/NO
+
+TARGET EXPANSION READY: YES/NO
+GLOBAL EXPANSION BOUNDED: YES/NO
+PARISH EXPANSION READY: YES/NO
+CLASS EXPANSION READY: YES/NO
+ROLE EXPANSION READY: YES/NO
+
+REGISTERED RECIPIENT UNION READY: YES/NO
+HISTORICAL REGISTERED RECIPIENTS PRESERVED: YES/NO
+
+NOTIFICATION HEADER IDEMPOTENCY READY: YES/NO
+OPERATION KEY DEDUPE READY: YES/NO
+APPLICATION EVENT IDENTITY HANDLING READY: YES/NO
+PARTIAL FANOUT RETRY SAFE: YES/NO
+RECIPIENT DEDUPE READY: YES/NO
+
+ZERO-RECIPIENT HEADER PERSISTED: YES/NO
+HEADER IMMUTABILITY READY: YES/NO
+
+INBOX LIST READY: YES/NO
+UNREAD COUNT READY: YES/NO
+MARK ONE READ READY: YES/NO
+MARK ALL READ READY: YES/NO
+INBOX SELF-SCOPE SAFE: YES/NO
+INBOX DATA MINIMIZATION READY: YES/NO
+
+DEVICE REGISTRATION READY: YES/NO
+DEVICE PROVIDER VALIDATION READY: YES/NO
+GLOBAL TOKEN UNIQUENESS READY: YES/NO
+CROSS-USER TOKEN REASSIGNMENT READY: YES/NO
+DEVICE DEREGISTRATION READY: YES/NO
+DEVICE TOKEN RESPONSE PRIVACY SAFE: YES/NO
+
+PUSH DELIVERY IMPLEMENTED: NO
+NOTIFICATION PREFERENCES IMPLEMENTED: NO
+EMAIL/SMS IMPLEMENTED: NO
+GENERIC MANUAL NOTIFICATION CREATE: NO
+DURABLE OUTBOX IN MVP: NO
+
+NO RAW CANCELLATION REASON: YES/NO
+NO DIRECT ANNOUNCEMENT REPOSITORY DEPENDENCY: YES/NO
+NO DIRECT EVENT REPOSITORY DEPENDENCY: YES/NO
+NO N+1 BY INSPECTION: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+FINAL CMS ROUTE COUNT: 8
+FINAL ANNOUNCEMENT ROUTE COUNT: 8
+FINAL EVENT ROUTE COUNT: 14
+FINAL NOTIFICATION ROUTE COUNT: 6
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+PUSH DELIVERY EXECUTED: NO — not implemented in MVP
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#007 READINESS: YES/NO
+
+==================================================
+#007 GATE
+==================================================
+
+Proceed if:
+
+- exactly 6 notification routes
+- communication handler ready
+- four source event fan-outs ready
+- target expansion secure/bounded
+- registered recipient union correct
+- idempotency/retry safe
+- inbox self-scope correct
+- device ownership secure
+- privacy clean
+- no provider calls
+- no direct source repositories
+- no N+1
+- tests/specs written
+- Community total = 36
+- BLOCKER=0
+- HIGH=0
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #007/7 —
+FAST-MODE FINALIZATION — DEMO SEED + POSTMAN + README/OPENAPI + STATIC FINAL AUDIT
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #006 implementation status
+- final route count
+- communication fan-out
+- target expansion
+- idempotency
+- inbox/read state
+- devices
+- push/provider scope
+- privacy/N+1
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #007 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(notifications): add fanout inbox and device registration"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #007 automatically.

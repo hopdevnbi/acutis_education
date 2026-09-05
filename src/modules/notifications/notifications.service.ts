@@ -3,8 +3,12 @@ import type {
   CreateNotificationInput,
   CreateNotificationRecipientInput,
   NotificationDeviceSnapshot,
+  NotificationHeaderCreationResult,
+  NotificationInboxFilter,
+  NotificationInboxItemSnapshot,
   NotificationRecipientSnapshot,
   NotificationSnapshot,
+  PaginatedNotificationInbox,
   RegisterNotificationDeviceInput,
 } from './interfaces/notification.interfaces';
 import { NotificationDeviceService } from './services/notification-device.service';
@@ -19,6 +23,12 @@ export class NotificationsService {
     private readonly notificationDeviceService: NotificationDeviceService,
   ) {}
 
+  async createOrGetHeader(
+    input: CreateNotificationInput,
+  ): Promise<NotificationHeaderCreationResult> {
+    return this.notificationInternalService.createOrGetHeader(input);
+  }
+
   async createNotification(input: CreateNotificationInput): Promise<NotificationSnapshot> {
     return this.notificationInternalService.create(input);
   }
@@ -32,6 +42,53 @@ export class NotificationsService {
   ): Promise<NotificationSnapshot | null> {
     return this.notificationInternalService.findByOperationKey(operationKey);
   }
+
+  async fanOutRecipients(
+    notificationId: string,
+    recipientUserIds: readonly string[],
+  ): Promise<number> {
+    return this.notificationRecipientService.fanOutRecipients(
+      notificationId,
+      recipientUserIds,
+    );
+  }
+
+  async listUserInbox(
+    recipientUserId: string,
+    filter?: NotificationInboxFilter,
+  ): Promise<PaginatedNotificationInbox> {
+    return this.notificationRecipientService.listUserInbox(recipientUserId, filter);
+  }
+
+  async getUnreadCount(recipientUserId: string): Promise<number> {
+    return this.notificationRecipientService.getUnreadCount(recipientUserId);
+  }
+
+  async markRead(
+    notificationId: string,
+    recipientUserId: string,
+  ): Promise<NotificationInboxItemSnapshot> {
+    return this.notificationRecipientService.markRead(notificationId, recipientUserId);
+  }
+
+  async markAllRead(recipientUserId: string): Promise<number> {
+    return this.notificationRecipientService.markAllRead(recipientUserId);
+  }
+
+  async registerDevice(
+    input: RegisterNotificationDeviceInput,
+  ): Promise<NotificationDeviceSnapshot> {
+    return this.notificationDeviceService.registerDevice(input);
+  }
+
+  async deactivateDeviceById(
+    deviceId: string,
+    userId: string,
+  ): Promise<NotificationDeviceSnapshot> {
+    return this.notificationDeviceService.deactivateDeviceById(deviceId, userId);
+  }
+
+  // --- Backward compatibility methods ---
 
   async addRecipient(
     input: CreateNotificationRecipientInput,
@@ -49,13 +106,6 @@ export class NotificationsService {
     );
   }
 
-  async markRead(
-    notificationId: string,
-    recipientUserId: string,
-  ): Promise<NotificationRecipientSnapshot> {
-    return this.notificationRecipientService.markRead(notificationId, recipientUserId);
-  }
-
   async markDismissed(
     notificationId: string,
     recipientUserId: string,
@@ -68,12 +118,6 @@ export class NotificationsService {
     options?: { readonly limit?: number; readonly unreadOnly?: boolean },
   ): Promise<readonly NotificationRecipientSnapshot[]> {
     return this.notificationRecipientService.listUserRecipients(recipientUserId, options);
-  }
-
-  async registerDevice(
-    input: RegisterNotificationDeviceInput,
-  ): Promise<NotificationDeviceSnapshot> {
-    return this.notificationDeviceService.registerDevice(input);
   }
 
   async deactivateDevice(token: string): Promise<void> {

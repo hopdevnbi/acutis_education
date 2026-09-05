@@ -67,3 +67,37 @@ export interface RegisterNotificationDeviceInput {
   readonly appVersion?: string | null;
   readonly locale?: string | null;
 }
+
+export interface NotificationInboxItemSnapshot {
+  readonly id: string; // primary item id = notificationId
+  readonly notificationId: string;
+  readonly type: NotificationType;
+  readonly sourceType: NotificationSourceType;
+  readonly sourceId: string;
+  readonly title: string;
+  readonly snippet: string;
+  readonly actionUrl: string;
+  readonly isRead: boolean;
+  readonly readAt: Date | null;
+  readonly createdAt: Date;
+}
+
+export interface NotificationInboxFilter {
+  readonly page?: number;
+  readonly limit?: number;
+  readonly unreadOnly?: boolean;
+  readonly type?: NotificationType;
+  readonly sourceType?: NotificationSourceType;
+}
+
+export interface PaginatedNotificationInbox {
+  readonly items: readonly NotificationInboxItemSnapshot[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface NotificationHeaderCreationResult {
+  readonly notification: NotificationSnapshot;
+  readonly isNew: boolean;
+}
