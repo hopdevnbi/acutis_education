@@ -80,10 +80,6 @@ function parseMinCountConfig(record: Record<string, unknown> | null): MilestoneT
   return { minCount };
 }
 
-/**
- * Validates typed milestone trigger_config_json for the given trigger type.
- * FIRST_* triggers accept null/empty/`{}` and return null.
- */
 export function parseAndValidateMilestoneTriggerConfig(
   triggerType: MilestoneTriggerType,
   triggerConfigJson: string | null,
@@ -109,7 +105,7 @@ export function parseAndValidateMilestoneTriggerConfig(
 
 /**
  * Maps milestone trigger types to reward event types.
- * FIRST_MISSION_COMPLETED has no reward event mapping in #004 (returns null).
+ * FIRST_MISSION_COMPLETED maps to MISSION_COMPLETED (#005).
  */
 export function milestoneTriggerToRewardEventType(
   triggerType: MilestoneTriggerType,
@@ -123,7 +119,7 @@ export function milestoneTriggerToRewardEventType(
     case MilestoneTriggerType.FirstExamCompleted:
       return REWARD_EVENT_TYPES.ExamCompleted;
     case MilestoneTriggerType.FirstMissionCompleted:
-      return null;
+      return REWARD_EVENT_TYPES.MissionCompleted;
     default: {
       const _exhaustive: never = triggerType;
       throw new InvalidMilestoneTriggerConfigError(
@@ -140,9 +136,7 @@ export function doesMilestoneTriggerMatchEvent(input: {
   readonly eventCountForMappedType: number;
 }): boolean {
   switch (input.triggerType) {
-    // Missions emit completion in #005; never match in #004.
     case MilestoneTriggerType.FirstMissionCompleted:
-      return false;
     case MilestoneTriggerType.FirstLessonCompleted:
     case MilestoneTriggerType.FirstExamCompleted: {
       const mappedEventType = milestoneTriggerToRewardEventType(input.triggerType);

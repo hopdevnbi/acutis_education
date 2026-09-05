@@ -106,6 +106,25 @@ export class BadgeService {
     return toBadgeDefinitionSnapshot(row);
   }
 
+  async findDefinitionsByIds(
+    rawIds: readonly string[],
+    manager?: EntityManager,
+  ): Promise<Map<string, BadgeDefinitionSnapshot>> {
+    const uniqueIds = Array.from(new Set(rawIds.filter(Boolean).map((id) => normalizeUuid(id))));
+    if (uniqueIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.definitionRepo(manager).find({
+      where: { id: In(uniqueIds) },
+    });
+    const map = new Map<string, BadgeDefinitionSnapshot>();
+    for (const row of rows) {
+      const snapshot = toBadgeDefinitionSnapshot(row);
+      map.set(snapshot.id, snapshot);
+    }
+    return map;
+  }
+
   async listDefinitions(input?: {
     readonly parishId?: string | null;
     readonly includeGlobal?: boolean;

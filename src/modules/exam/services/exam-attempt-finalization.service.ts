@@ -115,6 +115,7 @@ export class ExamAttemptFinalizationService {
       occurredAt: attempt.gradedAt ?? new Date(),
       studentId: attempt.studentId,
       enrollmentId: attempt.enrollmentId,
+      classId: attempt.classId,
       parishId: attempt.parishId,
       academicYearId: attempt.academicYearId,
       sourceId: attempt.id,

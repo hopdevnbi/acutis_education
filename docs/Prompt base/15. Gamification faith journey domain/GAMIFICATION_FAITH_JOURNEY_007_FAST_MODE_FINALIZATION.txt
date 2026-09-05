@@ -1,0 +1,1178 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #007/7
+FAST IMPLEMENTATION MODE
+FINALIZATION — DEMO SEED + POSTMAN + README / OPENAPI + STATIC FINAL AUDIT
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production artifacts
+- demo seed code
+- Postman collection
+- test/spec files if gaps are found
+- README/docs
+- static audit report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not mark deferred validation as FAIL.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+POSTMAN EXECUTED: NO — deferred
+DEMO SEED EXECUTED: NO — deferred
+
+Architecture/security/privacy/RBAC/scope/modular-boundary/static N+1 review remain mandatory gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(gamification): add demo postman and finalize implementation"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7 — Domain audit/design
+#002/7 — Persistence foundation
+#003/7 — Points engine + reward ingest + manual adjustments
+#004/7 — Badges + milestones
+#005/7 — Missions + progress/completion
+#006/7 — Faith Journey + Learner/Parent/Staff reads + security hardening
+
+Current verified implementation state from #006:
+
+ARCHITECTURE
+- one `gamification` module
+- exports `GamificationService` only
+- `FaithJourneyService` internal
+- no Faith Journey source table
+- ApplicationEvents neutral
+- no forwardRef
+- no source module repository/entity imports
+
+POINTS
+- immutable ledger
+- reward rules
+- automatic reward ingest
+- manual adjustment
+- reversal
+- learner/staff points reads
+
+BADGES
+- admin definitions
+- automatic/manual award
+- soft revoke
+- bonus + reversal
+- learner/parent/staff reads
+- N+1 fixed
+
+MISSIONS
+- GLOBAL/PARISH/CLASS
+- DRAFT/ACTIVE/ARCHIVED
+- progress/completion
+- bonus
+- MISSION_COMPLETED event
+- learner/parent/staff reads
+
+MILESTONES
+- system/learning only
+- automatic achievements
+- learner/parent/staff reads
+- no sacramental/pastoral milestones
+- N+1 fixed
+
+FAITH JOURNEY
+- learner
+- linked Parent
+- scoped staff/Catechist
+- canonical summary
+- latestAchievement
+- bounded timeline
+- manual adjustment details omitted from learner/Parent timeline
+
+SECURITY
+- Parent active guardian
+- Learner self
+- Catechist current active assignment/current enrollment
+- ParishAdmin own parish
+- SuperAdmin global staff
+- no `/me` impersonation
+- no leaderboard
+- no holiness/spiritual-worth scoring
+- no PII leak
+
+#006 verdict:
+BLOCKER=0
+HIGH=0
+MEDIUM=0
+#007 READINESS=YES
+
+Current:
+#007/7 — FINALIZATION
+
+PRIMARY OBJECTIVE
+-----------------
+Complete final implementation artifacts and close the backend implementation phase for Gamification + Faith Journey:
+
+1. final static code/contract audit
+2. demo seed implementation
+3. demo seed specs
+4. Postman collection
+5. README finalization
+6. OpenAPI static final review
+7. final route inventory
+8. final architecture/security/N+1 inspection
+9. implementation completion report
+10. next-module readiness
+
+Do NOT perform runtime validation.
+
+==================================================
+PART A — FINAL STATIC CODE AUDIT
+==================================================
+
+By code inspection only, verify:
+
+- GamificationModule exists and is registered
+- exactly 9 owned tables
+- no extra Faith Journey source table
+- immutable ledger still append-only
+- reward ingest remains idempotent
+- source modules still emit only neutral application events
+- source modules do not import Gamification
+- Gamification does not import source repositories/entities
+- no forwardRef
+- no FamilyPortal dependency
+- no Localization runtime dependency
+- no leaderboard/ranking endpoints
+- no streak tables/endpoints
+- no sacramental milestone model
+- no public child profiles
+- no Parent full point ledger route
+- no `/me` admin impersonation
+- learner/Parent timelines omit staffNote/manual raw reasons
+- badge/milestone N+1 remains resolved
+- mission reads remain set-based/batched
+- Faith Journey remains bounded
+- no entity leakage in controllers
+
+If BLOCKER/HIGH found:
+fix it before finalizing.
+
+Do NOT start a validation command loop.
+
+==================================================
+PART B — FINAL TABLE INVENTORY
+==================================================
+
+Document exactly the final 9 tables:
+
+1. reward_rules
+2. processed_reward_events
+3. point_ledger_entries
+4. badge_definitions
+5. badge_awards
+6. mission_definitions
+7. mission_progress
+8. milestone_definitions
+9. milestone_achievements
+
+Confirm:
+- no hard-delete history behavior
+- no cascade from foreign domains
+- scalar cross-module IDs
+- append-only ledger
+- archive/soft revoke where applicable
+
+==================================================
+PART C — FINAL HTTP ROUTE INVENTORY
+==================================================
+
+Produce exact final route inventory from actual code.
+
+Group routes by:
+
+POINTS / REWARD RULES
+- staff summary
+- staff points
+- manual adjustment
+- learner summary
+- learner points
+- reward-rule admin
+
+BADGES
+- admin definition routes
+- manual award/revoke
+- learner badges
+- parent badges
+- staff badges
+
+MILESTONES
+- admin definition routes
+- learner milestones
+- parent milestones
+- staff milestones
+
+MISSIONS
+- admin list/detail/create/update/activate/archive
+- class missions
+- mission progress
+- learner list/detail
+- parent missions
+
+FAITH JOURNEY
+- learner faith journey
+- parent summary
+- parent faith journey
+- staff faith journey
+
+Do not invent routes.
+Read controller code and list only real endpoints.
+
+Required:
+FINAL GAMIFICATION ROUTE COUNT = <exact integer>
+
+==================================================
+PART D — DEMO SEED STRATEGY
+==================================================
+
+Create an idempotent dev/test demo seed.
+
+Preferred script:
+
+npm run seed:gamification-demo
+
+Follow repository seed conventions.
+
+Compose existing domain seeds rather than duplicating ownership.
+
+Use public domain services / GamificationService, not foreign repositories.
+
+Seed must be safe for dev/test only.
+
+Use:
+assertSafeSeedEnvironment
+or current project equivalent.
+
+Do not execute seed.
+
+==================================================
+PART E — DEMO ACTORS / CONTEXT
+==================================================
+
+Reuse existing deterministic demo actors where available:
+
+- SuperAdmin
+- ParishAdmin
+- Catechist
+- Parent
+- Student Alpha
+- optional Student Beta / Gamma
+- active class
+- active enrollment
+- guardian link
+- catechist assignment
+
+Do not create duplicate parallel identity fixtures if existing seeds already provide them.
+
+Need at least:
+
+STUDENT ALPHA
+- linked Parent
+- assigned Catechist
+- active enrollment/class
+
+STUDENT BETA/GAMMA
+- useful for foreign-scope denial fixtures
+
+==================================================
+PART F — DEMO REWARD RULES
+==================================================
+
+Seed deterministic reward rules such as:
+
+- lesson completion points
+- practice completion points
+- exam completion points
+- exam score threshold bonus
+- attendance present points
+- attendance late points
+- mission completion bonus rule if desired
+
+Use stable codes.
+
+Examples:
+LESSON_COMPLETE_10
+PRACTICE_COMPLETE_5
+EXAM_COMPLETE_15
+EXAM_SCORE_80_BONUS
+ATTENDANCE_PRESENT_5
+
+Do not over-seed.
+
+==================================================
+PART G — DEMO POINT LEDGER
+==================================================
+
+Create enough demo entries to show:
+
+- positive automatic-like rewards
+- one manual positive award
+- one adjustment/reversal scenario if useful
+- stable balance
+- lifetimePositivePoints
+
+Prefer using service APIs / ingest foundation where possible.
+
+Do not bypass ledger immutability.
+
+No direct balance mutation.
+
+==================================================
+PART H — DEMO BADGES
+==================================================
+
+Seed at least:
+
+1. automatic badge
+2. manual/BOTH badge
+
+Example concepts:
+- First Lesson
+- Faithful Learner
+- Practice Explorer
+
+At least 2 active awarded badges for Student Alpha.
+
+Optional revoked historical badge if useful for testing revoke semantics.
+
+Do not use sacramental labels.
+
+==================================================
+PART I — DEMO MISSIONS
+==================================================
+
+Seed at least:
+
+- one ACTIVE mission with partial progress
+- one COMPLETED mission
+- optional archived mission
+
+Examples:
+- Complete 3 Lessons
+- Attend 4 Classes
+- Finish 2 Practice Sessions
+
+Student Alpha should have:
+- one active mission with `currentCount < targetCount`
+- one completed mission
+
+Do not use student-targeted mission scope.
+
+Use GLOBAL/PARISH/CLASS.
+
+==================================================
+PART J — DEMO MILESTONES
+==================================================
+
+Seed at least 2 achieved learning/system milestones.
+
+Examples:
+- First Lesson Completed
+- First Exam Completed
+- First Mission Completed
+
+No sacramental/pastoral milestone.
+
+==================================================
+PART K — DEMO FAITH JOURNEY
+==================================================
+
+Seed composition should make learner Faith Journey meaningful:
+
+- non-zero points
+- lifetimePositivePoints
+- 2+ badges
+- 1 active mission
+- 1 completed mission
+- 2+ milestones
+- recent timeline with POINTS/BADGE/MISSION/MILESTONE categories
+
+Parent should be able to read same child safely.
+
+Catechist should be able to read Student Alpha but not foreign student.
+
+==================================================
+PART L — DEMO IDEMPOTENCY
+==================================================
+
+Seed must be conceptually idempotent.
+
+Use stable:
+- codes
+- source IDs
+- reason codes
+- mission codes
+- badge codes
+- milestone codes
+
+Repeated conceptual seed execution must not duplicate:
+- reward rules
+- ledger auto-awards
+- badge active awards
+- mission definitions
+- mission progress
+- milestone achievements
+
+Write idempotency tests.
+
+Do not run.
+
+==================================================
+PART M — DEMO SEED FILES
+==================================================
+
+Follow existing project naming style.
+
+Suggested:
+
+src/database/seeds/gamification-demo.seed.constants.ts
+src/database/seeds/gamification-demo.seed.service.ts
+src/database/seeds/gamification-demo-seed.module.ts
+scripts/seed-gamification-demo.ts
+
+Add:
+
+"seed:gamification-demo": "..."
+
+to package.json using project convention.
+
+==================================================
+PART N — DEMO SEED TESTS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Cover:
+- first conceptual run creates required demo scenario
+- second conceptual run is idempotent
+- no duplicate reward rules
+- no duplicate ledger identity
+- no duplicate active badge award
+- no duplicate mission progress
+- no duplicate milestone achievement
+- Parent link exists
+- Catechist assignment exists
+- Faith Journey scenario has all required categories
+- foreign student fixture remains unauthorized for Parent/Catechist as intended
+
+==================================================
+PART O — POSTMAN COLLECTION
+==================================================
+
+Create:
+
+docs/postman/Acutis-Education-Gamification-Faith-Journey.postman_collection.json
+
+Follow repository Postman conventions.
+
+No live hardcoded JWTs.
+
+Variables should include:
+
+baseUrl
+demoPassword
+
+superAdminEmail
+parishAdminEmail
+catechistEmail
+parentEmail
+studentEmail
+
+superAdminToken
+parishAdminToken
+catechistToken
+parentToken
+studentToken
+
+studentId
+foreignStudentId
+enrollmentId
+foreignEnrollmentId
+classId
+
+rewardRuleId
+badgeId
+missionId
+milestoneId
+
+==================================================
+PART P — POSTMAN AUTH FLOWS
+==================================================
+
+Include login requests for:
+
+- SuperAdmin
+- ParishAdmin
+- Catechist
+- Parent
+- Student
+
+Capture tokens.
+
+Use actual project auth/login endpoint.
+
+==================================================
+PART Q — POSTMAN LEARNER FLOWS
+==================================================
+
+Include:
+
+1. learner gamification summary
+2. learner points
+3. learner badges
+4. learner missions
+5. learner mission detail
+6. learner milestones
+7. learner Faith Journey
+
+Assertions:
+- 200
+- response shape
+- no staffNote
+- no awardedByUserId
+- no eventId
+
+==================================================
+PART R — POSTMAN PARENT FLOWS
+==================================================
+
+Include:
+
+1. Parent linked-child gamification summary
+2. Parent Faith Journey
+3. Parent badges
+4. Parent missions
+5. Parent milestones
+
+Negative:
+- foreign child -> 403
+- detailed Parent points route should not exist / do not include one
+
+Assertions:
+- no raw manual adjustment reasons
+- no staffNote
+- no event IDs
+
+==================================================
+PART S — POSTMAN STAFF READ FLOWS
+==================================================
+
+Catechist:
+
+- student summary
+- student points
+- student badges
+- student milestones
+- student Faith Journey
+- class missions
+- mission progress
+
+Negative:
+- foreign/unassigned student -> 403
+
+ParishAdmin:
+- own parish student reads
+- cross parish -> 403
+
+SuperAdmin:
+- global staff reads
+
+==================================================
+PART T — POSTMAN ADMIN WRITE FLOWS
+==================================================
+
+Reward rules:
+- list
+- create
+- update
+
+Badges:
+- list
+- create
+- update
+- manual award
+- revoke
+
+Missions:
+- list
+- create DRAFT
+- update
+- activate
+- archive
+
+Milestones:
+- list
+- create
+- update/archive if endpoint model supports
+
+Points:
+- manual adjustment
+
+Use separate disposable/demo objects where needed.
+
+Do not depend on executing these now.
+
+==================================================
+PART U — POSTMAN NEGATIVE FLOWS
+==================================================
+
+Include representative security cases:
+
+- Parent staff summary -> 403
+- Student staff summary -> 403
+- Catechist reward-rule manage -> 403
+- Catechist badge definition manage -> 403
+- ParishAdmin milestone definition manage -> 403
+- Catechist unassigned class mission manage -> 403
+- Parent `/me` foreign child -> 403
+- Admin `/me/learner` -> 403
+- SuperAdmin `/me/parent` -> 403 unless actually Parent role
+- zero point adjustment -> 400
+- duplicate/repeated revoke -> 409 where contract says so
+
+Do not duplicate every DB e2e case.
+
+==================================================
+PART V — POSTMAN TEST SCRIPTS
+==================================================
+
+Add lightweight scripts:
+
+- status assertions
+- JSON property assertions
+- capture IDs/tokens
+- privacy field absence checks
+
+Do NOT run Newman/Postman.
+
+Report:
+POSTMAN EXECUTED: NO — deferred.
+
+==================================================
+PART W — README FINALIZATION
+==================================================
+
+Finalize Gamification + Faith Journey README section.
+
+Document:
+
+ARCHITECTURE
+- one module
+- 9 tables
+- Faith Journey composed, no timeline source table
+- ApplicationEvents neutral
+
+POINTS
+- immutable ledger
+- reward rules
+- idempotency
+- manual adjustments/reversal
+
+BADGES
+- scopes
+- auto/manual/BOTH
+- revoke
+- bonus/reversal
+
+MISSIONS
+- scopes
+- lifecycle
+- typed conditions
+- progress/completion
+- no historical backfill
+
+MILESTONES
+- system/learning only
+- SuperAdmin definitions
+- automatic achievements
+
+FAITH JOURNEY
+- learner
+- Parent
+- staff
+- bounded timeline
+
+SECURITY
+- Parent linked child
+- Student self
+- Catechist current assignment
+- ParishAdmin own parish
+- SuperAdmin global staff
+- no leaderboard
+- no holiness/spiritual-worth score
+- no sacramental/pastoral data
+
+PERFORMANCE
+- badge/milestone N+1 resolved
+- Faith Journey bounded query budget
+
+DEMO
+- seed command
+- Postman path
+
+DEFERRED
+- leaderboards
+- streaks
+- student-targeted missions
+- localization
+- outbox/queue
+- sacramental milestones
+- FamilyPortal composition
+- runtime validation
+
+Add explicit statement:
+
+GAMIFICATION + FAITH JOURNEY BACKEND IMPLEMENTATION COMPLETE
+
+Also explicitly:
+
+RUNTIME VALIDATION DEFERRED TO FE INTEGRATION / STABILIZATION PHASE
+
+Do not claim runtime tests have run.
+
+==================================================
+PART X — OPENAPI FINAL STATIC REVIEW
+==================================================
+
+By static inspection, verify all Gamification routes have:
+
+- bearer auth
+- correct permission
+- actor/capability scope description
+- UUID params
+- pagination query DTOs where needed
+- response DTO
+- expected 400/401/403/404/409
+
+Fix stale/missing annotations.
+
+Do not launch Swagger runtime.
+
+==================================================
+PART Y — TEST INVENTORY FINAL AUDIT
+==================================================
+
+Inspect all Gamification specs.
+
+Ensure written coverage exists for:
+
+PERSISTENCE
+- all 9 tables
+- uniques/checks
+- append-only ledger
+
+POINTS
+- rule matching
+- idempotency
+- source emissions
+- adjustments/reversal
+
+BADGES
+- automatic/manual
+- revoke
+- bonus
+
+MISSIONS
+- lifecycle
+- scope
+- progress
+- completion
+- bonus/event
+
+MILESTONES
+- typed triggers
+- one-time achievement
+
+READS
+- learner
+- Parent
+- staff
+- Faith Journey
+- N+1 batch behavior
+
+SECURITY
+- denial matrix
+- no `/me` impersonation
+- privacy/minors
+
+DEMO
+- seed idempotency
+
+If a critical spec is missing:
+write it.
+
+Do not run tests.
+
+==================================================
+PART Z — FINAL MODULE BOUNDARY AUDIT
+==================================================
+
+Static confirm:
+
+- GamificationModule owns exactly 9 tables
+- exports GamificationService only
+- FaithJourneyService internal
+- ApplicationEvents neutral
+- no source domain repo/entity imports
+- no FamilyPortal import
+- no LearningProgress/Practice/Exam/ClassOperations module import inside Gamification
+- source modules do not import Gamification
+- no forwardRef
+- no localization/media runtime coupling
+- no reverse domain dependency
+
+Update boundary specs if missing.
+
+Do not run.
+
+==================================================
+PART AA — FINAL SECURITY / PRIVACY AUDIT
+==================================================
+
+Static inspect:
+
+- no public student profile
+- no leaderboard
+- no spiritual-value/holiness score
+- no sacramental/pastoral data
+- no PII in events
+- no PII in learner/Parent read DTOs
+- no staffNote in learner/Parent
+- no manual adjustment raw reason in learner/Parent Faith Journey
+- no actor IDs
+- no event IDs
+- Parent active guardian only
+- Learner self only
+- Catechist current assignment/current enrollment
+- ParishAdmin own parish
+- SuperAdmin staff global
+- no `/me` impersonation
+- no client auto-points mutation
+- no mutable ledger balance
+
+Fix obvious issues before final verdict.
+
+==================================================
+PART AB — FINAL PERFORMANCE AUDIT
+==================================================
+
+By static inspection:
+
+- reward ingest bounded
+- no foreign-domain loops
+- badge/milestone batch definitions
+- mission read/progress no per-row foreign calls
+- Faith Journey fixed bounded queries
+- timeline capped
+- pagination max limits
+- no leaderboard aggregate scans
+
+No benchmark/query-plan execution.
+
+==================================================
+PART AC — IMPLEMENTATION COMPLETION VERDICT
+==================================================
+
+Under Fast Implementation Mode, phase can be marked:
+
+GAMIFICATION + FAITH JOURNEY IMPLEMENTATION COMPLETE: YES
+
+if:
+
+- all designed MVP capabilities are implemented
+- final route inventory matches code
+- 9-table ownership intact
+- points/badges/missions/milestones/Faith Journey complete
+- demo seed code exists
+- Postman collection exists
+- README/OpenAPI final
+- specs written
+- security/privacy clean by inspection
+- module boundaries clean
+- BLOCKER=0
+- HIGH=0
+
+This is NOT equivalent to runtime validation complete.
+
+Also state:
+
+RUNTIME VALIDATION COMPLETE: NO — deferred by Fast Implementation Mode
+
+==================================================
+PART AD — NEXT MODULE READINESS
+==================================================
+
+If implementation completion is YES and BLOCKER/HIGH=0:
+
+NEXT BACKEND MODULE READY TO START: YES
+
+Do not decide the next module unless roadmap/report already specifies it.
+
+If roadmap exists:
+state recommended next module name only.
+
+Do not implement next module.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- leaderboard
+- streaks
+- student-targeted missions
+- public profiles
+- sacramental milestones
+- FamilyPortal composition
+- localization integration
+- notifications
+- outbox/queue
+- cached balance table
+- runtime validation
+- FE code
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_007_FAST_MODE_FINALIZATION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Final module structure
+7 Final table inventory
+8 Final route inventory
+9 Final route count
+10 Final architecture audit
+11 Final points audit
+12 Final badge audit
+13 Final mission audit
+14 Final milestone audit
+15 Final Faith Journey audit
+16 Final event integration audit
+17 Final idempotency audit
+18 Final RBAC/scope audit
+19 Final privacy/minors audit
+20 Final N+1/performance audit
+21 Demo seed strategy
+22 Demo seed implementation
+23 Demo actors
+24 Demo reward rules
+25 Demo ledger
+26 Demo badges
+27 Demo missions
+28 Demo milestones
+29 Demo Faith Journey scenario
+30 Demo idempotency
+31 Demo seed tests written
+32 Postman collection
+33 Postman variables
+34 Postman auth flows
+35 Learner flows
+36 Parent flows
+37 Staff flows
+38 Admin write flows
+39 Negative/security flows
+40 Postman test scripts
+41 README finalization
+42 OpenAPI final static review
+43 Test inventory
+44 Unit tests written
+45 Integration tests written
+46 DB e2e tests written
+47 Tests executed
+48 DB validation
+49 quality:full
+50 Docker
+51 npm audit
+52 Demo seed execution
+53 Postman execution
+54 Deferred validation plan
+55 Deferred product scope
+56 Static inspection findings
+57 BLOCKER/HIGH/MEDIUM/LOW
+58 Implementation completion verdict
+59 Runtime validation verdict
+60 Next module readiness
+61 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+FINAL GAMIFICATION ROUTE COUNT: <integer>
+
+FINAL NINE TABLES IMPLEMENTED: YES/NO
+
+POINTS ENGINE READY BY INSPECTION: YES/NO
+IMMUTABLE LEDGER PRESERVED: YES/NO
+REWARD IDEMPOTENCY READY BY INSPECTION: YES/NO
+
+BADGES READY BY INSPECTION: YES/NO
+MISSIONS READY BY INSPECTION: YES/NO
+MILESTONES READY BY INSPECTION: YES/NO
+FAITH JOURNEY READY BY INSPECTION: YES/NO
+
+LEARNER CONTRACTS READY: YES/NO
+PARENT CONTRACTS READY: YES/NO
+STAFF CONTRACTS READY: YES/NO
+ADMIN CONTRACTS READY: YES/NO
+
+PARENT GUARDIAN SCOPE SAFE: YES/NO
+LEARNER SELF SCOPE SAFE: YES/NO
+CATECHIST CURRENT-ASSIGNMENT SCOPE SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+ACTOR-SPECIFIC /ME IMPERSONATION SAFE: YES/NO
+
+NO LEADERBOARD IN MVP: YES/NO
+NO STREAKS IN MVP: YES/NO
+NO SACRAMENTAL MILESTONES: YES/NO
+POINTS NOT SPIRITUAL VALUE: YES/NO
+
+BADGE/MILESTONE N+1 RESOLVED: YES/NO
+FAITH JOURNEY QUERY BUDGET BOUNDED: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+DEMO SEED IMPLEMENTED: YES/NO
+DEMO SEED IDEMPOTENCY DESIGNED: YES/NO
+DEMO SEED TESTS WRITTEN: YES/NO
+
+POSTMAN IMPLEMENTED: YES/NO
+README FINALIZED: YES/NO
+OPENAPI READY BY STATIC INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+DEMO SEED EXECUTED: NO — deferred
+POSTMAN EXECUTED: NO — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+GAMIFICATION + FAITH JOURNEY IMPLEMENTATION COMPLETE: YES/NO
+
+RUNTIME VALIDATION COMPLETE: NO — deferred by Fast Implementation Mode
+
+NEXT BACKEND MODULE READY TO START: YES/NO
+
+FINAL GATE
+----------
+Implementation may be considered complete if:
+
+- BLOCKER=0
+- HIGH=0
+- final route/table inventory correct
+- points/badges/missions/milestones/Faith Journey ready
+- actor scopes safe
+- privacy/minors safe
+- N+1/performance acceptable
+- module boundary clean
+- demo seed implemented
+- Postman implemented
+- README/OpenAPI final
+- tests/specs written
+
+Runtime validation is NOT required under Fast Implementation Mode.
+
+If complete, state exactly:
+
+GAMIFICATION + FAITH JOURNEY IMPLEMENTATION PHASE COMPLETE
+
+VALIDATION DEFERRED TO FE INTEGRATION / STABILIZATION PHASE
+
+READY TO START NEXT BACKEND MODULE: YES
+
+Do not implement the next module automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #007 implementation status
+- final route count
+- final 9 tables
+- points/badges/missions/milestones/Faith Journey
+- demo seed
+- Postman
+- tests written/not run
+- architecture/security/N+1 inspection
+- BLOCKER/HIGH/MEDIUM
+- implementation complete yes/no
+- runtime validation deferred
+- next module ready yes/no
+- report path
+
+Then exactly:
+
+git commit -m "feat(gamification): add demo postman and finalize implementation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next module automatically.

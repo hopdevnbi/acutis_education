@@ -262,6 +262,7 @@ export class ClassOperationsService {
         occurredAt: session.completedAt ?? new Date(),
         studentId: mark.studentId,
         enrollmentId: mark.enrollmentId,
+        classId: session.classId,
         parishId: session.parishId,
         academicYearId: session.academicYearId,
         sourceId: mark.id,

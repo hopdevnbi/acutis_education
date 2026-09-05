@@ -12,6 +12,7 @@ import type {
   RewardRuleStatus,
   RewardScopeType,
 } from '../enums/gamification.enums';
+import type { RewardEligibleEvent } from '../../application-events/contracts/reward-eligible-event.contract';
 
 export interface RewardRuleSnapshot {
   readonly id: string;
@@ -160,6 +161,15 @@ export interface MilestoneAchievementSnapshot {
   readonly createdAt: Date;
 }
 
+export interface LatestAchievementSnapshot {
+  readonly kind: 'BADGE' | 'MISSION' | 'MILESTONE';
+  readonly code: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly achievedAt: Date;
+  readonly pointsBonus?: number | null;
+}
+
 /** Compact learner-facing summary foundation (#004+ HTTP). */
 export interface GamificationSummarySnapshot {
   readonly studentId: string;
@@ -167,23 +177,65 @@ export interface GamificationSummarySnapshot {
   readonly pointsBalance: number;
   readonly lifetimePositivePoints: number;
   readonly activeBadgeCount: number;
+  /** Eligible ACTIVE mission definitions for the learner (incl. zero progress). */
+  readonly activeMissionCount: number;
   readonly completedMissionCount: number;
   readonly milestoneAchievementCount: number;
+  readonly latestAchievement: LatestAchievementSnapshot | null;
 }
 
-/** Placeholder composed Faith Journey read model (#005+). */
-export interface FaithJourneySnapshot {
-  readonly studentId: string;
-  readonly enrollmentId: string | null;
-  readonly generatedAt: Date;
-  readonly items: readonly FaithJourneyItemPlaceholder[];
-}
-
-export interface FaithJourneyItemPlaceholder {
-  readonly kind: 'POINT' | 'BADGE' | 'MISSION' | 'MILESTONE';
+export interface FaithJourneyTimelineItemSnapshot {
+  readonly type: 'POINTS' | 'BADGE' | 'MISSION' | 'MILESTONE';
   readonly occurredAt: Date;
-  readonly refId: string;
-  readonly titleKey: string | null;
+  readonly code: string;
+  readonly title: string;
+  readonly descriptionKey?: string | null;
+  readonly pointsDelta?: number | null;
+  readonly relatedId?: string | null;
+}
+
+export interface LearnerBadgeView {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly category: string;
+  readonly iconMediaAssetId: string | null;
+  readonly awardedAt: Date;
+  readonly pointsBonus: number | null;
+}
+
+export interface LearnerMilestoneView {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly sortOrder: number;
+  readonly achievedAt: Date;
+}
+
+export interface LearnerMissionView {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly conditionType: string;
+  readonly currentCount: number;
+  readonly targetCount: number;
+  readonly status: MissionProgressStatus;
+  readonly pointsBonus: number | null;
+  readonly startsAt: Date | null;
+  readonly endsAt: Date | null;
+  readonly completedAt: Date | null;
+}
+
+/** Composed Faith Journey read model (#006). */
+export interface FaithJourneySnapshot {
+  readonly summary: GamificationSummarySnapshot;
+  readonly activeMissions: readonly LearnerMissionView[];
+  readonly recentBadges: readonly LearnerBadgeView[];
+  readonly milestones: readonly LearnerMilestoneView[];
+  readonly recentTimeline: readonly FaithJourneyTimelineItemSnapshot[];
 }
 
 export interface PointLedgerIdentity {
@@ -226,6 +278,15 @@ export interface RewardIngestResult {
   readonly badgesAwarded: number;
   /** Internal — milestones achieved in this ingest (not HTTP). */
   readonly milestonesAchieved: number;
+  /** Internal — missions progressed in this ingest (not HTTP). */
+  readonly missionsProgressed: number;
+  /** Internal — missions newly completed in this ingest (not HTTP). */
+  readonly missionsCompleted: number;
+  /**
+   * Publish after transaction commit only.
+   * Listener publishes these as separate RewardEligibleEvent (MISSION_COMPLETED).
+   */
+  readonly pendingMissionCompletedEvents: readonly RewardEligibleEvent[];
 }
 
 export interface ManualPointAdjustmentInput {

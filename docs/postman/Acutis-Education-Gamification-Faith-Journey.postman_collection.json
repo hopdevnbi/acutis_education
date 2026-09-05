@@ -1,0 +1,1195 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-gamification-faith-journey-collection",
+    "name": "Acutis Education — Gamification & Faith Journey",
+    "description": "Comprehensive Postman verification for Gamification + Faith Journey APIs.\n\nPrerequisites:\n1. npm run migration:run\n2. npm run seed:gamification-demo\n3. npm run start:dev\n\nDemo actors (sample password {{demoPassword}}):\n- SuperAdmin: superadmin@local.catechism.test\n- ParishAdmin: admin@local.catechism.test\n- Catechist: catechist@local.catechism.test\n- Parent: parent@local.catechism.test\n- Student Alpha: student-alpha@local.catechism.test\n\nNever commit live JWTs or production secrets.\nRuntime validation of this collection is deferred to FE Integration / Stabilization Phase.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "demoPassword", "value": "LocalDev!Sample2026" },
+    { "key": "superAdminEmail", "value": "superadmin@local.catechism.test" },
+    { "key": "parishAdminEmail", "value": "admin@local.catechism.test" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "studentEmail", "value": "student-alpha@local.catechism.test" },
+    { "key": "superAdminToken", "value": "" },
+    { "key": "parishAdminToken", "value": "" },
+    { "key": "catechistToken", "value": "" },
+    { "key": "parentToken", "value": "" },
+    { "key": "studentToken", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "foreignStudentId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "foreignEnrollmentId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "rewardRuleId", "value": "" },
+    { "key": "badgeId", "value": "" },
+    { "key": "missionId", "value": "" },
+    { "key": "milestoneId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "SuperAdmin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('accessToken present', () => pm.expect(body.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('superAdminToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "ParishAdmin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parishAdminToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parishAdminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('catechistToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Student Alpha login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('studentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Bootstrap Context",
+      "item": [
+        {
+          "name": "Parent discover children",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.children && body.children.length > 0) {",
+                  "  const child = body.children[0];",
+                  "  pm.collectionVariables.set('studentId', child.id);",
+                  "  if (child.activeEnrollments && child.activeEnrollments.length > 0) {",
+                  "    pm.collectionVariables.set('enrollmentId', child.activeEnrollments[0].id);",
+                  "    pm.collectionVariables.set('classId', child.activeEnrollments[0].classId);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/children"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Learner Flows",
+      "item": [
+        {
+          "name": "Learner gamification summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 summary', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('pointsBalance is number', () => pm.expect(body.pointsBalance).to.be.a('number'));",
+                  "pm.test('lifetimePositivePoints is number', () => pm.expect(body.lifetimePositivePoints).to.be.a('number'));",
+                  "pm.test('activeBadgeCount >= 0', () => pm.expect(body.activeBadgeCount).to.be.at.least(0));",
+                  "pm.test('activeMissionCount >= 0', () => pm.expect(body.activeMissionCount).to.be.at.least(0));",
+                  "pm.test('completedMissionCount >= 0', () => pm.expect(body.completedMissionCount).to.be.at.least(0));",
+                  "pm.test('latestAchievement exists or null', () => pm.expect(body).to.have.property('latestAchievement'));",
+                  "pm.test('no staffNote leaked', () => pm.expect(body.staffNote).to.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/gamification/summary"
+          }
+        },
+        {
+          "name": "Learner faith journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 faith-journey', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('summary object present', () => pm.expect(body.summary).to.be.an('object'));",
+                  "pm.test('activeMissions array present', () => pm.expect(body.activeMissions).to.be.an('array'));",
+                  "pm.test('recentBadges array present', () => pm.expect(body.recentBadges).to.be.an('array'));",
+                  "pm.test('milestones array present', () => pm.expect(body.milestones).to.be.an('array'));",
+                  "pm.test('recentTimeline array present', () => pm.expect(body.recentTimeline).to.be.an('array'));",
+                  "pm.test('timeline capped at <= 20', () => pm.expect(body.recentTimeline.length).to.be.at.most(20));",
+                  "pm.test('no staffNote in timeline', () => {",
+                  "  body.recentTimeline.forEach(item => pm.expect(item.staffNote).to.be.undefined);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/faith-journey"
+          }
+        },
+        {
+          "name": "Learner point ledger",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 points', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "pm.test('no staffNote in items', () => {",
+                  "  body.items.forEach(item => pm.expect(item.staffNote).to.be.undefined);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/points?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Learner active badges",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 badges', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "pm.test('no ruleConfig in items', () => {",
+                  "  body.items.forEach(item => pm.expect(item.ruleConfigJson).to.be.undefined);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/badges"
+          }
+        },
+        {
+          "name": "Learner milestones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 milestones', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/milestones"
+          }
+        },
+        {
+          "name": "Learner missions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 missions', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('missionId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/missions"
+          }
+        },
+        {
+          "name": "Learner mission detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 mission detail', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('code is string', () => pm.expect(body.code).to.be.a('string'));",
+                  "pm.test('currentCount is number', () => pm.expect(body.currentCount).to.be.a('number'));",
+                  "pm.test('targetCount is number', () => pm.expect(body.targetCount).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/missions/{{missionId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Parent Flows",
+      "item": [
+        {
+          "name": "Parent child gamification summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 child summary', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('pointsBalance is number', () => pm.expect(body.pointsBalance).to.be.a('number'));",
+                  "pm.test('no staffNote', () => pm.expect(body.staffNote).to.be.undefined);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Parent child faith journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 child faith journey', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('summary present', () => pm.expect(body.summary).to.be.an('object'));",
+                  "pm.test('recentTimeline present', () => pm.expect(body.recentTimeline).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/faith-journey"
+          }
+        },
+        {
+          "name": "Parent child badges",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 child badges', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/badges"
+          }
+        },
+        {
+          "name": "Parent child missions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 child missions', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/missions"
+          }
+        },
+        {
+          "name": "Parent child milestones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 child milestones', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/milestones"
+          }
+        },
+        {
+          "name": "Parent foreign child summary (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden for unlinked student', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{foreignEnrollmentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Parent points route does not exist (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 Not Found — parent full ledger not in MVP', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/points"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Staff Read Flows",
+      "item": [
+        {
+          "name": "Catechist student summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student summary', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Catechist student faith journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student faith journey', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('summary present', () => pm.expect(body.summary).to.be.an('object'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/faith-journey"
+          }
+        },
+        {
+          "name": "Catechist student points ledger",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student points', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('staffNote property supported in staff DTO', () => {",
+                  "  if (body.items.length > 0) {",
+                  "    pm.expect(body.items[0]).to.have.property('staffNote');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/points?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Catechist student badges",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student badges', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/badges"
+          }
+        },
+        {
+          "name": "Catechist student milestones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student milestones', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/milestones"
+          }
+        },
+        {
+          "name": "Catechist class missions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 class missions', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/classes/{{classId}}/missions"
+          }
+        },
+        {
+          "name": "Catechist mission progress",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 mission progress', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/missions/{{missionId}}/progress?classId={{classId}}&page=1&limit=20"
+          }
+        },
+        {
+          "name": "ParishAdmin student summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 summary', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "SuperAdmin student faith journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 superAdmin faith journey', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/faith-journey"
+          }
+        },
+        {
+          "name": "Catechist unassigned student summary (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{foreignStudentId}}/gamification/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Admin Write Flows",
+      "item": [
+        {
+          "name": "List reward rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 reward rules', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('rewardRuleId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/reward-rules"
+          }
+        },
+        {
+          "name": "Create reward rule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created or 409 Conflict', () => {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"POSTMAN_RULE_TEST\",\n  \"eventType\": \"EXAM_COMPLETED\",\n  \"sourceType\": \"EXAM_COMPLETED\",\n  \"points\": 12,\n  \"scopeType\": \"GLOBAL\"\n}"
+            },
+            "url": "{{baseUrl}}/reward-rules"
+          }
+        },
+        {
+          "name": "List badges (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 badges', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('badgeId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/badges"
+          }
+        },
+        {
+          "name": "Manual badge award",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 or 201 award', () => {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/students/{{studentId}}/badges/{{badgeId}}/awards"
+          }
+        },
+        {
+          "name": "List missions (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 missions', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/missions?classId={{classId}}"
+          }
+        },
+        {
+          "name": "List milestones (SuperAdmin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 milestones', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/milestones"
+          }
+        },
+        {
+          "name": "Manual point adjustment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK adjustment', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('pointsDelta is 5', () => pm.expect(body.pointsDelta).to.equal(5));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delta\": 5,\n  \"reason\": \"Postman: special devotion encouragement\"\n}"
+            },
+            "url": "{{baseUrl}}/students/{{studentId}}/points/adjustments"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Negative & Security Flows",
+      "item": [
+        {
+          "name": "Parent staff summary (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Student staff summary (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{studentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/students/{{studentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Catechist reward-rules manage (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/reward-rules"
+          }
+        },
+        {
+          "name": "Catechist badge definitions manage (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/badges"
+          }
+        },
+        {
+          "name": "ParishAdmin milestone definitions manage (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden — milestones are SuperAdmin only', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/milestones"
+          }
+        },
+        {
+          "name": "Admin /me/learner route (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden — no admin impersonation on /me/learner', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/gamification/summary"
+          }
+        },
+        {
+          "name": "SuperAdmin /me/parent route (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden — no admin impersonation on /me/parent', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/gamification/summary"
+          }
+        },
+        {
+          "name": "Zero points adjustment (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delta\": 0,\n  \"reason\": \"Invalid zero adjustment\"\n}"
+            },
+            "url": "{{baseUrl}}/students/{{studentId}}/points/adjustments"
+          }
+        },
+        {
+          "name": "Unauthenticated request (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/learner/gamification/summary"
+          }
+        }
+      ]
+    }
+  ]
+}

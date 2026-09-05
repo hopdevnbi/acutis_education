@@ -8,6 +8,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -124,6 +125,7 @@ export class RewardRulesController {
   @Patch(':id')
   @RequirePermissions(GAMIFICATION_MANAGE_PERMISSION)
   @ApiOperation({ summary: 'Update reward rule' })
+  @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: RewardRuleResponseDto })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()

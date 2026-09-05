@@ -17,6 +17,12 @@ import {
 } from '../../student/errors/student.errors';
 import { LearnerSelfScopeDeniedError } from '../../student/errors/student-access.errors';
 import {
+  GuardianLinkNotFoundError,
+  GuardianNotLinkedToStudentError,
+  GuardianUserInactiveError,
+  GuardianUserNotFoundError,
+} from '../../student/errors/student-guardian.errors';
+import {
   BadgeAlreadyAwardedError,
   BadgeAlreadyRevokedError,
   BadgeAwardNotAllowedError,
@@ -36,6 +42,16 @@ import {
   MilestoneDefinitionNotActiveError,
   MilestoneDefinitionNotFoundError,
   MilestoneNotFoundError,
+  MissionDefinitionCodeAlreadyExistsError,
+  MissionDefinitionNotEditableError,
+  MissionDefinitionNotFoundError,
+  MissionNotApplicableError,
+  MissionNotFoundError,
+  MissionProgressAccessDeniedError,
+  MissionProgressNotFoundError,
+  MissionScopeAccessDeniedError,
+  InvalidMissionLifecycleTransitionError,
+  InvalidMissionScopeError,
   PointLedgerDuplicateIdentityError,
   PointLedgerEntryAlreadyReversedError,
   PointLedgerEntryNotFoundError,
@@ -50,9 +66,15 @@ export function rethrowGamificationServiceError(error: unknown): never {
   if (
     error instanceof GamificationAccessDeniedError ||
     error instanceof MilestoneDefinitionAccessDeniedError ||
+    error instanceof MissionScopeAccessDeniedError ||
+    error instanceof MissionProgressAccessDeniedError ||
     error instanceof ClassScopeAccessDeniedError ||
     error instanceof ParishScopeAccessDeniedError ||
-    error instanceof LearnerSelfScopeDeniedError
+    error instanceof LearnerSelfScopeDeniedError ||
+    error instanceof GuardianNotLinkedToStudentError ||
+    error instanceof GuardianUserInactiveError ||
+    error instanceof GuardianLinkNotFoundError ||
+    error instanceof GuardianUserNotFoundError
   ) {
     throw new ForbiddenException(error.message);
   }
@@ -66,7 +88,10 @@ export function rethrowGamificationServiceError(error: unknown): never {
     error instanceof BadgeNotFoundError ||
     error instanceof BadgeAwardNotFoundError ||
     error instanceof MilestoneDefinitionNotFoundError ||
-    error instanceof MilestoneNotFoundError
+    error instanceof MilestoneNotFoundError ||
+    error instanceof MissionDefinitionNotFoundError ||
+    error instanceof MissionNotFoundError ||
+    error instanceof MissionProgressNotFoundError
   ) {
     throw new NotFoundException(error.message);
   }
@@ -78,12 +103,17 @@ export function rethrowGamificationServiceError(error: unknown): never {
     error instanceof BadgeDefinitionCodeAlreadyExistsError ||
     error instanceof BadgeAlreadyAwardedError ||
     error instanceof BadgeAlreadyRevokedError ||
-    error instanceof MilestoneDefinitionCodeAlreadyExistsError
+    error instanceof MilestoneDefinitionCodeAlreadyExistsError ||
+    error instanceof MissionDefinitionCodeAlreadyExistsError ||
+    error instanceof InvalidMissionLifecycleTransitionError
   ) {
     throw new ConflictException(error.message);
   }
 
-  if (error instanceof StudentGamificationContextNotFoundError) {
+  if (
+    error instanceof StudentGamificationContextNotFoundError ||
+    error instanceof MissionNotApplicableError
+  ) {
     throw new UnprocessableEntityException(error.message);
   }
 
@@ -99,7 +129,9 @@ export function rethrowGamificationServiceError(error: unknown): never {
     error instanceof InvalidMilestoneTriggerConfigError ||
     error instanceof BadgeDefinitionNotActiveError ||
     error instanceof BadgeAwardNotAllowedError ||
-    error instanceof MilestoneDefinitionNotActiveError
+    error instanceof MilestoneDefinitionNotActiveError ||
+    error instanceof MissionDefinitionNotEditableError ||
+    error instanceof InvalidMissionScopeError
   ) {
     throw new BadRequestException(error.message);
   }

@@ -5,6 +5,7 @@ import {
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -36,6 +37,7 @@ export class StaffPointsController {
     description:
       'Server derives parish/enrollment/year from ACTIVE enrollment. Client cannot supply actor, source, or parish.',
   })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
   @ApiOkResponse({ type: ManualPointAdjustmentResponseDto })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()

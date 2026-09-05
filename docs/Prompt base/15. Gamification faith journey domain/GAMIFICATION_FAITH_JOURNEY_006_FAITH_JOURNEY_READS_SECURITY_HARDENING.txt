@@ -1,0 +1,739 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #006/7
+FAST IMPLEMENTATION MODE
+FAITH JOURNEY + LEARNER / PARENT / CATECHIST READS + SECURITY / CONTRACT HARDENING
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- especially `.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production code
+- controllers
+- DTOs
+- services
+- specs/tests
+- README/docs/report
+
+DO NOT RUN by default:
+- npm test / Jest / npm run test:*
+- lint / typecheck / build / format
+- quality / quality:full
+- npm audit
+- DB prepare/reset/migrations
+- seed execution
+- Docker
+- Postman/Newman
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture, security, privacy, RBAC/scope, deterministic contracts and N+1 design remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(gamification): add faith journey read contracts"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#001/7 Domain audit/design
+#002/7 Persistence foundation
+#003/7 Points engine + reward ingest + rules + manual adjustments
+#004/7 Badges + milestones
+#005/7 Missions + progress/completion/admin lifecycle
+
+Current implementation:
+- immutable point ledger
+- learner/staff points + summary
+- Parent full point ledger = NO
+- badge auto/manual/revoke/bonus + learner/staff reads
+- milestone auto achievements + learner/staff reads
+- mission GLOBAL/PARISH/CLASS + progress/completion + learner/staff reads
+- neutral ApplicationEvents; source modules remain decoupled
+- known MEDIUM: badge/milestone list definition-fetch N+1
+
+Current:
+#006/7 — Faith Journey + read contracts + hardening
+
+Remaining:
+#007/7 — Fast-mode finalization
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+1. Faith Journey composed read model
+2. learner Faith Journey endpoint
+3. Parent linked-child gamification summary
+4. Parent linked-child badges/missions/milestones
+5. Parent linked-child Faith Journey
+6. Catechist/staff scoped student Faith Journey
+7. actor-specific `/me` semantics
+8. privacy/data minimization
+9. fix badge/milestone N+1
+10. OpenAPI/README contract hardening
+11. tests/specs
+
+Do NOT implement demo seed/Postman yet.
+
+PART A — FAITH JOURNEY READ MODEL
+---------------------------------
+Faith Journey remains a composed read model inside Gamification.
+Do NOT add another source-of-truth table.
+
+Register/use `FaithJourneyService`.
+
+Compose only from Gamification-owned data:
+- points summary
+- badge awards
+- mission definitions/progress
+- milestone achievements
+- recent ledger/achievement events
+
+No source-domain repository reads.
+
+PART B — FAITH JOURNEY DTO
+--------------------------
+Create bounded response:
+
+FaithJourneyResponseDto {
+  summary: {
+    pointsBalance
+    lifetimePointsEarned
+    badgesEarnedCount
+    activeMissionCount
+    completedMissionCount
+    milestonesAchievedCount
+  }
+  activeMissions
+  recentBadges
+  milestones
+  recentTimeline
+}
+
+Caps:
+- activeMissions 5–10
+- recentBadges 5–10
+- milestones 10–20
+- recentTimeline max 20
+
+PART C — TIMELINE
+-----------------
+No timeline table.
+
+Compose from:
+- point ledger entries
+- badge awards
+- completed missions
+- milestone achievements
+
+Timeline item:
+- type: POINTS | BADGE | MISSION | MILESTONE
+- occurredAt
+- code
+- title
+- descriptionKey?
+- pointsDelta?
+- relatedId?
+
+Stable sort:
+occurredAt DESC + deterministic tie-breaker.
+
+No staff notes, actor IDs, event IDs or PII.
+
+PART D — LEARNER ROUTES
+-----------------------
+Implement:
+
+GET /api/v1/me/learner/faith-journey
+
+Permission:
+gamification.read
+
+Student self only.
+
+Harden existing:
+GET /api/v1/me/learner/gamification/summary
+
+Final summary:
+- pointsBalance
+- lifetimePointsEarned
+- badgesEarnedCount
+- activeMissionCount
+- completedMissionCount
+- milestonesAchievedCount
+- latestAchievement nullable
+
+No admin/audit internals.
+
+PART E — PARENT ROUTES
+----------------------
+Implement:
+
+GET /api/v1/me/parent/enrollments/:enrollmentId/gamification/summary
+GET /api/v1/me/parent/enrollments/:enrollmentId/faith-journey
+GET /api/v1/me/parent/enrollments/:enrollmentId/badges
+GET /api/v1/me/parent/enrollments/:enrollmentId/missions
+GET /api/v1/me/parent/enrollments/:enrollmentId/milestones
+
+Permission:
+gamification.read
+
+Scope:
+- PARENT actor
+- resolve enrollment
+- derive studentId
+- ACTIVE guardian link
+- foreign child 403
+- unknown enrollment 404
+- cross-parish linked child allowed if guardian relation valid
+
+Do NOT add Parent full points ledger route.
+
+PARENT FULL POINT LEDGER IN MVP: NO
+
+Parent-safe responses must omit:
+- staffNote
+- manual adjustment raw reason
+- awardedByUserId
+- internal event IDs
+- raw ruleConfig
+
+PART F — STAFF FAITH JOURNEY
+----------------------------
+Implement:
+
+GET /api/v1/students/:studentId/faith-journey
+
+Permission:
+gamification.read
+
+Scope:
+- Catechist: current ACTIVE assignment to student's current ACTIVE enrollment class
+- ParishAdmin: own parish
+- SuperAdmin: global
+- Parent/Student: generic staff route denied
+
+Do not allow former Catechist historical access merely because they once taught the student.
+
+Staff Faith Journey still excludes:
+- PII
+- attendance notes
+- exam answers
+- pastoral/confessional fields
+- raw manual adjustment reason
+
+Detailed staff points ledger remains separate.
+
+PART G — CLASS SUMMARY DECISION
+-------------------------------
+Strong default:
+do NOT add class leaderboard/ranking.
+
+Evaluate optional:
+GET /api/v1/classes/:classId/gamification/summary
+
+Only add if clearly useful and non-ranking.
+
+Required report verdict:
+CLASS GAMIFICATION SUMMARY IN MVP: YES/NO
+
+Strong default:
+NO.
+
+PART H — ACTOR-SPECIFIC /ME
+---------------------------
+Strict:
+- `/me/learner/*` = STUDENT actor
+- `/me/parent/*` = PARENT actor
+
+No SuperAdmin/ParishAdmin/Catechist impersonation fallback unless genuinely holding that role under actual multi-role model.
+
+PART I — HISTORICAL VS CURRENT
+------------------------------
+Historical student-owned achievements remain after:
+- enrollment transfer
+- class archive
+- academic year close
+
+Parent authorization still requires ACTIVE guardian relation at request time.
+
+Catechist generic read authorization uses current ACTIVE assignment/current enrollment only.
+
+Completed missions remain visible historically.
+Active missions use current eligibility.
+
+PART J — ACTIVE MISSION ELIGIBILITY
+-----------------------------------
+For learner/Parent Faith Journey:
+current active missions include:
+- GLOBAL
+- current PARISH
+- current CLASS
+
+Completed missions use persisted historical progress.
+
+If no active enrollment:
+- historical achievements remain
+- active missions may be empty
+
+PART K — CANONICAL SUMMARY
+--------------------------
+Create/harden one canonical Gamification summary method used by all actors.
+
+Input:
+studentId + optional current context
+
+Output:
+- pointsBalance
+- lifetimePointsEarned
+- badgesEarnedCount
+- activeMissionCount
+- completedMissionCount
+- milestonesAchievedCount
+- latestAchievement
+
+Do not duplicate formulas across controllers.
+
+PART L — LATEST ACHIEVEMENT
+---------------------------
+Define deterministic latestAchievement.
+
+Prefer:
+BADGE / MISSION / MILESTONE as achievements.
+Use POINTS only if deliberately chosen and documented.
+
+No staffNote.
+
+PART M — FIX BADGE/MILESTONE N+1
+--------------------------------
+Resolve the known MEDIUM from #004/#005.
+
+Add batch methods:
+
+BadgeService.findDefinitionsByIds(ids)
+MilestoneService.findDefinitionsByIds(ids)
+
+Use them for:
+- learner badge list
+- staff badge list
+- learner milestone list
+- staff milestone list
+- Faith Journey composition
+
+No per-item definition fetch.
+
+Required:
+BADGE/MILESTONE N+1 RESOLVED BY INSPECTION: YES
+
+PART N — FAITH JOURNEY PERFORMANCE
+----------------------------------
+Target fixed bounded query count.
+
+Avoid:
+- query per badge
+- query per milestone
+- query per mission
+- foreign domain loops
+
+Document approximate query budget.
+
+PART O — ACCESS HELPERS
+-----------------------
+Implement/reuse:
+
+assertParentCanReadStudentGamificationByEnrollment(actor, enrollmentId)
+assertLearnerCanReadOwnGamification(actor)
+assertStaffCanReadStudentGamification(actor, studentId)
+
+Use public APIs only.
+
+No foreign repository access.
+
+PART P — DTOs
+--------------
+Create:
+- GamificationSummaryResponseDto
+- LatestAchievementDto
+- FaithJourneyResponseDto
+- FaithJourneyTimelineItemDto
+- learner-safe badge/mission/milestone DTOs
+- Parent response DTOs only if shape differs
+
+Reuse learner-safe DTOs when identical.
+
+No entity leakage.
+
+PART Q — PRIVACY / MINORS
+-------------------------
+No:
+- public profiles
+- leaderboard
+- holiness score
+- spiritual worth score
+- sacramental/pastoral fields
+- attendance notes
+- exam answers
+- emails/phones/DOB
+- guardian contact
+- staffNote in learner/Parent
+- raw manual adjustment reason
+- awardedBy user IDs
+- event IDs
+
+Strong preference:
+omit manual adjustment entries entirely from learner/Parent timeline, while balance reflects them.
+
+Document final decision.
+
+PART R — OPENAPI
+----------------
+Static harden all read routes.
+
+Learner:
+- summary
+- points
+- badges
+- missions
+- mission detail
+- milestones
+- faith-journey
+
+Parent:
+- summary
+- badges
+- missions
+- milestones
+- faith-journey
+
+Staff:
+- student summary
+- points
+- badges
+- milestones
+- faith-journey
+- class missions
+- mission progress
+
+Document:
+auth
+permission
+scope
+pagination
+response DTO
+400/401/403/404
+
+No runtime Swagger.
+
+PART S — README
+---------------
+Update Gamification docs:
+- points
+- badges
+- missions
+- milestones
+- Faith Journey
+- learner routes
+- Parent routes
+- staff routes
+- Parent full ledger NO
+- no leaderboard/streaks
+- no sacramental milestones
+- points = engagement, not spiritual worth
+- historical retention
+- current scope semantics
+- validation deferred by Fast Mode
+
+Do NOT claim phase complete; #007 remains.
+
+PART T — UNIT TESTS
+-------------------
+WRITE, DO NOT RUN.
+
+Cover:
+- Faith Journey summary composition
+- timeline sort/cap
+- no staffNote/event IDs
+- learner self
+- Parent guardian / foreign / unknown / cross-parish valid child
+- no Parent full ledger
+- staff current Catechist assignment
+- former/unassigned Catechist denied
+- ParishAdmin own parish
+- SuperAdmin
+- Parent/Student generic denied
+- batch badge definitions
+- batch milestone definitions
+- no per-item fetches
+- latestAchievement deterministic
+
+PART U — INTEGRATION SPECS
+--------------------------
+WRITE, DO NOT RUN.
+
+Cover:
+1. summary counts
+2. recent badges
+3. active missions
+4. completed mission history
+5. milestones
+6. timeline ordering/cap
+7. manual adjustment note excluded
+8. batch badge/milestone composition
+9. Parent linked child
+10. historical retention after transfer
+11. current active mission eligibility after transfer
+
+PART V — DB E2E SPECS
+---------------------
+WRITE, DO NOT RUN.
+
+Learner:
+- summary 200
+- faith-journey 200
+- points/badges/missions/milestones 200
+- no PII/staffNote
+
+Parent:
+- linked summary 200
+- linked faith-journey 200
+- badges/missions/milestones 200
+- foreign 403
+- unknown 404
+- no points ledger route
+- no manual reason leak
+
+Staff:
+- assigned Catechist summary/faith-journey 200
+- former/unassigned 403
+- ParishAdmin own 200 / cross 403
+- SuperAdmin 200
+- Parent/Student generic 403
+
+Actor-specific:
+- Catechist parent `/me` 403
+- admin learner `/me` 403
+- SuperAdmin parent `/me` 403 unless genuinely Parent role
+
+Unauthenticated 401.
+
+PART W — MODULE BOUNDARY
+------------------------
+Confirm:
+- one Gamification module
+- exports GamificationService only
+- FaithJourneyService internal
+- no FamilyPortal import
+- no source repo/entity imports
+- ApplicationEvents neutral
+- no forwardRef
+- no Faith Journey table
+
+Update specs if needed.
+Do not run.
+
+PART X — STATIC INSPECTION
+--------------------------
+Inspect:
+- FaithJourneyService registered
+- canonical summary path
+- Parent current guardian scope
+- learner self
+- Catechist current assignment
+- no `/me` impersonation
+- no staffNote/manual reason leakage
+- timeline bounded/deterministic
+- badge/milestone N+1 removed
+- no per-item loops
+- no cycles
+- no entity leakage
+- no leaderboard/ranking
+
+Fix obvious issues by inspection.
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- demo seed (#007)
+- Postman (#007)
+- final completion (#007)
+- leaderboard
+- streaks
+- public profiles
+- sacramental milestones
+- FamilyPortal composition
+- Parent full points ledger
+- notifications
+- outbox/queue
+- runtime validation
+
+REQUIRED REPORT
+---------------
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_006_FAITH_JOURNEY_READS_SECURITY_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Faith Journey service
+7 Faith Journey DTO
+8 Timeline composition
+9 Timeline privacy
+10 Learner Faith Journey
+11 Learner summary
+12 Parent summary
+13 Parent Faith Journey
+14 Parent badges
+15 Parent missions
+16 Parent milestones
+17 Parent full ledger decision
+18 Parent guardian scope
+19 Staff student summary
+20 Staff Faith Journey
+21 Catechist current-assignment scope
+22 ParishAdmin scope
+23 SuperAdmin scope
+24 Actor-specific /me semantics
+25 Current vs historical context
+26 Active mission eligibility
+27 Canonical summary aggregate
+28 Latest achievement
+29 Badge batch query
+30 Milestone batch query
+31 #004/#005 N+1 resolution
+32 Faith Journey query budget
+33 DTO boundaries
+34 Data minimization
+35 Manual adjustment privacy
+36 Security/minors
+37 Error contract
+38 OpenAPI
+39 README
+40 Module boundaries
+41 Unit tests written
+42 Integration tests written
+43 DB e2e tests written
+44 Tests executed
+45 DB validation
+46 quality:full
+47 Docker
+48 npm audit
+49 Static inspection
+50 Risks/deferred
+51 BLOCKER/HIGH/MEDIUM/LOW
+52 #007 readiness
+53 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+FAITH JOURNEY COMPOSED READ MODEL READY: YES/NO
+NO FAITH JOURNEY SOURCE TABLE ADDED: YES/NO
+LEARNER FAITH JOURNEY READY: YES/NO
+LEARNER SUMMARY READY: YES/NO
+LEARNER SELF SCOPE SAFE: YES/NO
+PARENT SUMMARY READY: YES/NO
+PARENT FAITH JOURNEY READY: YES/NO
+PARENT BADGE READ READY: YES/NO
+PARENT MISSION READ READY: YES/NO
+PARENT MILESTONE READ READY: YES/NO
+PARENT GUARDIAN SCOPE SAFE: YES/NO
+PARENT FULL POINT LEDGER IN MVP: NO
+STAFF FAITH JOURNEY READY: YES/NO
+CATECHIST CURRENT-ASSIGNMENT SCOPE SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+SUPERADMIN STAFF READ READY: YES/NO
+ACTOR-SPECIFIC /ME IMPERSONATION SAFE: YES/NO
+HISTORICAL ACHIEVEMENT RETENTION READY: YES/NO
+ACTIVE MISSION ELIGIBILITY READY: YES/NO
+CANONICAL SUMMARY READY: YES/NO
+LATEST ACHIEVEMENT READY: YES/NO
+BADGE/MILESTONE N+1 RESOLVED BY INSPECTION: YES/NO
+FAITH JOURNEY PERFORMANCE READY BY INSPECTION: YES/NO
+DATA MINIMIZATION READY: YES/NO
+MANUAL ADJUSTMENT PRIVACY SAFE: YES/NO
+SECURITY/MINORS READY: YES/NO
+OPENAPI READY BY STATIC INSPECTION: YES/NO
+README READY: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+CLASS GAMIFICATION SUMMARY IN MVP: YES/NO
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#007 READINESS: YES/NO
+
+#007 GATE
+---------
+Proceed if:
+- no BLOCKER/HIGH by static inspection
+- Faith Journey ready
+- learner/Parent/staff contracts ready
+- Parent guardian scope safe
+- Catechist current-assignment scope safe
+- no `/me` impersonation
+- data minimization safe
+- badge/milestone N+1 resolved
+- performance acceptable
+- OpenAPI/README ready
+- tests/specs written
+- module boundary clean
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+GAMIFICATION + FAITH JOURNEY #007/7 —
+FAST-MODE FINALIZATION — DEMO SEED + POSTMAN + README / OPENAPI + STATIC FINAL AUDIT
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #006 implementation status
+- Faith Journey
+- learner reads
+- Parent reads/scope
+- staff/Catechist scope
+- N+1 status
+- privacy/security
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #007 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(gamification): add faith journey read contracts"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #007 automatically.

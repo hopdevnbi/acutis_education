@@ -12,6 +12,7 @@ import { assertRewardEligibleEventShape } from '../../utils/reward-event.util';
 import { doesRuleMatchEvent } from '../../utils/reward-source-mapping.util';
 import { BadgeAwardProcessor } from '../../badges/services/badge-award.processor';
 import { MilestoneAchievementProcessor } from '../../milestones/services/milestone-achievement.processor';
+import { MissionProgressProcessor } from '../../missions/services/mission-progress.processor';
 import { PointLedgerService } from '../../points/services/point-ledger.service';
 import { RewardEventReceiptService } from './reward-event-receipt.service';
 import { RewardRuleService } from './reward-rule.service';
@@ -25,6 +26,9 @@ function emptyAlreadyProcessed(eventId: string): RewardIngestResult {
     matchedRuleCodes: [],
     badgesAwarded: 0,
     milestonesAchieved: 0,
+    missionsProgressed: 0,
+    missionsCompleted: 0,
+    pendingMissionCompletedEvents: [],
   };
 }
 
@@ -38,6 +42,7 @@ export class RewardIngestService {
     private readonly pointLedgerService: PointLedgerService,
     private readonly badgeAwardProcessor: BadgeAwardProcessor,
     private readonly milestoneAchievementProcessor: MilestoneAchievementProcessor,
+    private readonly missionProgressProcessor: MissionProgressProcessor,
   ) {}
 
   async ingest(event: RewardEligibleEvent): Promise<RewardIngestResult> {
@@ -117,11 +122,14 @@ export class RewardIngestService {
         }
       }
 
+      // Deterministic order: points → badges → milestones → missions.
+      // Mission completion events are returned for post-commit publish (no in-txn recursion).
       const badgeResult = await this.badgeAwardProcessor.processEvent(event, manager);
       const milestoneResult = await this.milestoneAchievementProcessor.processEvent(
         event,
         manager,
       );
+      const missionResult = await this.missionProgressProcessor.processEvent(event, manager);
 
       return {
         eventId: normalizeUuid(event.eventId),
@@ -131,6 +139,9 @@ export class RewardIngestService {
         matchedRuleCodes,
         badgesAwarded: badgeResult.badgesAwarded,
         milestonesAchieved: milestoneResult.milestonesAchieved,
+        missionsProgressed: missionResult.missionsProgressed,
+        missionsCompleted: missionResult.missionsCompleted,
+        pendingMissionCompletedEvents: missionResult.pendingMissionCompletedEvents,
       };
     });
   }

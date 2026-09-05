@@ -15,10 +15,13 @@ import { BadgeManualAwardService } from './badges/services/badge-manual-award.se
 import { BadgeService } from './badges/services/badge.service';
 import { BadgeDefinitionsController } from './controllers/badge-definitions.controller';
 import { LearnerGamificationController } from './controllers/learner-gamification.controller';
+import { ParentGamificationController } from './controllers/parent-gamification.controller';
+import { MissionDefinitionsController } from './controllers/mission-definitions.controller';
 import { MilestoneDefinitionsController } from './controllers/milestone-definitions.controller';
 import { RewardRulesController } from './controllers/reward-rules.controller';
 import { StaffBadgeAwardController } from './controllers/staff-badge-award.controller';
 import { StaffGamificationController } from './controllers/staff-gamification.controller';
+import { StaffMissionsController } from './controllers/staff-missions.controller';
 import { StaffPointsController } from './controllers/staff-points.controller';
 import { GamificationService } from './gamification.service';
 import { RewardEligibleEventListener } from './listeners/reward-eligible-event.listener';
@@ -28,6 +31,7 @@ import { MilestoneAchievementProcessor } from './milestones/services/milestone-a
 import { MilestoneService } from './milestones/services/milestone.service';
 import { MissionDefinitionEntity } from './missions/entities/mission-definition.entity';
 import { MissionProgressEntity } from './missions/entities/mission-progress.entity';
+import { MissionProgressProcessor } from './missions/services/mission-progress.processor';
 import { MissionService } from './missions/services/mission.service';
 import { PointLedgerEntryEntity } from './points/entities/point-ledger-entry.entity';
 import { PointAdjustmentService } from './points/services/point-adjustment.service';
@@ -38,6 +42,7 @@ import { RewardEventHistoryService } from './rewards/services/reward-event-histo
 import { RewardEventReceiptService } from './rewards/services/reward-event-receipt.service';
 import { RewardIngestService } from './rewards/services/reward-ingest.service';
 import { RewardRuleService } from './rewards/services/reward-rule.service';
+import { FaithJourneyService } from './faith-journey/services/faith-journey.service';
 
 @Module({
   imports: [
@@ -64,10 +69,13 @@ import { RewardRuleService } from './rewards/services/reward-rule.service';
     StaffGamificationController,
     StaffPointsController,
     StaffBadgeAwardController,
+    StaffMissionsController,
     LearnerGamificationController,
+    ParentGamificationController,
     RewardRulesController,
     BadgeDefinitionsController,
     MilestoneDefinitionsController,
+    MissionDefinitionsController,
   ],
   providers: [
     GamificationService,
@@ -83,8 +91,10 @@ import { RewardRuleService } from './rewards/services/reward-rule.service';
     BadgeAwardProcessor,
     BadgeManualAwardService,
     MissionService,
+    MissionProgressProcessor,
     MilestoneService,
     MilestoneAchievementProcessor,
+    FaithJourneyService,
   ],
   exports: [GamificationService],
 })

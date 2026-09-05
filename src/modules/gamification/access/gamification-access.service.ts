@@ -8,16 +8,27 @@ import {
 import { AccessControlService } from '../../access-control/services/access-control.service';
 import { ClassCatechistAssignmentService } from '../../class/services/class-catechist-assignment.service';
 import { ClassService } from '../../class/services/class.service';
+import { EnrollmentStatus } from '../../enrollment/enums/enrollment-status.enum';
+import type { EnrollmentSnapshot } from '../../enrollment/interfaces/enrollment.interface';
 import { EnrollmentQueryService } from '../../enrollment/services/enrollment-query.service';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { ParishScopeService } from '../../parish/services/parish-scope.service';
 import { LearnerSelfScopeService } from '../../student/services/learner-self-scope.service';
 import { StudentGuardianService } from '../../student/services/student-guardian.service';
 import { StudentService } from '../../student/services/student.service';
-import { RewardScopeType, BadgeScopeType } from '../enums/gamification.enums';
-import { GamificationAccessDeniedError } from '../errors/gamification.errors';
+import {
+  BadgeScopeType,
+  MissionScopeType,
+  RewardScopeType,
+} from '../enums/gamification.enums';
+import {
+  GamificationAccessDeniedError,
+  MissionProgressAccessDeniedError,
+  MissionScopeAccessDeniedError,
+} from '../errors/gamification.errors';
 import type {
   BadgeDefinitionSnapshot,
+  MissionDefinitionSnapshot,
   StudentGamificationContext,
 } from '../interfaces/gamification.interfaces';
 
@@ -139,6 +150,29 @@ export class GamificationAccessService {
     throw new GamificationAccessDeniedError();
   }
 
+  async assertParentCanReadStudentGamificationByEnrollment(
+    rawUserId: string,
+    rawEnrollmentId: string,
+  ): Promise<{ studentId: string; enrollment: EnrollmentSnapshot }> {
+    const isParent = await this.hasRole(rawUserId, PARENT_ROLE_CODE);
+    if (!isParent) {
+      throw new GamificationAccessDeniedError();
+    }
+
+    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
+
+    try {
+      await this.studentGuardianService.assertGuardianLinked(rawUserId, enrollment.studentId);
+    } catch {
+      throw new GamificationAccessDeniedError();
+    }
+
+    return {
+      studentId: enrollment.studentId,
+      enrollment,
+    };
+  }
+
   async assertCanStaffAccessClass(rawUserId: string, rawClassId: string): Promise<void> {
     if (await this.canStaffAccessClass(rawUserId, rawClassId)) {
       return;
@@ -152,6 +186,13 @@ export class GamificationAccessService {
   ): Promise<void> {
     if (await this.isSuperAdmin(rawUserId)) {
       return;
+    }
+
+    const isStaff =
+      (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE)) ||
+      (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE));
+    if (!isStaff) {
+      throw new GamificationAccessDeniedError();
     }
 
     const activeEnrollments =
@@ -340,5 +381,310 @@ export class GamificationAccessService {
       return;
     }
     throw new GamificationAccessDeniedError();
+  }
+
+  /**
+   * Mission definition manage: SuperAdmin any scope; ParishAdmin PARISH/CLASS own parish;
+   * Catechist CLASS only when assigned; Parent/Student denied.
+   */
+  async assertCanManageMissionDefinition(
+    rawUserId: string,
+    input: {
+      scopeType: MissionScopeType;
+      parishId?: string | null;
+      classId?: string | null;
+    },
+  ): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+
+    if (await this.hasRole(rawUserId, PARENT_ROLE_CODE)) {
+      throw new MissionScopeAccessDeniedError();
+    }
+    if (await this.hasRole(rawUserId, STUDENT_ROLE_CODE)) {
+      const isStaff =
+        (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) ||
+        (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE));
+      if (!isStaff) {
+        throw new MissionScopeAccessDeniedError();
+      }
+    }
+
+    if (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE)) {
+      if (input.scopeType === MissionScopeType.Global) {
+        throw new MissionScopeAccessDeniedError();
+      }
+
+      if (input.scopeType === MissionScopeType.Parish) {
+        if (!input.parishId) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        if (!(await this.canAccessAsParishAdmin(rawUserId, input.parishId))) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        return;
+      }
+
+      if (input.scopeType === MissionScopeType.Class) {
+        if (!input.classId) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        const classSnapshot = await this.classService.getClassById(input.classId);
+        if (!(await this.canAccessAsParishAdmin(rawUserId, classSnapshot.parishId))) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        return;
+      }
+
+      throw new MissionScopeAccessDeniedError();
+    }
+
+    if (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) {
+      if (input.scopeType !== MissionScopeType.Class || !input.classId) {
+        throw new MissionScopeAccessDeniedError();
+      }
+      try {
+        await this.classCatechistAssignmentService.assertCatechistAssigned(
+          rawUserId,
+          input.classId,
+        );
+        return;
+      } catch {
+        throw new MissionScopeAccessDeniedError();
+      }
+    }
+
+    throw new MissionScopeAccessDeniedError();
+  }
+
+  async assertCanReadMissionDefinition(
+    rawUserId: string,
+    mission: Pick<MissionDefinitionSnapshot, 'scopeType' | 'parishId' | 'classId'>,
+  ): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+
+    if (await this.hasRole(rawUserId, PARENT_ROLE_CODE)) {
+      throw new MissionScopeAccessDeniedError();
+    }
+    if (await this.hasRole(rawUserId, STUDENT_ROLE_CODE)) {
+      const isStaff =
+        (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) ||
+        (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE));
+      if (!isStaff) {
+        throw new MissionScopeAccessDeniedError();
+      }
+    }
+
+    if (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE)) {
+      if (mission.scopeType === MissionScopeType.Global) {
+        throw new MissionScopeAccessDeniedError();
+      }
+
+      if (mission.scopeType === MissionScopeType.Parish) {
+        if (!mission.parishId) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        if (!(await this.canAccessAsParishAdmin(rawUserId, mission.parishId))) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        return;
+      }
+
+      if (mission.scopeType === MissionScopeType.Class) {
+        if (!mission.classId) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        const classSnapshot = await this.classService.getClassById(mission.classId);
+        if (!(await this.canAccessAsParishAdmin(rawUserId, classSnapshot.parishId))) {
+          throw new MissionScopeAccessDeniedError();
+        }
+        return;
+      }
+
+      throw new MissionScopeAccessDeniedError();
+    }
+
+    if (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) {
+      if (mission.scopeType !== MissionScopeType.Class || !mission.classId) {
+        throw new MissionScopeAccessDeniedError();
+      }
+      try {
+        await this.classCatechistAssignmentService.assertCatechistAssigned(
+          rawUserId,
+          mission.classId,
+        );
+        return;
+      } catch {
+        throw new MissionScopeAccessDeniedError();
+      }
+    }
+
+    throw new MissionScopeAccessDeniedError();
+  }
+
+  async assertCanReadClassMissions(rawUserId: string, rawClassId: string): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+
+    if (await this.hasRole(rawUserId, PARENT_ROLE_CODE)) {
+      throw new MissionScopeAccessDeniedError();
+    }
+    if (await this.hasRole(rawUserId, STUDENT_ROLE_CODE)) {
+      const isStaff =
+        (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) ||
+        (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE));
+      if (!isStaff) {
+        throw new MissionScopeAccessDeniedError();
+      }
+    }
+
+    const classSnapshot = await this.classService.getClassById(rawClassId);
+
+    if (await this.canAccessAsParishAdmin(rawUserId, classSnapshot.parishId)) {
+      return;
+    }
+
+    if (await this.canAccessAsCatechistAssignedClass(rawUserId, classSnapshot.id)) {
+      return;
+    }
+
+    throw new MissionScopeAccessDeniedError();
+  }
+
+  /**
+   * Catechist on GLOBAL/PARISH must supply classId of assigned class.
+   * Returns optional studentId filter for progress listing (null = no filter for SuperAdmin/ParishAdmin).
+   */
+  async assertCanReadMissionProgress(
+    rawUserId: string,
+    mission: Pick<MissionDefinitionSnapshot, 'scopeType' | 'parishId' | 'classId'>,
+    options?: { classId?: string | null },
+  ): Promise<{ studentIdsFilter: string[] | null }> {
+    if (await this.hasRole(rawUserId, PARENT_ROLE_CODE)) {
+      throw new MissionProgressAccessDeniedError();
+    }
+    if (await this.hasRole(rawUserId, STUDENT_ROLE_CODE)) {
+      const isStaff =
+        (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) ||
+        (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE));
+      if (!isStaff) {
+        throw new MissionProgressAccessDeniedError();
+      }
+    }
+
+    if (await this.isSuperAdmin(rawUserId)) {
+      return { studentIdsFilter: null };
+    }
+
+    if (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE)) {
+      if (mission.scopeType === MissionScopeType.Global) {
+        throw new MissionProgressAccessDeniedError();
+      }
+
+      if (mission.scopeType === MissionScopeType.Parish) {
+        if (!mission.parishId) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        if (!(await this.canAccessAsParishAdmin(rawUserId, mission.parishId))) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        return { studentIdsFilter: null };
+      }
+
+      if (mission.scopeType === MissionScopeType.Class) {
+        if (!mission.classId) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        const classSnapshot = await this.classService.getClassById(mission.classId);
+        if (!(await this.canAccessAsParishAdmin(rawUserId, classSnapshot.parishId))) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        return { studentIdsFilter: null };
+      }
+
+      throw new MissionProgressAccessDeniedError();
+    }
+
+    if (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) {
+      let classIdForFilter: string | null = null;
+
+      if (mission.scopeType === MissionScopeType.Class) {
+        if (!mission.classId) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        classIdForFilter = mission.classId;
+      } else if (
+        mission.scopeType === MissionScopeType.Global ||
+        mission.scopeType === MissionScopeType.Parish
+      ) {
+        if (!options?.classId) {
+          throw new MissionProgressAccessDeniedError();
+        }
+        classIdForFilter = options.classId;
+
+        if (mission.scopeType === MissionScopeType.Parish) {
+          if (!mission.parishId) {
+            throw new MissionProgressAccessDeniedError();
+          }
+          const classSnapshot = await this.classService.getClassById(classIdForFilter);
+          if (classSnapshot.parishId !== mission.parishId) {
+            throw new MissionProgressAccessDeniedError();
+          }
+        }
+      } else {
+        throw new MissionProgressAccessDeniedError();
+      }
+
+      try {
+        await this.classCatechistAssignmentService.assertCatechistAssigned(
+          rawUserId,
+          classIdForFilter,
+        );
+      } catch {
+        throw new MissionProgressAccessDeniedError();
+      }
+
+      const studentIds = await this.listActiveStudentIdsForClass(classIdForFilter);
+      return { studentIdsFilter: studentIds };
+    }
+
+    throw new MissionProgressAccessDeniedError();
+  }
+
+  async listAssignedClassIdsForCatechist(rawUserId: string): Promise<string[]> {
+    return this.classCatechistAssignmentService.listAssignedClassIds(rawUserId);
+  }
+
+  async resolveLearnerEnrollmentContext(
+    rawStudentId: string,
+  ): Promise<{ parishId: string; classIds: string[] }> {
+    const enrollments = await this.enrollmentQueryService.listActiveEnrollmentsByStudentIds([
+      rawStudentId,
+    ]);
+    if (enrollments.length === 0) {
+      throw new GamificationAccessDeniedError();
+    }
+
+    const parishId = enrollments[0]!.parishId;
+    const classIds = [...new Set(enrollments.map((enrollment) => enrollment.classId))];
+    return { parishId, classIds };
+  }
+
+  private async listActiveStudentIdsForClass(rawClassId: string): Promise<string[]> {
+    const result = await this.enrollmentService.listEnrollmentsByClass(rawClassId, {
+      page: 1,
+      limit: 1000,
+      sortBy: 'enrolledAt',
+      sort: 'DESC',
+      status: EnrollmentStatus.Active,
+    });
+
+    return result.items
+      .filter((enrollment) => enrollment.status === EnrollmentStatus.Active)
+      .map((enrollment) => enrollment.studentId);
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, In, QueryFailedError, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../../database/uuid-v4.util';
 import { MilestoneDefinitionStatus, MilestoneTriggerType } from '../../enums/gamification.enums';
 import {
@@ -86,6 +86,25 @@ export class MilestoneService {
       throw new MilestoneDefinitionNotFoundError();
     }
     return toMilestoneDefinitionSnapshot(row);
+  }
+
+  async findDefinitionsByIds(
+    rawIds: readonly string[],
+    manager?: EntityManager,
+  ): Promise<Map<string, MilestoneDefinitionSnapshot>> {
+    const uniqueIds = Array.from(new Set(rawIds.filter(Boolean).map((id) => normalizeUuid(id))));
+    if (uniqueIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.definitionRepo(manager).find({
+      where: { id: In(uniqueIds) },
+    });
+    const map = new Map<string, MilestoneDefinitionSnapshot>();
+    for (const row of rows) {
+      const snapshot = toMilestoneDefinitionSnapshot(row);
+      map.set(snapshot.id, snapshot);
+    }
+    return map;
   }
 
   async findDefinitionByCode(code: string): Promise<MilestoneDefinitionSnapshot | null> {

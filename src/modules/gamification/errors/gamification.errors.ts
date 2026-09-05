@@ -229,6 +229,57 @@ export class PointLedgerEntryAlreadyReversedError extends Error {
   }
 }
 
+export class MissionDefinitionNotEditableError extends Error {
+  constructor(message = 'Mission definition is not editable in its current status.') {
+    super(message);
+    this.name = 'MissionDefinitionNotEditableError';
+  }
+}
+
+export class InvalidMissionLifecycleTransitionError extends Error {
+  constructor(message = 'Invalid mission lifecycle transition.') {
+    super(message);
+    this.name = 'InvalidMissionLifecycleTransitionError';
+  }
+}
+
+export class MissionScopeAccessDeniedError extends Error {
+  constructor(message = 'Mission scope access denied.') {
+    super(message);
+    this.name = 'MissionScopeAccessDeniedError';
+  }
+}
+
+export class MissionNotApplicableError extends Error {
+  constructor(message = 'Mission is not applicable to this learner.') {
+    super(message);
+    this.name = 'MissionNotApplicableError';
+  }
+}
+
+export class MissionProgressAccessDeniedError extends Error {
+  constructor(message = 'Mission progress access denied.') {
+    super(message);
+    this.name = 'MissionProgressAccessDeniedError';
+  }
+}
+
+export class MissionDefinitionNotActiveError extends Error {
+  constructor() {
+    super('Mission definition is not ACTIVE.');
+    this.name = 'MissionDefinitionNotActiveError';
+  }
+}
+
+/** Prompt-facing alias. */
+export class MissionNotFoundError extends MissionDefinitionNotFoundError {
+  constructor() {
+    super();
+    this.name = 'MissionNotFoundError';
+    this.message = 'Mission definition not found.';
+  }
+}
+
 /** Prompt-facing aliases for badge/milestone HTTP/error contracts. */
 export class BadgeNotFoundError extends BadgeDefinitionNotFoundError {
   constructor() {

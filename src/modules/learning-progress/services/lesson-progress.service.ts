@@ -144,6 +144,7 @@ export class LessonProgressService {
         occurredAt: result.snapshot.completedAt ?? new Date(),
         studentId: enrollmentForEmit.studentId,
         enrollmentId: enrollmentForEmit.id,
+        classId: enrollmentForEmit.classId,
         parishId: enrollmentForEmit.parishId,
         academicYearId: enrollmentForEmit.academicYearId,
         sourceId: result.snapshot.id,

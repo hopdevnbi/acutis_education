@@ -1,0 +1,1490 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #005/7
+FAST IMPLEMENTATION MODE
+MISSIONS + PROGRESS / COMPLETION + ADMIN LIFECYCLE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production code
+- controllers
+- DTOs
+- services
+- migrations only if genuinely required
+- unit specs
+- integration specs
+- DB e2e specs
+- README/docs/report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not mark deferred validation as FAIL.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture, security, privacy, module ownership, RBAC/scope and obvious N+1/code-quality issues remain mandatory STATIC INSPECTION gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(gamification): add missions and progress"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7 — Domain audit/design
+#002/7 — Persistence foundation
+#003/7 — Points engine + reward ingestion + rules + manual adjustments
+#004/7 — Badges + milestones
+
+Current verified implementation:
+
+POINTS:
+- immutable point ledger
+- transactional event receipt + ledger
+- reward-rule matching
+- automatic point awards
+- manual adjustments
+- reversals
+
+EVENTS:
+- neutral ApplicationEvents infrastructure
+- LearningProgress / Practice / Exam / ClassOperations emit neutral events
+- no source -> Gamification dependency
+- no forwardRef
+
+BADGES:
+- GLOBAL/PARISH definitions
+- automatic/manual award
+- soft revoke
+- badge bonus points
+- bonus reversal
+- learner/staff reads
+
+MILESTONES:
+- SuperAdmin-managed system definitions
+- automatic achievements
+- learning/system trigger types only
+- no sacramental milestones
+- learner/staff reads
+
+EVENT HISTORY:
+- processed reward events enriched with parish/enrollment/occurredAt
+- available for count-based projection rules
+
+RBAC:
+- gamification.read
+- gamification.manage
+- points.adjust
+- badges.award
+
+Capability-specific policy already enforced:
+- Catechist cannot manage reward rules
+- Catechist cannot manage badge definitions
+- Milestone definitions SuperAdmin-only
+
+Known accepted MEDIUM:
+- some learner/staff badge/milestone list composition currently has definition-fetch N+1
+- do NOT worsen this
+- if touched during #005, batch it opportunistically using Gamification-owned queries
+- do not add per-mission/per-student service loops
+
+Current:
+#005/7 — MISSIONS
+
+Remaining:
+#006/7 — Faith Journey + Learner/Parent/Catechist reads/security/contracts
+#007/7 — Fast-mode finalization
+
+PRIMARY OBJECTIVE
+-----------------
+Implement the full Mission capability:
+
+1. mission definition administration
+2. mission lifecycle
+3. GLOBAL / PARISH / CLASS mission scope
+4. capability-specific management scope
+5. automatic mission progress from reward events
+6. idempotent progress updates
+7. mission completion
+8. mission completion points bonus
+9. mission completion RewardEligibleEvent
+10. FIRST_MISSION_COMPLETED milestone activation
+11. learner mission APIs
+12. staff mission APIs / progress reads
+13. pagination / data minimization
+14. specs/tests for all above
+
+Do NOT implement Parent Faith Journey reads yet.
+Do NOT implement full Faith Journey timeline yet.
+Do NOT implement demo seed/Postman yet.
+
+==================================================
+PART A — MISSION DEFINITION ADMIN ENDPOINTS
+==================================================
+
+Implement:
+
+GET /api/v1/missions
+GET /api/v1/missions/:missionId
+POST /api/v1/missions
+PATCH /api/v1/missions/:missionId
+POST /api/v1/missions/:missionId/activate
+POST /api/v1/missions/:missionId/archive
+
+Permission:
+gamification.manage
+
+Capability-specific scope:
+
+SUPER_ADMIN:
+- GLOBAL
+- PARISH
+- CLASS
+- any scope
+
+PARISH_ADMIN:
+- PARISH within own parish
+- CLASS within own parish
+- NOT GLOBAL
+
+CATECHIST:
+- CLASS only
+- class must be ACTIVE assignment
+- cannot create/manage GLOBAL/PARISH mission
+
+PARENT/STUDENT:
+- denied admin endpoints
+
+Do not rely on permission alone.
+Scope must be enforced server-side.
+
+==================================================
+PART B — MISSION DEFINITION LIFECYCLE
+==================================================
+
+Status:
+
+DRAFT
+ACTIVE
+ARCHIVED
+
+Allowed:
+
+DRAFT -> ACTIVE
+DRAFT -> ARCHIVED
+ACTIVE -> ARCHIVED
+
+No:
+ARCHIVED -> ACTIVE
+ACTIVE -> DRAFT
+
+While DRAFT:
+editable metadata/scope/condition/target/dates/pointsBonus
+
+While ACTIVE:
+allow only safe metadata edits if required by product.
+Strong preference:
+scope / conditionType / targetCount / pointsBonus should become immutable once ACTIVE to preserve progress semantics.
+
+Allowed ACTIVE edits may be limited to:
+- name
+- description
+- endsAt extension if safe
+
+Choose exact policy and document it.
+
+ARCHIVED:
+immutable except perhaps labels if project convention allows.
+Strong preference:
+read-only.
+
+==================================================
+PART C — MISSION SCOPE MODEL
+==================================================
+
+Existing scopes:
+
+GLOBAL
+PARISH
+CLASS
+
+No STUDENT-targeted mission in MVP.
+
+Eligibility:
+
+GLOBAL:
+student with active/current enrollment context participating in platform
+
+PARISH:
+student’s relevant enrollment/parish matches mission parish
+
+CLASS:
+student’s event/enrollment/class context matches mission class
+
+Critical:
+RewardEligibleEvent currently has:
+- studentId
+- enrollmentId?
+- parishId
+- academicYearId?
+- sourceId
+- metadata
+
+It may not have classId.
+
+Audit event contract.
+
+If CLASS mission progress needs classId:
+prefer enrich neutral RewardEligibleEvent with optional `classId`.
+
+Create a neutral contract update:
+classId?: uuid
+
+Update publishers where class context is known.
+
+Do NOT query foreign repositories during mission event processing merely to discover classId if event producer can provide it safely.
+
+No PII.
+
+==================================================
+PART D — SOURCE EVENT CLASS CONTEXT
+==================================================
+
+Audit each source:
+
+LearningProgress:
+- can derive class/enrollment context from completion workflow?
+- if classId is not naturally available, do not create expensive/cyclic lookup solely for global/parish missions
+
+Practice:
+- likely enrollment/session context
+
+Exam:
+- likely enrollment/program/class context depending existing model
+
+ClassOperations:
+- classId known directly
+
+For CLASS missions:
+only events with trustworthy classId can progress class-scoped mission.
+
+If some source event cannot reliably provide classId:
+that event should not match CLASS mission for that condition until contract is available.
+
+Document exact source coverage.
+
+Do not invent incorrect class relationships.
+
+==================================================
+PART E — MISSION CONDITION TYPES
+==================================================
+
+Already defined:
+
+LESSONS_COMPLETED
+PRACTICE_COMPLETED
+ATTENDANCE_PRESENT_OR_LATE
+EXAMS_COMPLETED
+
+Map:
+
+LESSONS_COMPLETED
+<- LEARNING_LESSON_COMPLETED
+
+PRACTICE_COMPLETED
+<- PRACTICE_COMPLETED
+
+ATTENDANCE_PRESENT_OR_LATE
+<- ATTENDANCE_SESSION_COMPLETED_MARK
+
+EXAMS_COMPLETED
+<- EXAM_COMPLETED
+
+No generic expression engine.
+
+No mixed multi-condition mission in MVP.
+
+One mission = one condition type + targetCount.
+
+==================================================
+PART F — MISSION ELIGIBILITY MATCHING
+==================================================
+
+On RewardEligibleEvent:
+
+1. map event type -> MissionConditionType
+2. load ACTIVE mission definitions for:
+   - GLOBAL
+   - matching PARISH
+   - matching CLASS when event.classId exists
+3. enforce startsAt/endsAt against event.occurredAt
+4. create/update progress idempotently
+5. cap currentCount at targetCount
+6. on crossing target:
+   ACTIVE -> COMPLETED
+   set completedAt
+   award pointsBonus once
+   publish mission completed reward event once
+
+Do not progress:
+- DRAFT
+- ARCHIVED
+- not-yet-started
+- expired
+- wrong scope
+- wrong condition type
+
+==================================================
+PART G — MISSION PROGRESS PROCESSOR
+==================================================
+
+Create:
+MissionProgressProcessor
+
+Integrate into RewardIngestService after point/badge/milestone processing or in a clear deterministic order.
+
+Recommended order:
+
+1. receipt
+2. points rules
+3. badge processor
+4. milestone processor
+5. mission progress processor
+
+But mission completion may emit a new reward event which itself can trigger:
+- MISSION_COMPLETED point reward rules
+- FIRST_MISSION_COMPLETED milestone
+
+Avoid recursive same-transaction event-bus loops.
+
+Strong design:
+MissionProgressProcessor returns completion result.
+After successful Gamification transaction commit, publish separate MISSION_COMPLETED RewardEligibleEvent.
+
+Alternative:
+process mission completion bonus directly in same transaction and separately invoke milestone logic.
+
+Choose the cleanest non-recursive approach.
+
+Required:
+no infinite event recursion.
+
+==================================================
+PART H — MISSION CONTRIBUTION IDEMPOTENCY
+==================================================
+
+Critical.
+
+`processed_reward_events` prevents the same source RewardEligibleEvent being processed twice globally.
+
+Therefore mission progress increment for one event occurs at most once if mission update is in the same ingest transaction.
+
+However:
+one processed event can update multiple eligible missions.
+
+Required:
+- progress updates happen inside same transaction as receipt
+- duplicate replay = no progress increment
+- mission row unique (missionDefinitionId, studentId)
+- currentCount capped at target
+- completed mission never increments/reopens
+
+No separate contribution table in MVP unless static inspection proves needed.
+
+==================================================
+PART I — PROGRESS CREATION
+==================================================
+
+When first eligible event arrives:
+
+create mission_progress:
+
+missionDefinitionId
+studentId
+enrollmentId from event if present
+currentCount = 1
+targetCount copied from definition
+status:
+COMPLETED if targetCount == 1
+otherwise ACTIVE
+completedAt accordingly
+lastEventId = event.eventId
+
+For subsequent event:
+increment by 1 up to targetCount.
+
+If event enrollment changes over time:
+do not rewrite historical meaning blindly.
+
+Decide whether `enrollmentId` on progress represents:
+- initial enrollment context
+or
+- latest context
+
+Strong preference:
+initial/creation context or nullable contextual reference;
+mission progress is student-owned historical projection.
+
+Document.
+
+==================================================
+PART J — MISSION COMPLETION POINTS BONUS
+==================================================
+
+If mission definition `pointsBonus > 0`:
+
+On first transition to COMPLETED append:
+
+sourceType = MISSION_COMPLETED
+sourceId = missionProgress.id
+reasonCode = MISSION_COMPLETION:{missionCode}
+pointsDelta = definition.pointsBonus
+studentId = progress.studentId
+enrollmentId = current event enrollment/context
+parishId = current event parish
+awardedByUserId = null
+
+Unique identity prevents duplicate bonus.
+
+Do not award bonus again on event replay.
+
+==================================================
+PART K — MISSION_COMPLETED REWARD EVENT
+==================================================
+
+Add neutral event type:
+
+MISSION_COMPLETED
+
+RewardEligibleEvent fields:
+
+eventId:
+stable missionProgress.id OR deterministic UUID tied to progress completion
+
+Strong preference:
+eventId = missionProgress.id if UUID and one completion ever.
+
+sourceId = missionProgress.id
+studentId
+enrollmentId?
+parishId
+academicYearId?
+classId? if mission scope CLASS
+occurredAt = completedAt
+
+Metadata allow-list:
+missionCode
+missionScopeType if needed
+
+No mission free-text description.
+No PII.
+
+==================================================
+PART L — MISSION COMPLETION EVENT TIMING
+==================================================
+
+Do not publish MISSION_COMPLETED until Gamification transaction commits.
+
+After commit:
+ApplicationEventBus.publishRewardEligibleEvent(...)
+
+The new event can then:
+
+- match PointSourceType MISSION_COMPLETED reward rules
+- trigger FIRST_MISSION_COMPLETED milestone
+- potentially trigger future badges if configured later
+
+Important:
+avoid double bonus if mission definition already has `pointsBonus`.
+
+There are two reward mechanisms:
+
+A. mission definition pointsBonus
+B. reward rule listening to MISSION_COMPLETED
+
+Both may intentionally apply.
+
+Document that they are additive if both configured.
+
+No hidden duplicate suppression across different reason codes.
+
+==================================================
+PART M — FIRST_MISSION_COMPLETED MILESTONE
+==================================================
+
+Activate the previously inert milestone trigger:
+
+FIRST_MISSION_COMPLETED
+
+MilestoneAchievementProcessor should match:
+MISSION_COMPLETED
+
+Achievement once per student.
+
+No source repo queries.
+
+Update tests/specs.
+
+==================================================
+PART N — BADGE RULE OPTIONAL MISSION SUPPORT
+==================================================
+
+Do NOT expand badge rules unless explicitly useful.
+
+#001 badge typed rules did not include mission completion.
+
+Keep badges unchanged unless architecture already has generic event rule that naturally supports mission event.
+
+Do not scope creep.
+
+==================================================
+PART O — MISSION ADMIN CREATE DTO
+==================================================
+
+CreateMissionDefinitionDto:
+
+- code
+- name
+- description
+- scopeType
+- parishId?
+- classId?
+- conditionType
+- targetCount
+- pointsBonus?
+- startsAt?
+- endsAt?
+
+Server:
+- validates capability scope
+- builds scopeKey
+- status starts DRAFT
+
+Do not accept:
+status ACTIVE directly on create unless project convention strongly prefers.
+Strong preference:
+create DRAFT -> activate endpoint.
+
+==================================================
+PART P — MISSION UPDATE DTO
+==================================================
+
+UpdateMissionDefinitionDto:
+
+DRAFT:
+may edit:
+- code
+- name
+- description
+- scope
+- condition
+- target
+- bonus
+- dates
+
+ACTIVE:
+only safe fields per lifecycle decision.
+
+Do not allow status change via PATCH.
+Use activate/archive actions.
+
+==================================================
+PART Q — ACTIVATE MISSION
+==================================================
+
+POST /api/v1/missions/:missionId/activate
+
+Validate:
+
+- current status DRAFT
+- scope valid
+- condition valid
+- targetCount > 0
+- startsAt/endsAt valid
+- capability scope actor still authorized
+- class ACTIVE for CLASS mission if public Class API supports assertion
+- parish consistency
+
+Set ACTIVE.
+
+No immediate backfill of historical events in MVP.
+
+Mission starts accumulating only from events processed while mission active/effective.
+
+Document:
+NO HISTORICAL BACKFILL IN MVP.
+
+==================================================
+PART R — ARCHIVE MISSION
+==================================================
+
+POST /api/v1/missions/:missionId/archive
+
+Allowed:
+DRAFT -> ARCHIVED
+ACTIVE -> ARCHIVED
+
+After archive:
+- no new progress
+- existing progress retained
+- completed remains completed
+- active incomplete progress remains historical/incomplete
+
+Do not delete progress.
+
+==================================================
+PART S — MISSION LIST ADMIN
+==================================================
+
+GET /api/v1/missions
+
+Permission:
+gamification.manage
+
+Query:
+- page
+- limit max 50
+- status?
+- scopeType?
+- parishId?
+- classId?
+- conditionType?
+
+Actor-scoped result:
+SuperAdmin all
+ParishAdmin own parish scopes
+Catechist assigned CLASS scopes only
+
+Stable sort:
+createdAt DESC + id DESC
+or name/code if repository conventions fit.
+
+No cross-parish data.
+
+==================================================
+PART T — MISSION DETAIL ADMIN
+==================================================
+
+GET /api/v1/missions/:missionId
+
+Permission:
+gamification.manage
+
+Capability scope enforced.
+
+May include:
+- definition metadata
+- aggregate progress counts if bounded
+
+If progress counts create expensive/N+1:
+omit in #005 and keep separate progress endpoint.
+
+==================================================
+PART U — STAFF CLASS MISSIONS READ
+==================================================
+
+Implement:
+
+GET /api/v1/classes/:classId/missions
+
+Permission:
+gamification.read
+
+Allowed:
+- assigned Catechist
+- ParishAdmin own parish
+- SuperAdmin
+
+Return relevant ACTIVE/DRAFT/ARCHIVED based optional query.
+Strong default for ordinary staff read:
+ACTIVE missions.
+
+If admin wants full lifecycle use `/missions`.
+
+Keep response bounded/paginated if needed.
+
+==================================================
+PART V — MISSION PROGRESS STAFF ENDPOINT
+==================================================
+
+Implement:
+
+GET /api/v1/missions/:missionId/progress
+
+Permission:
+gamification.read
+
+Scope:
+SuperAdmin
+ParishAdmin mission parish
+Catechist assigned CLASS mission/class
+For GLOBAL/PARISH mission, Catechist should not see all parish/global students broadly.
+
+Strong privacy rule:
+Catechist progress endpoint should only expose students in Catechist's assigned classes.
+
+This may require:
+- optional classId query for GLOBAL/PARISH mission
+- assert Catechist assigned class
+- return only those students
+
+Do NOT provide all-student global progress to Catechist.
+
+Design exact safe contract.
+
+Paginated max 50.
+
+Item:
+- studentId
+- displayName only if necessary for staff UI and obtained via batch Student public API
+- currentCount
+- targetCount
+- status
+- completedAt
+
+No DOB/contact/guardian data.
+
+Avoid per-student StudentService calls.
+Use batch snapshot API.
+
+==================================================
+PART W — LEARNER MISSION LIST
+==================================================
+
+Implement:
+
+GET /api/v1/me/learner/missions
+
+Permission:
+gamification.read
+
+Self only.
+
+Query:
+- status? ACTIVE|COMPLETED
+- page/limit max 50 if necessary
+
+Return missions applicable to student:
+- GLOBAL
+- student parish
+- student current assigned class scope where applicable
+
+Need combine definition eligibility + mission_progress.
+
+Important:
+an ACTIVE mission may not yet have a `mission_progress` row.
+Learner should still see eligible active mission with:
+
+currentCount = 0
+targetCount
+status = ACTIVE
+
+Do not require progress row to list mission.
+
+No per-mission foreign service calls.
+
+==================================================
+PART X — LEARNER MISSION DETAIL
+==================================================
+
+Implement:
+
+GET /api/v1/me/learner/missions/:missionId
+
+Self scope.
+
+Return only if mission is:
+- applicable to learner OR
+- learner already has historical progress/completion
+
+This preserves historical completed mission visibility after transfer.
+
+Return:
+- id/code/name/description
+- conditionType
+- currentCount
+- targetCount
+- status
+- pointsBonus
+- startsAt/endsAt
+- completedAt
+
+No internal scope/audit actor fields beyond useful display context.
+
+==================================================
+PART Y — HISTORICAL MISSION SEMANTICS
+==================================================
+
+Mission completion/progress must survive:
+
+- enrollment transfer
+- class archive
+- academic year close
+
+For current ACTIVE mission eligibility:
+use current event/context.
+
+For completed mission read:
+use persisted mission_progress history even if current context changed.
+
+Do not delete progress.
+
+Do not recompute old mission completion dynamically from current source state.
+
+==================================================
+PART Z — MISSION SUMMARY COUNTS
+==================================================
+
+Extend Gamification summary aggregates:
+
+activeMissionCount
+completedMissionCount
+
+Need clarify:
+activeMissionCount should include eligible ACTIVE definitions with current progress or zero progress.
+
+For learner summary:
+count currently eligible active missions.
+
+completedMissionCount:
+persisted COMPLETED mission_progress.
+
+Avoid per-mission JS loops.
+
+Use bounded/set-based queries.
+
+==================================================
+PART AA — ACCESS SERVICE
+==================================================
+
+Implement capability-specific helpers:
+
+assertCanManageMissionDefinition(actor, scope)
+assertCanReadMissionDefinition(actor, mission)
+assertCanReadMissionProgress(actor, mission, optionalClassScope)
+assertLearnerCanReadMission(actor, mission/student)
+assertCanReadClassMissions(actor, classId)
+
+Policy:
+
+SUPER_ADMIN:
+all
+
+PARISH_ADMIN:
+PARISH/CLASS own parish
+not GLOBAL management
+
+CATECHIST:
+CLASS mission manage only assigned classes
+class mission read assigned
+global/parish mission progress only limited to assigned-class students
+
+PARENT:
+no admin/staff mission endpoints
+
+STUDENT:
+self `/me` only
+
+No `/me` impersonation.
+
+==================================================
+PART AB — DTOs
+==================================================
+
+Create module-owned DTOs:
+
+CreateMissionDefinitionDto
+UpdateMissionDefinitionDto
+MissionDefinitionResponseDto
+MissionDefinitionListResponseDto
+MissionAdminListQueryDto
+ClassMissionListQueryDto
+MissionProgressListQueryDto
+MissionProgressItemDto
+MissionProgressListResponseDto
+LearnerMissionListQueryDto
+LearnerMissionResponseDto
+LearnerMissionListResponseDto
+
+No entity leakage.
+
+==================================================
+PART AC — HTTP ERRORS
+==================================================
+
+Add minimal errors:
+
+MissionNotFoundError
+MissionDefinitionNotEditableError
+InvalidMissionLifecycleTransitionError
+MissionScopeAccessDeniedError
+MissionNotApplicableError
+MissionProgressAccessDeniedError
+MissionDefinitionNotActiveError
+
+Map:
+400 validation
+401 unauthenticated
+403 scope
+404 not found
+409 lifecycle
+422 domain applicability if project convention uses it
+
+Automatic duplicate progress:
+idempotent/no-op.
+
+==================================================
+PART AD — POINT LEDGER INTERACTION
+==================================================
+
+Mission completion pointsBonus is an immutable ledger entry.
+
+Do not call points HTTP layer internally.
+
+Use internal PointLedgerService with transaction manager.
+
+No mutable balance.
+
+No reversal on mission archive:
+completion is historical and remains awarded.
+
+If a mission was configured incorrectly:
+future staff adjustment/reversal workflow handles correction separately.
+
+==================================================
+PART AE — REWARD INGEST RESULT
+==================================================
+
+Extend internal result if useful:
+
+missionsProgressed
+missionsCompleted
+
+Do not expose result via HTTP.
+
+No PII.
+
+==================================================
+PART AF — TRANSACTIONAL SAFETY
+==================================================
+
+Within source RewardIngest transaction:
+
+- receipt
+- points
+- badges
+- milestones
+- mission progress
+- mission bonus
+
+should remain atomic for Gamification state.
+
+MISSION_COMPLETED application event:
+publish only after successful commit.
+
+If ApplicationEventBus handler error isolation complicates knowing transaction completion:
+RewardIngestService may return completion events to listener, and listener publishes them after ingest resolves.
+
+This is preferred.
+
+Avoid event recursion inside open transaction.
+
+==================================================
+PART AG — EVENT RECURSION GUARD
+==================================================
+
+MISSION_COMPLETED event may itself pass through RewardIngestService.
+
+It MUST NOT cause the same mission to progress itself unless condition mapping explicitly includes mission completion (it currently does not).
+
+No infinite loop.
+
+Milestone FIRST_MISSION_COMPLETED may react once.
+
+Point reward rules may react.
+
+Event receipt protects duplicate mission completion event.
+
+==================================================
+PART AH — PERFORMANCE / N+1
+==================================================
+
+Mandatory static inspection.
+
+Mission processor:
+- load matching active mission definitions in one bounded query
+- progress update set bounded by number of matching missions
+- no foreign student/class lookup per mission
+
+Learner mission list:
+- definitions + progress in set-based/fixed-query composition
+- no per-mission queries
+
+Staff progress list:
+- paginated progress
+- batch Student snapshots if displayName included
+- no per-student lookup
+
+Known #004 MEDIUM:
+badge/milestone read N+1.
+
+If you touch shared summary/read mapper infrastructure and can safely batch definitions:
+fix it now.
+
+Otherwise do not expand it.
+
+Report whether N+1 MEDIUM remains.
+
+==================================================
+PART AI — DATA MINIMIZATION / MINORS
+==================================================
+
+Learner:
+self only.
+
+Staff mission progress:
+only:
+- studentId
+- necessary displayName
+- counts/status/completedAt
+
+No:
+- DOB
+- email
+- phone
+- guardian
+- attendance note
+- exam answers
+- pastoral/confessional data
+
+No leaderboard/ranking/sorting by points/progress rank.
+
+==================================================
+PART AJ — OPENAPI
+==================================================
+
+Annotate all mission routes:
+
+- bearer auth
+- permission
+- capability scope
+- UUID params
+- pagination/query
+- request DTO
+- response DTO
+- 400/401/403/404/409 as applicable
+
+Static only.
+Do not run Swagger.
+
+==================================================
+PART AK — README
+==================================================
+
+Update Gamification docs with:
+
+Missions:
+- GLOBAL / PARISH / CLASS
+- DRAFT / ACTIVE / ARCHIVED
+- typed condition model
+- targetCount
+- pointsBonus
+- no historical backfill
+- persisted progress
+- event-driven idempotent increments
+- mission completion event
+- FIRST_MISSION_COMPLETED milestone
+- learner mission APIs
+- staff class/progress APIs
+- Catechist CLASS-only management
+- no student-targeted missions
+- no leaderboard/streaks
+
+Do not claim phase complete.
+
+==================================================
+PART AL — UNIT TEST FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Definition:
+- scope validation
+- lifecycle
+- active immutable condition/target/bonus
+- SuperAdmin scopes
+- ParishAdmin own PARISH/CLASS
+- Catechist assigned CLASS only
+- Parent/Student denied
+
+Matching:
+- event -> condition mapping
+- GLOBAL
+- PARISH
+- CLASS
+- wrong class
+- wrong parish
+- outside effective dates
+- archived ignored
+
+Progress:
+- first event creates progress
+- increment
+- target cap
+- complete on threshold
+- duplicate event does not increment
+- completed never reopens/increments
+- targetCount=1
+
+Completion:
+- bonus once
+- MISSION_COMPLETED event once
+- stable eventId
+- no recursive self-progress
+- FIRST_MISSION_COMPLETED milestone path
+
+Learner:
+- eligible active mission at zero progress
+- completed historical mission after transfer
+- self only
+
+Staff:
+- Catechist assigned-class progress
+- global/parish progress restricted to assigned class
+- batch student lookup
+
+Summary:
+- activeMissionCount
+- completedMissionCount
+
+==================================================
+PART AM — INTEGRATION SPEC FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL cases:
+
+1. create DRAFT mission
+2. scope_key uniqueness
+3. activate
+4. archive
+5. active immutable fields
+6. event creates progress
+7. duplicate replay no increment
+8. multiple eligible missions increment
+9. wrong scope not increment
+10. completion at threshold
+11. bonus ledger once
+12. MISSION_COMPLETED receipt once
+13. FIRST_MISSION_COMPLETED milestone
+14. completed progress retained after enrollment transfer
+15. archive preserves progress
+16. learner eligible zero-progress composition
+17. summary counts
+18. no hard delete
+
+==================================================
+PART AN — DB E2E SPEC FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Mission admin:
+- SuperAdmin GLOBAL create/activate/archive
+- ParishAdmin own PARISH/CLASS
+- ParishAdmin GLOBAL denied
+- ParishAdmin foreign denied
+- Catechist assigned CLASS create/manage
+- Catechist unassigned CLASS denied
+- Catechist PARISH/GLOBAL denied
+- Parent/Student denied
+
+Learner:
+- self missions
+- self mission detail
+- active zero progress visible
+- completed visible
+- no foreign actor impersonation
+
+Staff:
+- class missions assigned Catechist
+- unassigned 403
+- ParishAdmin own parish
+- SuperAdmin
+- mission progress scoped
+- Catechist cannot see other class students
+
+Data:
+- no PII
+- stable pagination
+- unauthenticated 401
+
+==================================================
+PART AO — MODULE BOUNDARY
+==================================================
+
+Confirm:
+
+- Gamification exports GamificationService only
+- no source module imports
+- no source repository/entity imports
+- ApplicationEvents neutral
+- no FamilyPortal
+- no forwardRef
+- mission APIs stay inside Gamification
+
+Update boundary specs if useful.
+
+Do not run.
+
+==================================================
+PART AP — STATIC INSPECTION
+==================================================
+
+Before finish, inspect:
+
+- scope correctness
+- classId event context correctness
+- no guessed class relation
+- no historical backfill
+- mission bonus uniqueness
+- MISSION_COMPLETED event stable id
+- no recursive event loop
+- no mission progress replay increment
+- no foreign repo queries
+- no N+1 in new mission reads
+- learner self-scope
+- staff class scoping
+- DTO privacy
+- no entity leakage
+- no hard delete
+
+Fix obvious code defects by inspection.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- Parent gamification/Faith Journey reads (#006)
+- Parent badges/missions/milestones routes (#006)
+- full Faith Journey timeline (#006)
+- demo seed (#007)
+- Postman (#007)
+- leaderboard
+- streaks
+- student-targeted missions
+- multi-condition mission engine
+- historical mission backfill
+- sacramental milestones
+- outbox/queue
+- runtime validation
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_005_MISSIONS_PROGRESS_COMPLETION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Mission admin endpoints
+7 Mission lifecycle
+8 Mission scope model
+9 Reward event class context
+10 Source class-context coverage
+11 Mission condition mapping
+12 Mission eligibility matching
+13 Mission progress processor
+14 Progress idempotency
+15 Progress creation/update semantics
+16 Completion semantics
+17 Mission completion points bonus
+18 MISSION_COMPLETED reward event
+19 Completion event timing
+20 Event recursion protection
+21 FIRST_MISSION_COMPLETED milestone
+22 Mission activate behavior
+23 Mission archive behavior
+24 Historical mission semantics
+25 Admin list/detail
+26 Class missions read
+27 Staff mission progress
+28 Learner mission list
+29 Learner mission detail
+30 Summary mission counts
+31 Capability-specific access
+32 DTO boundaries
+33 Error contract
+34 Transactional safety
+35 Performance/N+1
+36 #004 N+1 status
+37 Data minimization
+38 OpenAPI
+39 README
+40 Module boundaries
+41 Unit tests written
+42 Integration tests written
+43 DB e2e tests written
+44 Tests executed
+45 DB validation
+46 quality:full
+47 Docker
+48 npm audit
+49 Static inspection
+50 Risks/deferred
+51 BLOCKER/HIGH/MEDIUM/LOW
+52 #006 readiness
+53 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+MISSION DEFINITION ADMIN READY: YES/NO
+MISSION LIFECYCLE READY: YES/NO
+MISSION SCOPE MODEL READY: YES/NO
+CATECHIST CLASS-ONLY MANAGEMENT SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+SUPERADMIN MISSION MANAGEMENT READY: YES/NO
+
+MISSION EVENT CLASS CONTEXT READY: YES/NO
+MISSION CONDITION MATCHING READY: YES/NO
+MISSION PROGRESS PROCESSOR READY: YES/NO
+MISSION PROGRESS IDEMPOTENCY READY: YES/NO
+MISSION COMPLETION READY: YES/NO
+MISSION BONUS POINTS READY: YES/NO
+MISSION_COMPLETED EVENT READY: YES/NO
+EVENT RECURSION SAFE: YES/NO
+FIRST_MISSION_COMPLETED MILESTONE READY: YES/NO
+
+LEARNER MISSION LIST READY: YES/NO
+LEARNER MISSION DETAIL READY: YES/NO
+STAFF CLASS MISSIONS READY: YES/NO
+STAFF MISSION PROGRESS READY: YES/NO
+MISSION SUMMARY COUNTS READY: YES/NO
+
+HISTORICAL MISSION RETENTION READY: YES/NO
+NO HISTORICAL BACKFILL POLICY READY: YES/NO
+DATA MINIMIZATION READY: YES/NO
+N+1/PERFORMANCE READY BY INSPECTION: YES/NO
+SOURCE MODULE DECOUPLING PRESERVED: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#006 READINESS: YES/NO
+
+==================================================
+#006 GATE
+==================================================
+
+Proceed if:
+
+- no BLOCKER/HIGH by static inspection
+- mission admin/lifecycle ready
+- scope safe
+- mission progress/idempotency ready
+- completion/bonus ready
+- MISSION_COMPLETED event safe
+- FIRST_MISSION_COMPLETED milestone active
+- learner/staff mission reads ready
+- N+1 design acceptable
+- tests/specs written
+- source decoupling preserved
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+GAMIFICATION + FAITH JOURNEY #006/7 —
+FAITH JOURNEY + LEARNER / PARENT / CATECHIST READS + SECURITY / CONTRACT HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #005 implementation status
+- mission admin/lifecycle
+- mission progress/completion
+- mission bonus/event
+- learner/staff reads
+- scope/security
+- N+1 status
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(gamification): add missions and progress"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.

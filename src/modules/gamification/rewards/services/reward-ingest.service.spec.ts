@@ -1,7 +1,7 @@
 /**
  * Reward ingest unit scenarios (Fast Mode — not executed).
  * Covers idempotency, multi-rule apply-once, inactive/wrong-parish/effective windows,
- * and #004 badge/milestone side-effect counters on RewardIngestResult.
+ * #004 badge/milestone counters, and #005 mission progress/completion counters on RewardIngestResult.
  */
 import type { RewardIngestResult } from '../../interfaces/gamification.interfaces';
 
@@ -18,7 +18,7 @@ describe('RewardIngestService scenarios (spec shell)', () => {
     expect(true).toBe(true);
   });
 
-  it('documents RewardIngestResult includes badgesAwarded and milestonesAchieved', () => {
+  it('documents RewardIngestResult includes badges, milestones, and missions fields', () => {
     const shape: RewardIngestResult = {
       eventId: 'evt-1',
       alreadyProcessed: false,
@@ -27,19 +27,31 @@ describe('RewardIngestService scenarios (spec shell)', () => {
       matchedRuleCodes: ['RULE_A'],
       badgesAwarded: 0,
       milestonesAchieved: 0,
+      missionsProgressed: 1,
+      missionsCompleted: 0,
+      pendingMissionCompletedEvents: [],
     };
     expect(shape).toEqual(
       expect.objectContaining({
         badgesAwarded: expect.any(Number),
         milestonesAchieved: expect.any(Number),
+        missionsProgressed: expect.any(Number),
+        missionsCompleted: expect.any(Number),
+        pendingMissionCompletedEvents: expect.any(Array),
       }),
     );
     expect(Object.keys(shape)).toEqual(
-      expect.arrayContaining(['badgesAwarded', 'milestonesAchieved']),
+      expect.arrayContaining([
+        'badgesAwarded',
+        'milestonesAchieved',
+        'missionsProgressed',
+        'missionsCompleted',
+        'pendingMissionCompletedEvents',
+      ]),
     );
   });
 
-  it('documents alreadyProcessed path still returns badge/milestone counters (typically 0)', () => {
+  it('documents alreadyProcessed path still returns counters (typically 0) and empty pending events', () => {
     const duplicate: RewardIngestResult = {
       eventId: 'evt-dup',
       alreadyProcessed: true,
@@ -48,9 +60,15 @@ describe('RewardIngestService scenarios (spec shell)', () => {
       matchedRuleCodes: [],
       badgesAwarded: 0,
       milestonesAchieved: 0,
+      missionsProgressed: 0,
+      missionsCompleted: 0,
+      pendingMissionCompletedEvents: [],
     };
     expect(duplicate.alreadyProcessed).toBe(true);
     expect(duplicate.badgesAwarded).toBe(0);
     expect(duplicate.milestonesAchieved).toBe(0);
+    expect(duplicate.missionsProgressed).toBe(0);
+    expect(duplicate.missionsCompleted).toBe(0);
+    expect(duplicate.pendingMissionCompletedEvents).toEqual([]);
   });
 });

@@ -253,6 +253,7 @@ export class PracticeAnswerService {
         occurredAt: new Date(),
         studentId: enrollment.studentId,
         enrollmentId: enrollment.id,
+        classId: enrollment.classId,
         parishId: enrollment.parishId,
         academicYearId: enrollment.academicYearId,
         sourceId: result.sessionId,

@@ -1,5 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export class LatestAchievementDto {
+  @ApiProperty({
+    enum: ['BADGE', 'MISSION', 'MILESTONE'],
+    description: 'Achievement kind',
+  })
+  kind!: 'BADGE' | 'MISSION' | 'MILESTONE';
+
+  @ApiProperty()
+  code!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  description!: string | null;
+
+  @ApiProperty()
+  achievedAt!: Date;
+
+  @ApiPropertyOptional({ nullable: true })
+  pointsBonus?: number | null;
+}
+
 export class GamificationSummaryResponseDto {
   @ApiProperty()
   studentId!: string;
@@ -13,14 +36,22 @@ export class GamificationSummaryResponseDto {
   @ApiProperty()
   lifetimePositivePoints!: number;
 
-  @ApiProperty({ description: 'Future badges; zero until #004' })
+  @ApiProperty()
   activeBadgeCount!: number;
 
-  @ApiProperty({ description: 'Future missions; zero until #005' })
+  @ApiProperty({
+    description: 'Eligible ACTIVE missions for the learner (includes zero-progress missions).',
+  })
+  activeMissionCount!: number;
+
+  @ApiProperty({ description: 'Persisted COMPLETED mission_progress rows.' })
   completedMissionCount!: number;
 
-  @ApiProperty({ description: 'Future milestones; zero until #004' })
+  @ApiProperty()
   milestoneAchievementCount!: number;
+
+  @ApiPropertyOptional({ type: LatestAchievementDto, nullable: true })
+  latestAchievement!: LatestAchievementDto | null;
 }
 
 export class PointLedgerItemStaffResponseDto {

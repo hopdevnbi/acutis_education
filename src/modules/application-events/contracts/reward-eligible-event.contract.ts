@@ -7,6 +7,7 @@ export const REWARD_EVENT_TYPES = {
   PracticeCompleted: 'PRACTICE_COMPLETED',
   ExamCompleted: 'EXAM_COMPLETED',
   AttendanceSessionCompletedMark: 'ATTENDANCE_SESSION_COMPLETED_MARK',
+  MissionCompleted: 'MISSION_COMPLETED',
 } as const;
 
 export type RewardEventType = (typeof REWARD_EVENT_TYPES)[keyof typeof REWARD_EVENT_TYPES];
@@ -18,6 +19,8 @@ export const REWARD_EVENT_METADATA_ALLOWED_KEYS = [
   'attendanceStatus',
   'scorePercent',
   'canonicalLessonKey',
+  'missionCode',
+  'missionScopeType',
 ] as const;
 
 export type RewardEventMetadataKey = (typeof REWARD_EVENT_METADATA_ALLOWED_KEYS)[number];
@@ -36,6 +39,7 @@ export interface RewardEligibleEvent {
   readonly occurredAt: Date;
   readonly studentId: string;
   readonly enrollmentId?: string | null;
+  readonly classId?: string | null;
   readonly parishId: string;
   readonly academicYearId?: string | null;
   readonly sourceId: string;

@@ -27,6 +27,21 @@ export class RewardEligibleEventListener implements RewardEligibleEventHandler, 
       alreadyProcessed: result.alreadyProcessed,
       ledgerEntriesCreated: result.ledgerEntriesCreated,
       totalPointsAwarded: result.totalPointsAwarded,
+      missionsProgressed: result.missionsProgressed,
+      missionsCompleted: result.missionsCompleted,
     });
+
+    // Post-commit: publish MISSION_COMPLETED events (separate ingest; no open-txn recursion).
+    for (const pending of result.pendingMissionCompletedEvents) {
+      try {
+        await this.applicationEventBus.publishRewardEligibleEvent(pending);
+      } catch (error: unknown) {
+        this.logger.error({
+          action: 'gamification.mission_completed.publish_failed',
+          eventId: pending.eventId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+      }
+    }
   }
 }

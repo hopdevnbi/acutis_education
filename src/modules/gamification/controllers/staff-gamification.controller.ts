@@ -20,11 +20,13 @@ import {
   GamificationSummaryResponseDto,
   PointLedgerListStaffResponseDto,
 } from '../dto/gamification-response.dto';
+import { FaithJourneyResponseDto } from '../dto/faith-journey.dto';
 import { StaffStudentBadgeListResponseDto } from '../dto/badge.dto';
 import { StaffStudentMilestoneListResponseDto } from '../dto/milestone.dto';
 import { ListPointsQueryDto } from '../dto/list-points-query.dto';
 import { GamificationService } from '../gamification.service';
 import {
+  toFaithJourneyResponseDto,
   toGamificationSummaryResponseDto,
   toStaffPointLedgerListDto,
   toStaffStudentBadgeListResponseDto,
@@ -49,6 +51,7 @@ export class StaffGamificationController {
     description:
       'Requires gamification.read. SuperAdmin, ParishAdmin (own parish ACTIVE enrollment), or Catechist (ACTIVE assigned class). Parent/Student generic routes denied by scope.',
   })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
   @ApiOkResponse({ type: GamificationSummaryResponseDto })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
@@ -69,12 +72,41 @@ export class StaffGamificationController {
     }
   }
 
+  @Get('students/:studentId/faith-journey')
+  @RequirePermissions(GAMIFICATION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Staff faith journey for a student',
+    description:
+      'Requires gamification.read. Scoped to SuperAdmin, ParishAdmin (own parish active enrollment), or Catechist (current ACTIVE assignment to active class). Omits attendance notes, exam answers, pastoral fields, raw manual adjustment reasons, and PII.',
+  })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
+  @ApiOkResponse({ type: FaithJourneyResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiNotFoundResponse()
+  async getStudentFaithJourney(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+  ): Promise<FaithJourneyResponseDto> {
+    try {
+      await this.gamificationAccessService.assertStaffCanReadStudentGamification(
+        authenticatedUser.userId,
+        studentId,
+      );
+      const faithJourney = await this.gamificationService.getFaithJourney({ studentId });
+      return toFaithJourneyResponseDto(faithJourney);
+    } catch (error: unknown) {
+      rethrowGamificationServiceError(error);
+    }
+  }
+
   @Get('students/:studentId/points')
   @RequirePermissions(GAMIFICATION_READ_PERMISSION)
   @ApiOperation({
     summary: 'Staff paginated point ledger for a student',
     description: 'createdAt DESC, id DESC. Max 50. Includes staffNote.',
   })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
   @ApiOkResponse({ type: PointLedgerListStaffResponseDto })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()

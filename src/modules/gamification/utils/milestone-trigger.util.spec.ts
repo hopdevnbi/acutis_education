@@ -147,10 +147,26 @@ describe('milestone-trigger.util', () => {
       ).toBe(true);
     });
 
-    it('never matches FIRST_MISSION_COMPLETED in #004', () => {
+    it('matches FIRST_MISSION_COMPLETED when eventType is MISSION_COMPLETED and count >= 1', () => {
       expect(milestoneTriggerToRewardEventType(MilestoneTriggerType.FirstMissionCompleted)).toBe(
-        null,
+        REWARD_EVENT_TYPES.MissionCompleted,
       );
+      expect(
+        doesMilestoneTriggerMatchEvent({
+          triggerType: MilestoneTriggerType.FirstMissionCompleted,
+          triggerConfigJson: null,
+          event: makeEvent({ eventType: REWARD_EVENT_TYPES.MissionCompleted }),
+          eventCountForMappedType: 1,
+        }),
+      ).toBe(true);
+      expect(
+        doesMilestoneTriggerMatchEvent({
+          triggerType: MilestoneTriggerType.FirstMissionCompleted,
+          triggerConfigJson: null,
+          event: makeEvent({ eventType: REWARD_EVENT_TYPES.MissionCompleted }),
+          eventCountForMappedType: 0,
+        }),
+      ).toBe(false);
       expect(
         doesMilestoneTriggerMatchEvent({
           triggerType: MilestoneTriggerType.FirstMissionCompleted,

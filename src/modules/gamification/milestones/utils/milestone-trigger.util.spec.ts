@@ -57,7 +57,7 @@ describe('milestone trigger util (milestones package entry)', () => {
     ).toThrow(InvalidMilestoneTriggerConfigError);
   });
 
-  it('matches first lesson and never matches FIRST_MISSION_COMPLETED', () => {
+  it('matches first lesson and FIRST_MISSION_COMPLETED on matching event and count >= 1', () => {
     expect(
       doesMilestoneTriggerMatchEvent({
         triggerType: MilestoneTriggerType.FirstLessonCompleted,
@@ -80,11 +80,43 @@ describe('milestone trigger util (milestones package entry)', () => {
         triggerConfigJson: null,
         event: {
           eventId: 'e2',
-          eventType: REWARD_EVENT_TYPES.LearningLessonCompleted,
+          eventType: REWARD_EVENT_TYPES.MissionCompleted,
           occurredAt: new Date('2026-09-01T00:00:00.000Z'),
           studentId: '11111111-1111-4111-8111-111111111111',
           parishId: '22222222-2222-4222-8222-222222222222',
           sourceId: 's2',
+        },
+        eventCountForMappedType: 1,
+      }),
+    ).toBe(true);
+
+    expect(
+      doesMilestoneTriggerMatchEvent({
+        triggerType: MilestoneTriggerType.FirstMissionCompleted,
+        triggerConfigJson: null,
+        event: {
+          eventId: 'e3',
+          eventType: REWARD_EVENT_TYPES.MissionCompleted,
+          occurredAt: new Date('2026-09-01T00:00:00.000Z'),
+          studentId: '11111111-1111-4111-8111-111111111111',
+          parishId: '22222222-2222-4222-8222-222222222222',
+          sourceId: 's3',
+        },
+        eventCountForMappedType: 0,
+      }),
+    ).toBe(false);
+
+    expect(
+      doesMilestoneTriggerMatchEvent({
+        triggerType: MilestoneTriggerType.FirstMissionCompleted,
+        triggerConfigJson: null,
+        event: {
+          eventId: 'e4',
+          eventType: REWARD_EVENT_TYPES.LearningLessonCompleted,
+          occurredAt: new Date('2026-09-01T00:00:00.000Z'),
+          studentId: '11111111-1111-4111-8111-111111111111',
+          parishId: '22222222-2222-4222-8222-222222222222',
+          sourceId: 's4',
         },
         eventCountForMappedType: 1,
       }),
