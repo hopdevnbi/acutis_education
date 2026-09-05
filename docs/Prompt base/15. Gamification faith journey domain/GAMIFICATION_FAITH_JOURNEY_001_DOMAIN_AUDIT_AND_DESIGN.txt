@@ -1,0 +1,1324 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #001/7
+DOMAIN AUDIT + OWNERSHIP + REWARD MODEL + API DESIGN
+AUDIT / DESIGN ONLY — FAST IMPLEMENTATION MODE
+
+IMPORTANT WORKFLOW
+------------------
+Fast Implementation Mode is ACTIVE.
+
+Read and obey:
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+For this audit/design prompt:
+- do NOT run tests
+- do NOT run lint/typecheck/build
+- do NOT run Docker
+- do NOT run DB commands
+- do NOT run npm audit
+- do NOT run migrations
+- do NOT run seeds
+
+This prompt is architecture/domain design only.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+No commit is needed for an audit-only prompt unless tracked files are unexpectedly changed.
+
+CONTEXT
+-------
+Previous backend implementation phase:
+
+ATTENDANCE + CLASS OPERATIONS IMPLEMENTATION PHASE COMPLETE
+
+Runtime validation is intentionally deferred to:
+FE INTEGRATION / STABILIZATION / VALIDATION PHASE
+
+Next backend phase:
+
+GAMIFICATION + FAITH JOURNEY
+
+Requested major capabilities:
+
+- Points ledger
+- Badges
+- Missions
+- Milestones
+
+Estimated:
+6–8 prompts
+
+Use 7 prompts unless audit proves another count is materially cleaner.
+
+Current:
+#001/7 — DOMAIN AUDIT + DESIGN ONLY
+
+Do NOT implement production business code yet.
+
+MANDATORY READING
+-----------------
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Especially:
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+Read relevant final reports if available:
+
+docs/CATECHIST_PARENT_005_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_005_FAST_MODE_FINALIZATION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/PRACTICE*.md
+docs/CURRICULUM*.md
+docs/QUESTION_BANK*.md
+
+Inspect only relevant code:
+
+src/modules/learning-progress/
+src/modules/practice/
+src/modules/exam/
+src/modules/class-operations/
+src/modules/enrollment/
+src/modules/student/
+src/modules/family-portal/
+src/modules/auth/
+src/modules/access-control/
+src/modules/class/
+src/modules/curriculum/
+src/database/migrations/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+README.md
+package.json
+test/
+
+Do NOT deep-audit unrelated modules.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Define the bounded context and implementation plan for:
+
+GAMIFICATION + FAITH JOURNEY
+
+Core capabilities:
+
+1. Points ledger
+2. Point balance / summary
+3. Badge definitions
+4. Badge awards
+5. Mission definitions
+6. Mission progress
+7. Mission completion
+8. Milestone definitions
+9. Milestone achievements
+10. Faith Journey read model / timeline / progress summary
+
+Answer precisely:
+
+- one module or multiple modules?
+- what belongs to Gamification vs Faith Journey?
+- who owns points?
+- are points mutable balances or immutable ledger entries?
+- how are duplicate rewards prevented?
+- how are reward rules triggered?
+- who can define badges/missions/milestones?
+- who can award manually?
+- which achievements are automatic?
+- how do LearningProgress/Practice/Exam/Attendance integrate?
+- do those modules call Gamification, or does Gamification consume events/public APIs?
+- how to avoid cycles?
+- what is student scope?
+- what can Parent/Catechist view?
+- should leaderboards exist now or be deferred?
+- what APIs are needed?
+- exact tables?
+- exact prompt plan?
+
+==================================================
+PART A — BOUNDED CONTEXT OPTIONS
+==================================================
+
+Evaluate architecture options.
+
+OPTION A
+--------
+One module:
+`gamification`
+
+Owns:
+- points ledger
+- badges
+- missions
+- milestones
+- faith journey read model
+
+OPTION B
+--------
+Two modules:
+`gamification`
+`faith-journey`
+
+Gamification owns:
+- points
+- badges
+- missions
+
+FaithJourney owns:
+- milestones
+- spiritual journey timeline
+
+OPTION C
+--------
+One broader module:
+`faith-journey`
+
+Owns all reward/progression concepts.
+
+Evaluate:
+- ownership clarity
+- future microservice extraction
+- coupling with education domain
+- terminology
+- ability to support non-point spiritual milestones
+- FE/Mobile simplicity
+- event processing
+- long-term maintainability
+
+Strong preference:
+avoid mixing pedagogical source-of-truth data with reward projections.
+
+Required verdict:
+
+FINAL MODULE STRATEGY: <one/two modules>
+FINAL MODULE NAME(S): <names>
+
+==================================================
+PART B — DOMAIN PRINCIPLE
+==================================================
+
+This platform is catechism/faith education.
+
+Gamification must support learning motivation without turning sacramental/spiritual life into a simplistic competitive score.
+
+Design should distinguish:
+
+GAME-LIKE REWARDS:
+- points
+- badges
+- missions
+
+FAITH JOURNEY:
+- milestones
+- progress markers
+- achievements
+- participation/history
+
+Avoid:
+- public ranking of spiritual worth
+- “holiness score”
+- competitive comparison of sacramental/spiritual status
+- leaderboards by default
+
+Required design principle:
+POINTS ARE ENGAGEMENT REWARDS, NOT SPIRITUAL VALUE.
+
+Document this explicitly.
+
+==================================================
+PART C — POINTS LEDGER
+==================================================
+
+Strong recommendation:
+immutable ledger, not mutable points counter.
+
+Candidate table:
+`point_ledger_entries`
+
+Each entry:
+- id
+- studentId
+- enrollmentId nullable if context-specific
+- parishId
+- academicYearId nullable
+- pointsDelta signed integer
+- sourceType
+- sourceId
+- reasonCode
+- descriptionKey / short label
+- awardedByUserId nullable for automated rewards
+- createdAt
+- idempotencyKey / uniqueness key
+
+Balance:
+SUM(pointsDelta)
+
+Do NOT make balance a manually edited canonical column unless cached projection is justified.
+
+Support negative entries only if needed for corrections/reversals.
+
+Required decision:
+POINT MODEL = immutable ledger / mutable balance / hybrid
+
+==================================================
+PART D — POINT SOURCE TYPES
+==================================================
+
+Propose stable source types, e.g.:
+
+PRACTICE_COMPLETED
+LESSON_COMPLETED
+EXAM_COMPLETED
+EXAM_SCORE_THRESHOLD
+ATTENDANCE_PRESENT
+ATTENDANCE_LATE
+MISSION_COMPLETED
+BADGE_BONUS
+MANUAL_AWARD
+ADJUSTMENT
+REVERSAL
+
+Do not invent too many.
+
+Keep:
+sourceType + sourceId + rule/reasonCode
+
+Prevent duplicate reward for the same source/rule.
+
+==================================================
+PART E — IDEMPOTENCY / DUPLICATE REWARD
+==================================================
+
+This is critical.
+
+Automatic reward must be idempotent.
+
+Candidate uniqueness:
+(studentId, sourceType, sourceId, reasonCode)
+
+or:
+idempotencyKey generated from:
+studentId + rewardRuleId + sourceId
+
+Required:
+- exact strategy
+- duplicate event retry behavior
+- correction/reversal semantics
+- manual award uniqueness behavior
+
+No double points from retry/webhook/replayed event.
+
+==================================================
+PART F — BADGES
+==================================================
+
+Separate:
+BadgeDefinition
+BadgeAward
+
+BadgeDefinition candidate:
+- id
+- code
+- name
+- description
+- icon/media reference optional
+- category
+- status
+- visibility
+- ruleType
+- ruleConfig
+- pointsBonus optional
+- created/updated timestamps
+
+BadgeAward:
+- id
+- badgeId
+- studentId
+- enrollmentId nullable
+- awardedAt
+- sourceType/sourceId
+- awardedByUserId nullable
+- revokedAt nullable if revocation supported
+
+Decide:
+- can badges repeat?
+- one-time badge vs repeatable badge
+- revocation?
+- manual badges?
+- automatic badges?
+
+Strong MVP:
+badge code unique
+non-repeatable by default
+manual + automatic award support
+revocation only if needed
+
+==================================================
+PART G — MISSION MODEL
+==================================================
+
+Mission is a goal/challenge over one or more measurable conditions.
+
+Potential:
+MissionDefinition
+MissionAssignment
+MissionProgress
+
+Mission examples:
+- complete 3 lessons
+- finish 5 practice sessions
+- attend 4 class sessions
+- complete one exam
+- maintain activity over a week
+
+Avoid overly generic rules engine if not required.
+
+Compare:
+
+A. strongly typed mission condition types
+B. JSON rule configuration
+C. dedicated mission step records
+
+Required MVP design.
+
+Potential mission lifecycle:
+DRAFT
+ACTIVE
+COMPLETED/ARCHIVED
+
+Mission assignment scope:
+- global
+- parish
+- class
+- individual student
+
+Decide exact MVP scope.
+
+==================================================
+PART H — MISSION PROGRESS
+==================================================
+
+Need to answer:
+
+- computed dynamically from source modules?
+- persisted progress projection?
+- event-driven increments?
+- hybrid?
+
+Strong preference:
+persisted mission progress projection updated idempotently by reward processing.
+
+But avoid circular writes.
+
+Required design:
+MISSION PROGRESS MODEL.
+
+Define:
+- target
+- current progress
+- completedAt
+- idempotent contribution tracking if needed
+
+==================================================
+PART I — MILESTONES
+==================================================
+
+Milestones are broader journey markers.
+
+Examples:
+- first lesson completed
+- first month active
+- completed catechism level
+- 10 attended classes
+- completed a curriculum unit
+- first exam passed
+- mission streak milestone
+
+Also potentially faith-specific milestones, but be careful:
+sacramental records may be a future separate pastoral/sacrament domain and should NOT be faked in Gamification.
+
+Required distinction:
+
+SYSTEM/LEARNING MILESTONE
+vs
+SACRAMENTAL/PASTORAL MILESTONE
+
+Strong recommendation:
+MVP supports system/learning milestones only.
+Sacramental records deferred to a dedicated domain.
+
+==================================================
+PART J — FAITH JOURNEY READ MODEL
+==================================================
+
+Define whether Faith Journey should be:
+
+- dedicated persisted table
+- composed read model
+- timeline projection of badges/milestones/missions/points
+
+Strong preference:
+read-model/timeline projection, not another source-of-truth table duplicating all events.
+
+Candidate endpoint:
+GET /api/v1/me/learner/faith-journey
+
+Could include:
+- points summary
+- latest badges
+- active missions
+- completed missions
+- milestones
+- recent journey events
+
+Parent:
+linked-child view
+
+Catechist:
+assigned student/class view if needed
+
+Required:
+FAITH JOURNEY DATA MODEL STRATEGY.
+
+==================================================
+PART K — EVENT / INTEGRATION STRATEGY
+==================================================
+
+Existing source modules own truths:
+
+LearningProgress owns:
+lesson/content completion
+
+Practice owns:
+practice attempts/results
+
+Exam owns:
+formal exam attempts/results
+
+ClassOperations owns:
+attendance
+
+Gamification must NOT write into those domains.
+
+Evaluate integration models:
+
+A. direct synchronous calls:
+source module -> GamificationService
+
+B. application/domain events:
+source module emits event
+Gamification consumes
+
+C. polling/read recompute
+
+Strong architectural preference:
+event-style integration with public contracts, but repository may not yet have event infrastructure.
+
+Audit existing event bus / EventEmitter / queue patterns.
+
+If no robust bus exists:
+design an internal application event abstraction that is future-extraction safe without over-engineering.
+
+No direct foreign repository queries.
+
+==================================================
+PART L — CROSS-MODULE DEPENDENCY DIRECTION
+==================================================
+
+Strong requirement:
+avoid cycles.
+
+Possible direction:
+
+Source modules
+  -> publish stable event/contracts
+Gamification
+  -> consumes reward events
+
+FaithJourney
+  -> reads Gamification public API
+
+But if direct import would create cycles, use:
+shared domain event contract or application event bus.
+
+Document exact dependency graph.
+
+No default forwardRef.
+
+==================================================
+PART M — REWARD EVENT CONTRACT
+==================================================
+
+Design a generic but bounded event contract, e.g.:
+
+RewardEvent:
+- eventId
+- eventType
+- studentId
+- enrollmentId?
+- parishId?
+- academicYearId?
+- sourceId
+- occurredAt
+- metadata allow-list
+
+Examples:
+LearningLessonCompleted
+PracticeCompleted
+ExamCompleted
+AttendanceMarkedPresent
+
+Do not pass entire entities.
+
+No PII.
+
+Need idempotent eventId.
+
+==================================================
+PART N — REWARD RULES
+==================================================
+
+Decide whether points rules are:
+
+1. hardcoded constants
+2. DB-configurable RewardRule table
+3. hybrid
+
+Evaluate admin flexibility vs complexity.
+
+Candidate RewardRule:
+- id
+- code
+- eventType
+- points
+- status
+- maxAwardsPerSource
+- scope
+- effective dates
+
+Strong MVP candidate:
+DB-configurable stable reward rules for points
+with typed event matching.
+
+But avoid building a generic expression engine.
+
+Required:
+REWARD RULE MODEL.
+
+==================================================
+PART O — MANUAL POINT ADJUSTMENT
+==================================================
+
+Who can manually award/correct points?
+
+Potential:
+SUPER_ADMIN
+PARISH_ADMIN own parish
+CATECHIST assigned student/class
+
+Parent/Student:
+never.
+
+Prefer:
+manual award is ledger entry with reason.
+Correction uses compensating negative/positive entry, never update/delete old ledger row.
+
+Define:
+- max magnitude?
+- note/reason required?
+- staff scope?
+- audit actor?
+
+==================================================
+PART P — BADGE ADMINISTRATION
+==================================================
+
+Who can create/manage badge definitions?
+
+Potential:
+SUPER_ADMIN global
+PARISH_ADMIN parish-specific
+CATECHIST should likely NOT define global badges
+
+Need decide badge scope:
+GLOBAL
+PARISH
+maybe CLASS
+
+Strong MVP:
+GLOBAL by SuperAdmin
+PARISH by ParishAdmin
+CATECHIST can view/award only specific manual badges if permitted
+
+Document exact policy.
+
+==================================================
+PART Q — MISSION ADMINISTRATION
+==================================================
+
+Mission scope candidates:
+GLOBAL
+PARISH
+CLASS
+STUDENT
+
+Who manages:
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST assigned class for CLASS missions
+
+Parent/Student:
+read/progress only.
+
+Do not allow Catechist cross-class mission assignment.
+
+==================================================
+PART R — MILESTONE ADMINISTRATION
+==================================================
+
+MVP preference:
+system-defined milestones, not arbitrary user-created spiritual milestones.
+
+Potential:
+SuperAdmin manages milestone definitions.
+Achievements automatic.
+
+Parish-specific milestone definitions may be deferred.
+
+Decide.
+
+==================================================
+PART S — STUDENT / PARENT / CATECHIST READ SCOPE
+==================================================
+
+Student:
+self only
+
+Parent:
+ACTIVE guardian-linked child only
+
+Catechist:
+ACTIVE assigned class students only
+
+ParishAdmin:
+own parish
+
+SuperAdmin:
+global admin endpoints
+
+No global student gamification lookup for ordinary actors.
+
+No `/me` admin impersonation.
+
+==================================================
+PART T — LEADERBOARD DECISION
+==================================================
+
+Evaluate but strongly consider deferring.
+
+Reasons:
+- minors/privacy
+- spiritual context
+- unhealthy competition
+- ranking complexity
+- scope/moderation
+
+Potential future:
+class-local opt-in engagement leaderboard
+
+Required verdict:
+LEADERBOARD IN MVP: YES/NO
+
+Strong default:
+NO.
+
+==================================================
+PART U — STREAKS
+==================================================
+
+Evaluate streaks.
+
+Examples:
+- learning-day streak
+- weekly mission streak
+
+Do not build if it materially increases complexity.
+
+Could be deferred unless mission/milestone model naturally supports it.
+
+Required verdict:
+STREAKS IN MVP: YES/NO
+
+==================================================
+PART V — EXACT TABLE DESIGN
+==================================================
+
+Propose exact MVP table set.
+
+Candidate:
+
+1. reward_rules
+2. point_ledger_entries
+3. badge_definitions
+4. badge_awards
+5. mission_definitions
+6. mission_assignments
+7. mission_progress
+8. milestone_definitions
+9. milestone_achievements
+10. reward_event_receipts / processed_reward_events
+
+Evaluate whether all are necessary.
+
+Maybe combine:
+mission assignment + progress
+
+Maybe event receipts are required for idempotency.
+
+Do not create unnecessary tables.
+
+Required:
+EXACT TABLE COUNT
+EXACT TABLE NAMES
+
+For each:
+- ownership
+- PK
+- important fields
+- unique constraints
+- status
+- timestamps
+- scalar cross-module IDs
+- deletion/retention semantics
+
+==================================================
+PART W — LEDGER RETENTION
+==================================================
+
+Points ledger should be append-only.
+
+No UPDATE/DELETE of awarded entry except perhaps metadata correction if absolutely necessary.
+
+Reversal:
+new compensating entry.
+
+Historical retention:
+must survive class/enrollment transfer/archive.
+
+No dangerous cascade delete.
+
+==================================================
+PART X — MISSION / BADGE / MILESTONE RETENTION
+==================================================
+
+Definitions may be archived.
+
+Awards/achievements remain historical.
+
+Do not delete student achievement history when:
+- enrollment transferred
+- class completed
+- academic year closed
+
+Define archival rules.
+
+==================================================
+PART Y — LOCALIZATION
+==================================================
+
+Gamification labels may need translation.
+
+Audit existing Localization architecture.
+
+Do NOT import Localization runtime just to return labels if architecture says translation ownership is separate.
+
+Decide:
+- definition stable code + default label fields
+- translation revisions later
+or
+- localized definition pattern now
+
+Keep scope realistic.
+
+==================================================
+PART Z — API INVENTORY
+==================================================
+
+Design exact MVP APIs.
+
+Potential learner:
+
+GET /api/v1/me/learner/gamification/summary
+GET /api/v1/me/learner/points
+GET /api/v1/me/learner/badges
+GET /api/v1/me/learner/missions
+GET /api/v1/me/learner/missions/:missionId
+GET /api/v1/me/learner/milestones
+GET /api/v1/me/learner/faith-journey
+
+Potential Parent:
+
+GET /api/v1/me/parent/enrollments/:enrollmentId/gamification/summary
+GET /api/v1/me/parent/enrollments/:enrollmentId/faith-journey
+
+Potential staff:
+
+GET /api/v1/students/:studentId/gamification/summary
+POST /api/v1/students/:studentId/points/adjustments
+POST/GET/PATCH badge definitions
+POST award badge if manual allowed
+CRUD/activate/archive missions
+GET mission progress
+CRUD milestone definitions if allowed
+
+Audit project route conventions.
+
+Produce exact endpoint inventory, not just examples.
+
+==================================================
+PART AA — FE / MOBILE READ MODELS
+==================================================
+
+Define contract for student dashboard:
+
+GamificationSummary:
+- pointsBalance
+- lifetimePointsEarned
+- badgesEarned
+- activeMissionCount
+- completedMissionCount
+- milestonesAchieved
+- latestAchievement
+
+FaithJourney:
+- summary
+- recent timeline items
+- milestones
+- active missions
+
+Keep payload bounded.
+
+No raw ledger full history by default unless explicitly requested.
+
+==================================================
+PART AB — SECURITY / MINORS
+==================================================
+
+Critical:
+
+- no public profiles
+- no global leaderboard
+- Parent linked child only
+- Student self only
+- Catechist assigned class only
+- no cross-parish access
+- no spiritual-value scoring
+- no PII in reward events
+- manual adjustments audited
+- no arbitrary client point mutation
+- client cannot submit pointsDelta on auto-reward endpoint
+- no trusting studentId from `/me` route payload
+
+==================================================
+PART AC — FRAUD / ABUSE
+==================================================
+
+Consider:
+
+- duplicate event retries
+- replayed source completion
+- manual award abuse
+- negative balance
+- deleted source objects
+- mission farming
+- badge repeat abuse
+
+Design protections:
+- idempotency
+- rule limits
+- immutable ledger
+- scoped staff permissions
+- optional daily cap only if necessary
+
+Do not over-engineer anti-cheat without evidence.
+
+==================================================
+PART AD — RBAC
+==================================================
+
+Propose exact permissions.
+
+Candidates:
+
+gamification.read
+points.read
+points.adjust
+badges.read
+badges.manage
+badges.award
+missions.read
+missions.manage
+milestones.read
+milestones.manage
+
+Avoid permission explosion.
+
+Maybe:
+
+gamification.read
+gamification.manage
+points.adjust
+badges.award
+
+plus domain-level scope.
+
+Required final permission set and role matrix:
+
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST
+PARENT
+STUDENT
+
+==================================================
+PART AE — ERROR CONTRACT
+==================================================
+
+Design stable errors:
+
+RewardRuleNotFound
+DuplicateRewardEvent
+InvalidPointAdjustment
+BadgeNotFound
+BadgeAlreadyAwarded
+MissionNotFound
+MissionNotActive
+MissionAssignmentNotFound
+MilestoneNotFound
+MilestoneAlreadyAchieved
+GamificationAccessDenied
+
+Map:
+400 validation
+401 unauthenticated
+403 scope
+404 resource
+409 duplicate/lifecycle
+422 domain rule if project convention supports
+
+Keep set minimal.
+
+==================================================
+PART AF — TEST STRATEGY
+==================================================
+
+Under Fast Implementation Mode:
+write tests in later prompts, do not run.
+
+Plan:
+
+Unit:
+- ledger balance
+- idempotency
+- point adjustments
+- badge uniqueness
+- mission progress
+- milestone achievement
+- scope logic
+- read-model mapping
+
+Integration specs:
+- ledger append-only
+- event receipt idempotency
+- badge award
+- mission assignment/progress
+- milestone achievement
+- retention across transfer
+
+DB e2e specs:
+- Student self
+- Parent linked child
+- Catechist assigned class
+- ParishAdmin own parish
+- cross-scope denials
+- manual point adjustment
+- duplicate automatic reward prevention
+- mission/badge/milestone flows
+- no PII
+
+Do not execute them in implementation prompts.
+
+==================================================
+PART AG — DEMO SEED / POSTMAN STRATEGY
+==================================================
+
+For final prompt:
+
+Demo student should have:
+- points from multiple sources
+- at least 2 badges
+- one active mission
+- one completed mission
+- multiple milestones
+- faith journey timeline
+
+Parent and Catechist fixtures for scoped reads.
+
+Postman:
+- learner summary
+- points ledger
+- badges
+- missions
+- milestones
+- faith journey
+- staff admin/manage flows
+- denials
+
+==================================================
+PART AH — DEPENDENCY GRAPH
+==================================================
+
+Required output must show:
+
+source modules
+  → event abstraction / reward contract
+  → Gamification
+
+Faith Journey read model
+  → Gamification public API
+
+No reverse dependency from Gamification into source repositories.
+
+If one module chosen:
+show internal boundaries.
+
+If two modules:
+show allowed import direction.
+
+No cycles.
+No forwardRef by default.
+
+==================================================
+PART AI — IMPLEMENTATION PROMPT PLAN
+==================================================
+
+Default proposed 7-prompt plan:
+
+#001/7
+Domain audit + architecture + API design
+
+#002/7
+Persistence foundation:
+ledger + definitions + event receipts + module shell
+
+#003/7
+Points engine:
+reward events + rules + ledger + manual adjustments
+
+#004/7
+Badges + milestones
+
+#005/7
+Missions + mission progress/completion
+
+#006/7
+Learner/Parent/Catechist Faith Journey reads + security/contracts
+
+#007/7
+Fast-mode finalization:
+demo seed + Postman + README/OpenAPI + static final audit
+
+Audit may adjust ordering/count if justified.
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Roadmap position
+3. Existing source-domain capabilities
+4. Existing event/integration infrastructure
+5. Bounded-context options
+6. Final module strategy
+7. Final module name(s)
+8. Domain principles
+9. Points ledger model
+10. Point source types
+11. Idempotency strategy
+12. Reversal/correction strategy
+13. Reward rule model
+14. Badge definition model
+15. Badge award model
+16. Badge repeat/revoke policy
+17. Mission definition model
+18. Mission assignment model
+19. Mission progress model
+20. Mission lifecycle
+21. Milestone definition model
+22. Milestone achievement model
+23. Faith Journey strategy
+24. Event integration strategy
+25. Reward event contract
+26. Cross-module dependency graph
+27. LearningProgress integration
+28. Practice integration
+29. Exam integration
+30. Attendance integration
+31. Manual point adjustment policy
+32. Badge administration
+33. Mission administration
+34. Milestone administration
+35. Student scope
+36. Parent scope
+37. Catechist scope
+38. ParishAdmin/SuperAdmin scope
+39. Leaderboard decision
+40. Streak decision
+41. Exact table set
+42. Table ownership
+43. Ledger retention
+44. Achievement retention
+45. Localization strategy
+46. Exact permission set
+47. Role matrix
+48. Exact API inventory
+49. Learner read models
+50. Parent read models
+51. Catechist/admin read models
+52. Data minimization
+53. Security/minors
+54. Abuse/fraud prevention
+55. Error contract
+56. Performance/N+1 design
+57. FE contract
+58. Mobile contract
+59. Test strategy
+60. Demo seed strategy
+61. Postman strategy
+62. Risks/deferred
+63. BLOCKER/HIGH/MEDIUM/LOW
+64. Exact prompt count
+65. Prompt plan
+66. #002 readiness
+67. Commit recommendation
+
+==================================================
+REQUIRED VERDICTS
+==================================================
+
+GO / NO-GO FOR IMPLEMENTATION: GO/NO-GO
+
+FINAL MODULE STRATEGY: <one/two modules>
+
+FINAL MODULE NAME(S): <names>
+
+POINT MODEL: <immutable ledger/mutable/hybrid>
+
+REWARD RULE MODEL READY: YES/NO
+
+REWARD EVENT MODEL READY: YES/NO
+
+IDEMPOTENCY MODEL READY: YES/NO
+
+BADGE MODEL READY: YES/NO
+
+MISSION MODEL READY: YES/NO
+
+MILESTONE MODEL READY: YES/NO
+
+FAITH JOURNEY MODEL READY: YES/NO
+
+LEADERBOARD IN MVP: YES/NO
+
+STREAKS IN MVP: YES/NO
+
+NEW TABLES REQUIRED: <count>
+
+NEW RBAC PERMISSIONS REQUIRED: YES/NO
+
+STUDENT CONTRACT READY: YES/NO
+
+PARENT CONTRACT READY: YES/NO
+
+CATECHIST CONTRACT READY: YES/NO
+
+SECURITY/MINORS MODEL READY: YES/NO
+
+MODULE BOUNDARY READY BY DESIGN: YES/NO
+
+FINAL RECOMMENDED PROMPT COUNT: <6/7/8>
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+==================================================
+#002 GATE
+==================================================
+
+Proceed if:
+
+- BLOCKER=0
+- HIGH=0
+- module strategy decided
+- exact table set decided
+- immutable/idempotent points model ready
+- badge model ready
+- mission model ready
+- milestone model ready
+- event integration direction ready
+- security/minors model ready
+- RBAC ready
+- API inventory ready
+
+Runtime validation is NOT required under Fast Implementation Mode.
+
+Then recommend exactly:
+
+GAMIFICATION + FAITH JOURNEY #002/7 —
+PERSISTENCE FOUNDATION + LEDGER / DEFINITIONS / EVENT RECEIPTS
+
+Do NOT implement automatically.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Respond concisely:
+
+- #001 audit status
+- module strategy
+- point model
+- badge model
+- mission model
+- milestone model
+- faith journey strategy
+- event integration
+- table count
+- permissions
+- leaderboard/streak decisions
+- prompt count
+- BLOCKER/HIGH
+- #002 readiness
+- report path
+
+Do NOT run validation commands.
+Do NOT print git add.
+Do NOT run git add/commit/push.

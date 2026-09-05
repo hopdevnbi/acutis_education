@@ -1,0 +1,1351 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #002/7
+FAST IMPLEMENTATION MODE
+PERSISTENCE FOUNDATION + LEDGER / DEFINITIONS / EVENT RECEIPTS
+
+IMPORTANT WORKFLOW
+------------------
+Fast Implementation Mode is ACTIVE.
+
+Read and obey:
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt is CODE-FIRST.
+
+MUST:
+- write production code
+- write entities
+- write migration(s)
+- write module wiring
+- write test/spec files
+- write report
+
+DO NOT RUN:
+- npm test
+- Jest
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB reset/prepare
+- migrations against DB
+- seed commands
+- Docker
+- Postman/Newman
+
+Do not mark unexecuted validation as FAIL.
+
+Use report wording:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture/security remain mandatory inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "feat(gamification): add persistence foundation"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#001/7 — Domain audit + architecture + API design
+
+#001 final decisions:
+
+MODULE:
+- one NestJS module
+- name: `gamification`
+- path: `src/modules/gamification/`
+- export: `GamificationService` only
+- Faith Journey is a read capability inside this module
+
+POINTS:
+- immutable append-only ledger
+- no mutable canonical balance
+- balance = SUM(points_delta)
+
+IDEMPOTENCY:
+- processed_reward_events unique(event_id)
+- ledger uniqueness for automatic awards:
+  (student_id, source_type, source_id, reason_code)
+
+REWARD RULES:
+- DB-configurable typed event matching
+- no generic expression engine
+
+BADGES:
+- definition + award tables
+- non-repeatable by default
+- manual + automatic support
+- soft revoke
+
+MISSIONS:
+- definition + persisted progress
+- no mission assignment table in MVP
+- GLOBAL / PARISH / CLASS scope
+- typed condition types
+
+MILESTONES:
+- system/learning milestones only
+- no sacramental/pastoral milestones
+
+FAITH JOURNEY:
+- composed read model
+- no duplicated timeline source-of-truth table
+
+LEADERBOARD:
+- NO
+
+STREAKS:
+- NO
+
+TABLES:
+1. reward_rules
+2. point_ledger_entries
+3. processed_reward_events
+4. badge_definitions
+5. badge_awards
+6. mission_definitions
+7. mission_progress
+8. milestone_definitions
+9. milestone_achievements
+
+RBAC permissions:
+- gamification.read
+- gamification.manage
+- points.adjust
+- badges.award
+
+Current:
+#002/7 — persistence foundation only
+
+Do NOT implement points ingest engine yet.
+Do NOT implement HTTP controllers yet.
+Do NOT emit reward events from source modules yet.
+Do NOT implement Faith Journey reads yet.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/GAMIFICATION_FAITH_JOURNEY_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Inspect relevant patterns:
+src/modules/class-operations/
+src/modules/exam/
+src/modules/practice/
+src/modules/learning-progress/
+src/modules/auth/
+src/modules/access-control/
+src/database/migrations/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+package.json
+test/
+
+Do not deep-audit unrelated modules.
+
+==================================================
+PART A — MODULE SHELL
+==================================================
+
+Create:
+
+src/modules/gamification/
+
+Recommended structure:
+
+gamification.module.ts
+gamification.service.ts
+
+points/
+  entities/
+  services/
+  interfaces/
+  enums/
+  constants/
+  errors/
+
+rewards/
+  entities/
+  services/
+  interfaces/
+  enums/
+  constants/
+  errors/
+
+badges/
+  entities/
+  services/
+  interfaces/
+  enums/
+  errors/
+
+missions/
+  entities/
+  services/
+  interfaces/
+  enums/
+  errors/
+
+milestones/
+  entities/
+  services/
+  interfaces/
+  enums/
+  errors/
+
+faith-journey/
+  interfaces/
+  services/
+
+access/
+  gamification-access.service.ts
+
+No controllers in #002.
+
+Register `GamificationModule` in AppModule.
+
+==================================================
+PART B — MODULE IMPORTS / BOUNDARIES
+==================================================
+
+GamificationModule may import public modules only as needed for future access readiness:
+
+- StudentModule
+- EnrollmentModule
+- ClassModule
+- ParishModule
+- AuthModule
+- AccessControlModule
+
+Strong preference:
+do NOT import source reward-producing modules yet:
+- LearningProgressModule
+- PracticeModule
+- ExamModule
+- ClassOperationsModule
+
+Event-driven integration will be introduced in #003.
+
+Do NOT import:
+- FamilyPortalModule
+- LocalizationModule
+- MediaModule unless an icon media ID type requires no runtime module import
+- NotificationModule
+
+No forwardRef.
+
+No foreign entity/repository imports.
+
+GamificationModule exports:
+`GamificationService` only.
+
+==================================================
+PART C — MIGRATION STRATEGY
+==================================================
+
+Create new migration(s) for all 9 tables.
+
+Preferred:
+one cohesive migration for the Gamification persistence foundation.
+
+Creation order should satisfy own-module FKs safely.
+
+Suggested order:
+
+1. reward_rules
+2. processed_reward_events
+3. point_ledger_entries
+4. badge_definitions
+5. badge_awards
+6. mission_definitions
+7. mission_progress
+8. milestone_definitions
+9. milestone_achievements
+
+Rollback reverse order.
+
+Do NOT:
+- edit landed migrations
+- use synchronize=true
+- run migration against DB
+
+==================================================
+PART D — REWARD RULES TABLE
+==================================================
+
+Create `reward_rules`.
+
+Suggested columns:
+
+id
+- uniqueidentifier PK
+- app UUID
+
+code
+- varchar/nvarchar suitable for stable code
+- NOT NULL
+- unique
+
+event_type
+- varchar(64) NOT NULL
+
+source_type
+- varchar(64) NOT NULL
+
+points
+- int NOT NULL
+- >= 0
+
+status
+- varchar(16) NOT NULL
+- ACTIVE | INACTIVE
+
+max_awards_per_source
+- int NOT NULL
+- default 1
+- > 0
+
+scope_type
+- varchar(16) NOT NULL
+- GLOBAL | PARISH
+
+parish_id
+- uniqueidentifier NULL
+
+effective_from
+- datetime2 NULL
+
+effective_to
+- datetime2 NULL
+
+created_at
+updated_at
+- datetime2 UTC
+
+Checks:
+- valid status
+- valid scope
+- GLOBAL => parish_id NULL
+- PARISH => parish_id NOT NULL
+- effective_to > effective_from when both set
+- points >= 0
+- max_awards_per_source > 0
+
+Cross-module scalar IDs only.
+
+If SQL FK to parish matches existing project convention:
+use NO ACTION.
+Otherwise document soft scalar reference.
+
+==================================================
+PART E — PROCESSED REWARD EVENTS TABLE
+==================================================
+
+Create `processed_reward_events`.
+
+Purpose:
+event receipt / replay protection.
+
+Columns:
+
+id
+- uniqueidentifier PK
+
+event_id
+- uniqueidentifier NOT NULL
+- UNIQUE
+
+event_type
+- varchar(64) NOT NULL
+
+student_id
+- uniqueidentifier NOT NULL
+
+source_id
+- uniqueidentifier NOT NULL
+
+processed_at
+- datetime2 NOT NULL
+
+created_at
+- datetime2 NOT NULL
+
+Optional:
+result_summary_json only if truly useful.
+Strong preference: omit.
+
+No PII.
+
+No raw event metadata blob unless explicitly required.
+
+==================================================
+PART F — POINT LEDGER TABLE
+==================================================
+
+Create `point_ledger_entries`.
+
+Columns:
+
+id
+- uniqueidentifier PK
+
+student_id
+- uniqueidentifier NOT NULL
+
+enrollment_id
+- uniqueidentifier NULL
+
+parish_id
+- uniqueidentifier NOT NULL
+
+academic_year_id
+- uniqueidentifier NULL
+
+points_delta
+- int NOT NULL
+- signed
+- reject 0 at DB or domain layer
+
+source_type
+- varchar(64) NOT NULL
+
+source_id
+- uniqueidentifier NOT NULL
+
+reason_code
+- varchar(128) NOT NULL
+
+description_key
+- nvarchar(256) NULL
+
+staff_note
+- nvarchar(500) NULL
+- manual/admin only
+- never returned to learner/parent by default
+
+awarded_by_user_id
+- uniqueidentifier NULL
+
+related_ledger_entry_id
+- uniqueidentifier NULL
+- own-table FK for REVERSAL/ADJUSTMENT reference
+
+created_at
+- datetime2 UTC
+- append-only
+
+Critical unique:
+(student_id, source_type, source_id, reason_code)
+
+Indexes:
+(student_id, created_at DESC equivalent)
+(parish_id, created_at)
+source lookup where useful
+
+No updated_at.
+No delete semantics.
+No mutable balance.
+
+==================================================
+PART G — POINT SOURCE ENUMS
+==================================================
+
+Create stable module-owned enums/constants:
+
+PointSourceType:
+- LESSON_COMPLETED
+- PRACTICE_COMPLETED
+- EXAM_COMPLETED
+- EXAM_SCORE_THRESHOLD
+- ATTENDANCE_PRESENT
+- ATTENDANCE_LATE
+- MISSION_COMPLETED
+- BADGE_BONUS
+- MANUAL_AWARD
+- ADJUSTMENT
+- REVERSAL
+
+RewardRuleStatus:
+ACTIVE
+INACTIVE
+
+RewardScopeType:
+GLOBAL
+PARISH
+
+Do not localize enum values.
+
+==================================================
+PART H — BADGE DEFINITIONS TABLE
+==================================================
+
+Create `badge_definitions`.
+
+Columns:
+
+id
+code
+name
+description
+category
+scope_type
+parish_id nullable
+status
+award_mode
+rule_event_type nullable
+rule_config_json nullable
+points_bonus nullable
+icon_media_asset_id nullable scalar UUID only
+created_at
+updated_at
+
+Enums:
+
+BadgeDefinitionStatus:
+DRAFT
+ACTIVE
+ARCHIVED
+
+BadgeAwardMode:
+AUTOMATIC
+MANUAL
+BOTH
+
+BadgeScopeType:
+GLOBAL
+PARISH
+
+Checks:
+- code unique
+- scope/parish consistency
+- points_bonus >= 0 when non-null
+- valid status/mode/scope
+
+Do not import MediaModule merely for icon ID.
+
+==================================================
+PART I — BADGE AWARDS TABLE
+==================================================
+
+Create `badge_awards`.
+
+Columns:
+
+id
+badge_definition_id
+student_id
+enrollment_id nullable
+parish_id
+awarded_at
+source_type
+source_id
+awarded_by_user_id nullable
+revoked_at nullable
+created_at
+
+Own FK:
+badge_definition_id -> badge_definitions
+
+Critical uniqueness:
+non-repeatable active badge per student.
+
+For MSSQL filtered unique index:
+(badge_definition_id, student_id)
+WHERE revoked_at IS NULL
+
+If project migration tooling supports filtered indexes, use it.
+Otherwise implement equivalent safe uniqueness design and document.
+
+No hard delete.
+
+==================================================
+PART J — MISSION DEFINITIONS TABLE
+==================================================
+
+Create `mission_definitions`.
+
+Columns:
+
+id
+code
+name
+description
+status
+scope_type
+parish_id nullable
+class_id nullable
+condition_type
+target_count
+points_bonus nullable
+starts_at nullable
+ends_at nullable
+created_at
+updated_at
+
+Enums:
+
+MissionDefinitionStatus:
+DRAFT
+ACTIVE
+ARCHIVED
+
+MissionScopeType:
+GLOBAL
+PARISH
+CLASS
+
+MissionConditionType:
+LESSONS_COMPLETED
+PRACTICE_COMPLETED
+ATTENDANCE_PRESENT_OR_LATE
+EXAMS_COMPLETED
+
+Checks:
+- target_count > 0
+- points_bonus >= 0 if non-null
+- scope consistency:
+  GLOBAL => parish_id/class_id null
+  PARISH => parish_id not null, class_id null
+  CLASS => class_id not null, parish_id not null or derived consistency if design says so
+- starts/ends ordering
+
+Unique code semantics:
+finalize safe index strategy:
+- GLOBAL code unique globally
+- PARISH code unique per parish
+- CLASS code unique per class
+
+Avoid nullable-column uniqueness traps in MSSQL.
+
+If easiest, use one generated/derived `scope_key` only if justified.
+Prefer clear filtered unique indexes.
+
+Document exact decision.
+
+==================================================
+PART K — MISSION PROGRESS TABLE
+==================================================
+
+Create `mission_progress`.
+
+Columns:
+
+id
+mission_definition_id
+student_id
+enrollment_id nullable
+current_count
+target_count
+status
+completed_at nullable
+last_event_id nullable
+created_at
+updated_at
+
+Enum:
+
+MissionProgressStatus:
+ACTIVE
+COMPLETED
+
+Unique:
+(mission_definition_id, student_id)
+
+Checks:
+- current_count >= 0
+- target_count > 0
+- current_count <= target_count OR allow over-target? Choose exact contract.
+Strong preference:
+cap stored current_count at target_count.
+
+- COMPLETED => completed_at NOT NULL
+- ACTIVE => completed_at NULL
+
+No reopen.
+
+==================================================
+PART L — MILESTONE DEFINITIONS TABLE
+==================================================
+
+Create `milestone_definitions`.
+
+Columns:
+
+id
+code
+name
+description
+status
+trigger_type
+trigger_config_json nullable
+sort_order
+created_at
+updated_at
+
+Enum:
+MilestoneDefinitionStatus:
+ACTIVE
+ARCHIVED
+
+Define typed trigger types appropriate for MVP, e.g.:
+FIRST_LESSON_COMPLETED
+LESSONS_COMPLETED_COUNT
+ATTENDANCE_COUNT
+FIRST_EXAM_COMPLETED
+FIRST_MISSION_COMPLETED
+
+Do not include sacramental/pastoral trigger types.
+
+code unique.
+
+==================================================
+PART M — MILESTONE ACHIEVEMENTS TABLE
+==================================================
+
+Create `milestone_achievements`.
+
+Columns:
+
+id
+milestone_definition_id
+student_id
+enrollment_id nullable
+parish_id
+achieved_at
+source_type
+source_id
+created_at
+
+Unique:
+(milestone_definition_id, student_id)
+
+No hard delete.
+
+==================================================
+PART N — ENTITY DESIGN
+==================================================
+
+Create TypeORM entities for all 9 tables.
+
+Rules:
+- scalar UUID IDs for cross-module references
+- no TypeORM relation graphs across modules
+- own-module relations may be scalar-only too if that matches project style
+- no lazy relations
+- no entity exposure outside module
+- timestamps consistent with repository conventions
+- varchar enum storage
+- no cascade deletes for historical tables
+
+==================================================
+PART O — PUBLIC SNAPSHOT / INTERFACE TYPES
+==================================================
+
+Create narrow interfaces/snapshots.
+
+Examples:
+
+RewardRuleSnapshot
+PointLedgerEntrySnapshot
+PointBalanceSummary
+BadgeDefinitionSnapshot
+BadgeAwardSnapshot
+MissionDefinitionSnapshot
+MissionProgressSnapshot
+MilestoneDefinitionSnapshot
+MilestoneAchievementSnapshot
+GamificationSummarySnapshot
+FaithJourneySnapshot placeholder interface only if useful
+
+Do not create HTTP DTOs yet.
+
+==================================================
+PART P — REPOSITORY / SERVICE FOUNDATION
+==================================================
+
+Create internal services with narrow responsibilities.
+
+Suggested:
+
+RewardRuleService
+- find active matching rules primitives
+- get/find by code
+- create/update persistence primitives for later admin APIs
+
+PointLedgerService
+- append entry primitive
+- get balance aggregate primitive
+- list student entries primitive
+- reversal support primitive
+- no update/delete
+
+RewardEventReceiptService
+- find/record eventId
+- duplicate detection primitive
+
+BadgeService
+- definition persistence
+- award lookup/list primitives
+
+MissionService
+- definition persistence
+- progress lookup/list primitives
+
+MilestoneService
+- definition persistence
+- achievement lookup/list primitives
+
+GamificationService
+- public facade
+- only stable safe read/foundation methods
+- do NOT expose raw repositories
+- do NOT expose bypass mutation primitives publicly
+
+==================================================
+PART Q — ACCESS SERVICE FOUNDATION
+==================================================
+
+Create:
+GamificationAccessService
+
+Prepare public-API-based scope helpers for later HTTP prompts:
+
+- learner self
+- Parent guardian
+- Catechist assigned class
+- ParishAdmin parish
+- SuperAdmin global
+
+Do not implement controllers yet.
+
+No foreign repository access.
+
+==================================================
+PART R — RBAC PERMISSIONS
+==================================================
+
+Add exactly:
+
+gamification.read
+gamification.manage
+points.adjust
+badges.award
+
+Use current auth/RBAC seed/constants pattern.
+
+Role matrix:
+
+SUPER_ADMIN:
+all four
+
+PARISH_ADMIN:
+all four
+
+CATECHIST:
+- gamification.read
+- gamification.manage (but later only CLASS mission management through service scope)
+- points.adjust
+- badges.award
+
+PARENT:
+gamification.read only
+
+STUDENT:
+gamification.read only
+
+Important:
+permission != scope.
+
+Do not create extra per-subdomain permissions yet.
+
+Write/update RBAC specs.
+Do NOT run them.
+
+==================================================
+PART S — APP / MODULE WIRING
+==================================================
+
+Register GamificationModule in AppModule.
+
+Do not register event emitter infrastructure yet unless #002 static design requires a contract shell.
+
+Strong preference:
+#002 may define reward event interface/port only,
+while #003 wires actual event integration.
+
+==================================================
+PART T — REWARD EVENT CONTRACT TYPES
+==================================================
+
+Create module-neutral/shared application contract in the correct project layer.
+
+Need an extraction-safe type:
+
+RewardEligibleEvent
+
+Fields:
+- eventId
+- eventType
+- occurredAt
+- studentId
+- enrollmentId?
+- parishId
+- academicYearId?
+- sourceId
+- metadata allow-list
+
+Important:
+Do NOT place this inside Gamification if source modules will later need to import Gamification just to emit event types.
+
+Choose a neutral location consistent with architecture, e.g.:
+
+src/common/application-events/contracts/
+or
+src/modules/application-events/contracts/
+
+If introducing a small `application-events` infra module shell now:
+it must contain no business logic.
+
+Do not install packages unless necessary.
+
+No runtime emitter wiring required in #002.
+
+==================================================
+PART U — EVENT TYPE ENUM / CONTRACT
+==================================================
+
+Create stable reward-eligible event type constants:
+
+LEARNING_LESSON_COMPLETED
+PRACTICE_COMPLETED
+EXAM_COMPLETED
+ATTENDANCE_SESSION_COMPLETED_MARK
+
+If EXAM score threshold uses metadata on EXAM_COMPLETED:
+do not create separate event unless needed.
+
+Attendance metadata may include:
+attendanceStatus
+
+Exam metadata may include:
+scorePercent
+
+No names/emails/notes.
+
+==================================================
+PART V — IDEMPOTENCY FOUNDATION
+==================================================
+
+Implement domain/persistence helpers for:
+
+- duplicate eventId recognition
+- ledger duplicate key recognition
+- event receipt representation
+- append-only ledger identity
+- duplicate automatic award treated as already applied later
+
+Do NOT implement full RewardIngestService processing yet.
+
+That belongs to #003.
+
+==================================================
+PART W — APPEND-ONLY PROTECTION
+==================================================
+
+By code design:
+
+PointLedgerService must NOT expose:
+- updatePoints
+- setBalance
+- deleteEntry
+
+Only:
+- append
+- reverse/adjust by creating new entry
+- aggregate/list reads
+
+Add static/unit spec files asserting this domain behavior where practical.
+
+Do not run tests.
+
+==================================================
+PART X — MISSION / BADGE / MILESTONE RETENTION
+==================================================
+
+Definitions:
+archive/status changes allowed later.
+
+Historical:
+- point ledger
+- badge awards
+- mission progress
+- milestone achievements
+
+must not be hard-deleted by normal domain APIs.
+
+No cascade from foreign domains.
+
+==================================================
+PART Y — MODULE BOUNDARY SPECS
+==================================================
+
+Update:
+src/modules/module-boundaries.spec.ts
+
+Add assertions:
+
+- GamificationModule exists
+- exports GamificationService only
+- no forwardRef
+- no FamilyPortal import
+- no LearningProgress/Practice/Exam/ClassOperations runtime import in #002
+- no Localization/Media runtime import unless truly needed
+- no reverse imports from source modules
+- no foreign entity/repository imports
+- owned tables only
+
+Write specs.
+Do not run.
+
+==================================================
+PART Z — UNIT TEST FILES
+==================================================
+
+Write focused specs for:
+
+Points:
+- ledger balance math
+- lifetime positive points aggregation helper if defined
+- zero delta rejected
+- no mutable balance setter
+- reversal creates compensating representation
+- duplicate identity construction
+
+Reward rules:
+- scope/status validity
+- effective date helper logic
+- maxAwardsPerSource > 0
+
+Badges:
+- non-repeatable active award uniqueness model
+- revoke semantics helper if present
+
+Missions:
+- target count validity
+- progress cap
+- completed timestamp semantics
+- scope validity
+
+Milestones:
+- unique achievement semantics
+- system trigger enums exclude sacramental types
+
+Events:
+- event contract validation helper
+- no PII metadata keys if validation layer is introduced
+
+RBAC:
+- role matrix
+
+Module boundaries.
+
+Do not execute tests.
+
+==================================================
+PART AA — INTEGRATION SPEC FILES
+==================================================
+
+Write MSSQL integration specs for future stabilization, but DO NOT RUN.
+
+Cover:
+
+1. migration table expectations
+2. reward_rules unique code
+3. processed_reward_events unique event_id
+4. point ledger unique automatic award identity
+5. point ledger append-only model
+6. ledger foreign delete NO ACTION / historical safety
+7. badge definition unique code
+8. active badge uniqueness
+9. mission scope uniqueness
+10. mission progress unique student/mission
+11. milestone unique code
+12. milestone achievement uniqueness
+13. no dangerous cascades
+14. enum/check constraints
+15. timestamp/status constraints
+
+If test helpers need cleanup support:
+write them.
+
+Do not start DB.
+
+==================================================
+PART AB — NO HTTP CONTROLLERS
+==================================================
+
+Strictly do NOT create HTTP business controllers in #002.
+
+No:
+- learner gamification routes
+- Parent routes
+- admin rules/badges/missions endpoints
+- points adjustment endpoint
+
+Those come later.
+
+==================================================
+PART AC — NO SOURCE MODULE EMISSION YET
+==================================================
+
+Do NOT modify:
+- LearningProgress
+- Practice
+- Exam
+- ClassOperations
+
+to emit events yet.
+
+#003 will implement reward event ingestion and source emission integration.
+
+#002 may only create the neutral event contract foundation.
+
+==================================================
+PART AD — STATIC INSPECTION BEFORE FINISH
+==================================================
+
+Inspect edited code manually for:
+
+- imports
+- TypeScript syntax
+- duplicate entity names
+- migration/entity mismatch
+- table/index naming collisions
+- nullable uniqueness mistakes
+- circular imports
+- improper exports
+- forwardRef
+- foreign entity imports
+- cascade delete
+- enum/check mismatch
+- missing module registration
+- permission seed duplication
+
+Fix obvious issues by inspection.
+
+Do not run command validation.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- event ingestion engine
+- actual event emitter/listener wiring
+- source module event emission
+- reward calculation
+- automatic point awards
+- manual point adjustment HTTP
+- badge award HTTP
+- badge automatic processing
+- mission progress event processing
+- milestone event processing
+- learner/parent/catechist HTTP APIs
+- Faith Journey HTTP APIs
+- demo seed
+- Postman
+- leaderboard
+- streaks
+- sacramental milestones
+- FamilyPortal composition
+- Localization integration
+- Docker/test runtime validation
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_002_PERSISTENCE_FOUNDATION_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Fast Implementation Mode
+3. State inherited
+4. Files created
+5. Files modified
+6. Module structure
+7. Module imports
+8. Module exports
+9. Table ownership
+10. Exact 9-table schema
+11. reward_rules
+12. processed_reward_events
+13. point_ledger_entries
+14. badge_definitions
+15. badge_awards
+16. mission_definitions
+17. mission_progress
+18. milestone_definitions
+19. milestone_achievements
+20. Enum model
+21. Scope/status constraints
+22. Unique/index strategy
+23. MSSQL nullable/filtered unique strategy
+24. FK/scalar-ID strategy
+25. Delete/cascade strategy
+26. Ledger append-only design
+27. Entity design
+28. Snapshot/interface design
+29. RewardRuleService foundation
+30. PointLedgerService foundation
+31. RewardEventReceiptService foundation
+32. BadgeService foundation
+33. MissionService foundation
+34. MilestoneService foundation
+35. GamificationService facade
+36. Access service foundation
+37. RBAC permissions
+38. RBAC matrix
+39. Reward event contract foundation
+40. Reward event type constants
+41. Idempotency foundation
+42. Module boundaries
+43. Unit tests written
+44. Integration tests written
+45. Tests executed
+46. DB validation
+47. quality:full
+48. Docker
+49. npm audit
+50. Static inspection findings
+51. Risks/deferred
+52. BLOCKER/HIGH/MEDIUM/LOW
+53. #003 readiness
+54. Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+GAMIFICATION MODULE FOUNDATION READY: YES/NO
+
+NINE-TABLE SCHEMA IMPLEMENTED: YES/NO
+
+REWARD RULE PERSISTENCE READY: YES/NO
+
+EVENT RECEIPT PERSISTENCE READY: YES/NO
+
+POINT LEDGER PERSISTENCE READY: YES/NO
+
+LEDGER APPEND-ONLY MODEL READY: YES/NO
+
+BADGE PERSISTENCE READY: YES/NO
+
+MISSION PERSISTENCE READY: YES/NO
+
+MILESTONE PERSISTENCE READY: YES/NO
+
+REWARD EVENT CONTRACT FOUNDATION READY: YES/NO
+
+IDEMPOTENCY FOUNDATION READY: YES/NO
+
+RBAC PERMISSIONS READY: YES/NO
+
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+
+INTEGRATION TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+
+DB VALIDATION: NOT RUN — deferred
+
+QUALITY:FULL: NOT RUN — deferred
+
+DOCKER: NOT RUN — deferred
+
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#003 READINESS: YES/NO
+
+==================================================
+#003 GATE
+==================================================
+
+Proceed to #003 if:
+
+- module foundation exists
+- all 9 tables/entities/migration implemented
+- append-only ledger design intact
+- event receipt/idempotency foundation ready
+- reward rule persistence ready
+- badge/mission/milestone persistence ready
+- RBAC seeded
+- event contract ready
+- tests/specs written
+- no BLOCKER/HIGH found by static inspection
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+GAMIFICATION + FAITH JOURNEY #003/7 —
+POINTS ENGINE + REWARD EVENT INGESTION + RULES + MANUAL ADJUSTMENTS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #002 implementation status
+- module/table foundation
+- ledger/event receipt
+- rules
+- badges/missions/milestones persistence
+- RBAC
+- event contract
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #003 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(gamification): add persistence foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

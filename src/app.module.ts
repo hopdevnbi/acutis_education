@@ -26,6 +26,7 @@ import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
 import { FamilyPortalModule } from './modules/family-portal/family-portal.module';
 import { ClassOperationsModule } from './modules/class-operations/class-operations.module';
+import { GamificationModule } from './modules/gamification/gamification.module';
 import { UsersModule } from './modules/users/users.module';
 
 export interface AppModuleOptions {
@@ -64,6 +65,7 @@ export class AppModule {
         LearningProgressModule,
         FamilyPortalModule,
         ClassOperationsModule,
+        GamificationModule,
         LocalizationModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),

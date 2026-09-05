@@ -1,0 +1,146 @@
+export class ZeroPointsDeltaError extends Error {
+  constructor() {
+    super('Point ledger points_delta must be non-zero.');
+    this.name = 'ZeroPointsDeltaError';
+  }
+}
+
+export class PointLedgerDuplicateIdentityError extends Error {
+  constructor() {
+    super('Point ledger entry with the same award identity already exists.');
+    this.name = 'PointLedgerDuplicateIdentityError';
+  }
+}
+
+export class PointLedgerEntryNotFoundError extends Error {
+  constructor() {
+    super('Point ledger entry not found.');
+    this.name = 'PointLedgerEntryNotFoundError';
+  }
+}
+
+export class RewardRuleNotFoundError extends Error {
+  constructor() {
+    super('Reward rule not found.');
+    this.name = 'RewardRuleNotFoundError';
+  }
+}
+
+export class RewardRuleCodeAlreadyExistsError extends Error {
+  constructor() {
+    super('Reward rule code already exists.');
+    this.name = 'RewardRuleCodeAlreadyExistsError';
+  }
+}
+
+export class InvalidRewardRuleScopeError extends Error {
+  constructor() {
+    super('Invalid reward rule scope configuration.');
+    this.name = 'InvalidRewardRuleScopeError';
+  }
+}
+
+export class RewardEventAlreadyProcessedError extends Error {
+  constructor() {
+    super('Reward event was already processed.');
+    this.name = 'RewardEventAlreadyProcessedError';
+  }
+}
+
+export class BadgeDefinitionNotFoundError extends Error {
+  constructor() {
+    super('Badge definition not found.');
+    this.name = 'BadgeDefinitionNotFoundError';
+  }
+}
+
+export class BadgeDefinitionCodeAlreadyExistsError extends Error {
+  constructor() {
+    super('Badge definition code already exists.');
+    this.name = 'BadgeDefinitionCodeAlreadyExistsError';
+  }
+}
+
+export class InvalidBadgeScopeError extends Error {
+  constructor() {
+    super('Invalid badge scope configuration.');
+    this.name = 'InvalidBadgeScopeError';
+  }
+}
+
+export class ActiveBadgeAwardAlreadyExistsError extends Error {
+  constructor() {
+    super('An active badge award already exists for this student and badge.');
+    this.name = 'ActiveBadgeAwardAlreadyExistsError';
+  }
+}
+
+export class BadgeAwardNotFoundError extends Error {
+  constructor() {
+    super('Badge award not found.');
+    this.name = 'BadgeAwardNotFoundError';
+  }
+}
+
+export class MissionDefinitionNotFoundError extends Error {
+  constructor() {
+    super('Mission definition not found.');
+    this.name = 'MissionDefinitionNotFoundError';
+  }
+}
+
+export class MissionDefinitionCodeAlreadyExistsError extends Error {
+  constructor() {
+    super('Mission definition code already exists in this scope.');
+    this.name = 'MissionDefinitionCodeAlreadyExistsError';
+  }
+}
+
+export class InvalidMissionScopeError extends Error {
+  constructor() {
+    super('Invalid mission scope configuration.');
+    this.name = 'InvalidMissionScopeError';
+  }
+}
+
+export class MissionProgressNotFoundError extends Error {
+  constructor() {
+    super('Mission progress not found.');
+    this.name = 'MissionProgressNotFoundError';
+  }
+}
+
+export class MilestoneDefinitionNotFoundError extends Error {
+  constructor() {
+    super('Milestone definition not found.');
+    this.name = 'MilestoneDefinitionNotFoundError';
+  }
+}
+
+export class MilestoneDefinitionCodeAlreadyExistsError extends Error {
+  constructor() {
+    super('Milestone definition code already exists.');
+    this.name = 'MilestoneDefinitionCodeAlreadyExistsError';
+  }
+}
+
+export class MilestoneAchievementAlreadyExistsError extends Error {
+  constructor() {
+    super('Milestone achievement already exists for this student.');
+    this.name = 'MilestoneAchievementAlreadyExistsError';
+  }
+}
+
+export class GamificationAccessDeniedError extends Error {
+  constructor() {
+    super('Gamification access denied.');
+    this.name = 'GamificationAccessDeniedError';
+  }
+}
+
+export class InvalidRewardEventMetadataError extends Error {
+  constructor(message = 'Reward event metadata contains disallowed keys.') {
+    super(message);
+    this.name = 'InvalidRewardEventMetadataError';
+  }
+}

@@ -294,6 +294,26 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Manage attendance',
     description: 'Create and update attendance marks for class sessions.',
   },
+  {
+    code: 'gamification.read',
+    name: 'Read gamification',
+    description: 'Read points, badges, missions, milestones, and faith journey summaries.',
+  },
+  {
+    code: 'gamification.manage',
+    name: 'Manage gamification',
+    description: 'Manage reward rules and badge/mission/milestone definitions within scope.',
+  },
+  {
+    code: 'points.adjust',
+    name: 'Adjust points',
+    description: 'Create manual point ledger adjustments and reversals.',
+  },
+  {
+    code: 'badges.award',
+    name: 'Award badges',
+    description: 'Manually award or soft-revoke badges for students.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -344,6 +364,10 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'class-sessions.manage',
     'attendance.read',
     'attendance.manage',
+    'gamification.read',
+    'gamification.manage',
+    'points.adjust',
+    'badges.award',
   ],
   CATECHIST: [
     'classes.read',
@@ -368,6 +392,10 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'class-sessions.manage',
     'attendance.read',
     'attendance.manage',
+    'gamification.read',
+    'gamification.manage',
+    'points.adjust',
+    'badges.award',
   ],
   PARENT: [
     'classes.read',
@@ -386,6 +414,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'exam.result.read',
     'class-sessions.read',
     'attendance.read',
+    'gamification.read',
   ],
   STUDENT: [
     'learner.self.read',
@@ -396,6 +425,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'exam.result.read',
     'class-sessions.read',
     'attendance.read',
+    'gamification.read',
   ],
 };
 
