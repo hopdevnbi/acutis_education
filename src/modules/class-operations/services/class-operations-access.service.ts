@@ -3,6 +3,7 @@ import {
   CATECHIST_ROLE_CODE,
   PARENT_ROLE_CODE,
   PARISH_ADMIN_ROLE_CODE,
+  STUDENT_ROLE_CODE,
 } from '../../access-control/constants/role-codes.constants';
 import { AccessControlService } from '../../access-control/services/access-control.service';
 import { ClassCatechistAssignmentService } from '../../class/services/class-catechist-assignment.service';
@@ -15,9 +16,8 @@ import { ClassOperationsAccessDeniedError } from '../errors/class-operations.err
 import { ClassSessionService } from './class-session.service';
 
 /**
- * Staff and future Parent/Learner access helpers for Class Operations.
- * Staff endpoints require assigned Catechist, ParishAdmin parish scope, or SuperAdmin.
- * Parent/Student never pass staff asserts via role alone or parish membership alone.
+ * Staff and Parent/Learner access helpers for Class Operations.
+ * /me routes require genuine PARENT or STUDENT roles — no admin impersonation.
  */
 @Injectable()
 export class ClassOperationsAccessService {
@@ -94,6 +94,12 @@ export class ClassOperationsAccessService {
     return this.canStaffAccessClass(rawUserId, session.classId);
   }
 
+  async canStaffAccessEnrollment(rawUserId: string, rawEnrollmentId: string): Promise<boolean> {
+    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
+
+    return this.canStaffAccessClass(rawUserId, enrollment.classId);
+  }
+
   async assertCanStaffManageClass(rawUserId: string, rawClassId: string): Promise<void> {
     if (await this.canStaffAccessClass(rawUserId, rawClassId)) {
       return;
@@ -118,6 +124,17 @@ export class ClassOperationsAccessService {
     await this.assertCanStaffManageSession(rawUserId, rawSessionId);
   }
 
+  async assertCanStaffReadEnrollmentAttendance(
+    rawUserId: string,
+    rawEnrollmentId: string,
+  ): Promise<void> {
+    if (await this.canStaffAccessEnrollment(rawUserId, rawEnrollmentId)) {
+      return;
+    }
+
+    throw new ClassOperationsAccessDeniedError();
+  }
+
   async canManageSessionWrites(rawUserId: string, rawSessionId: string): Promise<boolean> {
     return this.canStaffAccessSession(rawUserId, rawSessionId);
   }
@@ -126,13 +143,12 @@ export class ClassOperationsAccessService {
     rawUserId: string,
     rawEnrollmentId: string,
   ): Promise<boolean> {
+    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
     const isParent = await this.hasRole(rawUserId, PARENT_ROLE_CODE);
 
     if (!isParent) {
       return false;
     }
-
-    const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
 
     try {
       await this.studentGuardianService.assertGuardianLinked(rawUserId, enrollment.studentId);
@@ -143,11 +159,27 @@ export class ClassOperationsAccessService {
     }
   }
 
+  async assertCanParentReadEnrollmentAttendance(
+    rawUserId: string,
+    rawEnrollmentId: string,
+  ): Promise<void> {
+    if (await this.canReadEnrollmentAttendanceAsParent(rawUserId, rawEnrollmentId)) {
+      return;
+    }
+
+    throw new ClassOperationsAccessDeniedError();
+  }
+
   async canReadEnrollmentAttendanceAsLearner(
     rawUserId: string,
     rawEnrollmentId: string,
   ): Promise<boolean> {
     const enrollment = await this.enrollmentService.getEnrollmentById(rawEnrollmentId);
+    const isStudent = await this.hasRole(rawUserId, STUDENT_ROLE_CODE);
+
+    if (!isStudent) {
+      return false;
+    }
 
     try {
       await this.learnerSelfScopeService.assertActingAsLinkedStudent(
@@ -159,5 +191,16 @@ export class ClassOperationsAccessService {
     } catch {
       return false;
     }
+  }
+
+  async assertCanLearnerReadEnrollmentAttendance(
+    rawUserId: string,
+    rawEnrollmentId: string,
+  ): Promise<void> {
+    if (await this.canReadEnrollmentAttendanceAsLearner(rawUserId, rawEnrollmentId)) {
+      return;
+    }
+
+    throw new ClassOperationsAccessDeniedError();
   }
 }

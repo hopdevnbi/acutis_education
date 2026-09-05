@@ -33,3 +33,30 @@ export interface AttendanceEnrollmentSummary {
   readonly unmarkedCount: number;
   readonly attendanceRatePercent: number;
 }
+
+export interface EnrollmentAttendanceHistoryItem {
+  readonly sessionId: string;
+  readonly classId: string;
+  readonly title: string | null;
+  readonly startsAt: Date;
+  readonly endsAt: Date;
+  readonly sessionStatus: string;
+  readonly attendanceStatus: AttendanceStatus | null;
+  readonly note: string | null;
+  readonly markedAt: Date | null;
+}
+
+export interface EnrollmentAttendanceHistoryResult {
+  readonly enrollmentId: string;
+  readonly page: number;
+  readonly limit: number;
+  readonly total: number;
+  readonly totalPages: number;
+  readonly items: EnrollmentAttendanceHistoryItem[];
+}
+
+export interface ListEnrollmentAttendanceHistoryInput {
+  readonly enrollmentId: string;
+  readonly page: number;
+  readonly limit: number;
+}

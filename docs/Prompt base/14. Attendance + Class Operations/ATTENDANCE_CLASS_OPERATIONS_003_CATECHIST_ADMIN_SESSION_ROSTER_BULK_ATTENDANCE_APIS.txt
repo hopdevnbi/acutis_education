@@ -1,0 +1,748 @@
+CURSOR PROMPT — ATTENDANCE + CLASS OPERATIONS #003/5
+CATECHIST / ADMIN SESSION OPERATIONS + ROSTER + BULK ATTENDANCE APIs
+
+CONTEXT
+-------
+Completed:
+- #001/5 Domain audit + schema/API design
+- #002/5 Persistence foundation + session/attendance schema
+
+#002 verified:
+- class-operations module ready
+- class_sessions / class_session_roster / attendance_records ready
+- lifecycle/status ready
+- roster snapshot foundation ready
+- historical retention safe
+- RBAC permissions ready
+- module boundary ready
+- integration PASS
+- DB e2e regression PASS
+- quality:full PASS
+- npm audit PASS
+- Docker PASS
+- BLOCKER/HIGH/MEDIUM = 0
+
+Current:
+#003/5 — STAFF OPERATIONS + BULK ATTENDANCE
+
+Remaining:
+#004/5 Parent/Student reads + summary + security/performance hardening
+#005/5 Final audit + demo seed + Postman + phase completion
+
+PRIMARY OBJECTIVE
+-----------------
+Implement only the staff-facing operational workflows:
+
+1. create/list/get/update/cancel/complete class sessions
+2. freeze roster on create
+3. refresh roster under strict conditions
+4. get session attendance roster
+5. bulk PUT attendance
+6. enforce lifecycle + Catechist/ParishAdmin/SuperAdmin scope
+7. OpenAPI + tests
+8. preserve all module boundaries
+
+Do NOT implement Parent/Student attendance read routes yet.
+Do NOT implement demo seed/Postman yet.
+Do NOT add recurring schedule templates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(class-operations): add session roster and attendance APIs"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/ATTENDANCE_CLASS_OPERATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_002_PERSISTENCE_FOUNDATION_SESSION_ATTENDANCE_SCHEMA_REPORT.md
+
+Inspect only relevant code:
+src/modules/class-operations/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/auth/
+src/modules/access-control/
+src/modules/parish/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+STAFF ROUTES
+------------
+Implement exactly:
+
+1. POST /api/v1/classes/:classId/sessions
+2. GET /api/v1/classes/:classId/sessions
+3. GET /api/v1/class-sessions/:sessionId
+4. PATCH /api/v1/class-sessions/:sessionId
+5. POST /api/v1/class-sessions/:sessionId/cancel
+6. POST /api/v1/class-sessions/:sessionId/complete
+7. POST /api/v1/class-sessions/:sessionId/roster/refresh
+8. GET /api/v1/class-sessions/:sessionId/attendance
+9. PUT /api/v1/class-sessions/:sessionId/attendance
+
+Do NOT add Parent/Student attendance history/summary routes in #003.
+
+CONTROLLERS
+-----------
+Use module-owned controllers, e.g.:
+- ClassSessionsController
+- ClassSessionAttendanceController
+
+Do not extend existing Class/FamilyPortal/Enrollment controllers.
+
+CREATE SESSION
+--------------
+POST /api/v1/classes/:classId/sessions
+
+Input:
+- title? max 128
+- startsAt ISO
+- endsAt ISO
+
+Server-derived:
+- classId from route
+- parishId from class
+- academicYearId from class
+- status SCHEDULED
+- actor IDs from auth context
+
+Rules:
+- class exists
+- class status ACTIVE
+- endsAt > startsAt
+- permission + actor scope
+- transaction: create session + freeze roster
+
+Roster freeze:
+- batch ACTIVE enrollments for class
+- batch student names
+- no N+1
+
+Empty roster:
+may still create session; document behavior.
+
+STAFF SCOPE
+-----------
+CATECHIST:
+- class-sessions.manage / attendance.manage
+- ACTIVE assignment to target class
+- role alone is never enough
+
+PARISH_ADMIN:
+- own parish scope + permission
+
+SUPER_ADMIN:
+- global + permission
+
+PARENT/STUDENT:
+- staff endpoints forbidden in #003
+
+Never trust client parish/user/student IDs for scope.
+
+LIST SESSIONS
+-------------
+GET /api/v1/classes/:classId/sessions
+
+Query:
+- page default 1
+- limit default project convention, max 50
+- from?
+- to?
+- status?
+
+Deterministic default:
+startsAt DESC + id tie-breaker.
+
+Return compact DTO + pagination.
+
+If rosterCount/markedCount can be obtained with bounded grouped queries, include.
+Otherwise omit from list and expose on detail/attendance.
+
+No per-session count loop.
+
+GET SESSION
+-----------
+GET /api/v1/class-sessions/:sessionId
+
+Authorize by session class/parish scope.
+
+Return compact session data.
+Optional bounded counts okay.
+
+No learner PII.
+
+UPDATE SESSION
+--------------
+PATCH /api/v1/class-sessions/:sessionId
+
+Only SCHEDULED.
+
+Editable:
+- title
+- startsAt
+- endsAt
+
+Do not allow:
+- classId
+- parishId
+- academicYearId
+- status
+- createdBy
+
+Changing time while SCHEDULED = reschedule behavior.
+No RESCHEDULED status.
+
+CANCEL
+------
+POST /api/v1/class-sessions/:sessionId/cancel
+
+Only:
+SCHEDULED -> CANCELLED
+
+Set cancelledAt UTC.
+After cancel:
+- no attendance writes
+- no roster refresh
+- no metadata edits
+- keep existing marks
+- excluded from future summary
+
+Second cancel/non-SCHEDULED -> 409.
+
+COMPLETE
+--------
+POST /api/v1/class-sessions/:sessionId/complete
+
+Only:
+SCHEDULED -> COMPLETED
+
+Set completedAt UTC.
+After complete:
+- attendance locked
+- roster locked
+- metadata locked
+
+MVP may complete with UNMARKED learners.
+Expose rosterCount / markedCount / unmarkedCount where appropriate.
+Do not block completion solely because unmarked exist.
+
+ROSTER REFRESH
+--------------
+POST /api/v1/class-sessions/:sessionId/roster/refresh
+
+Allowed only:
+- SCHEDULED
+- zero attendance rows
+
+Flow:
+- authorize manage
+- batch current ACTIVE enrollments
+- batch student names
+- transactionally replace roster snapshot
+
+After first mark -> 409.
+After completed/cancelled -> 409.
+
+ATTENDANCE GET
+--------------
+GET /api/v1/class-sessions/:sessionId/attendance
+
+Permission:
+attendance.read
+
+Staff only:
+assigned Catechist
+ParishAdmin own parish
+SuperAdmin
+
+Parent/Student -> 403 in #003.
+
+Response:
+- compact session
+- rosterCount
+- markedCount
+- unmarkedCount
+- items:
+  - enrollmentId
+  - studentId
+  - displayName
+  - status nullable
+  - note nullable
+  - markedAt nullable
+
+No DOB/email/phone/address/guardian data.
+
+Stable sort:
+displayName then enrollmentId.
+
+BULK ATTENDANCE PUT
+-------------------
+PUT /api/v1/class-sessions/:sessionId/attendance
+
+Permission:
+attendance.manage
+
+Payload:
+{
+  "records": [
+    {
+      "enrollmentId": "...",
+      "status": "PRESENT|ABSENT|LATE|EXCUSED",
+      "note": "..."
+    }
+  ]
+}
+
+Rules:
+- session exists
+- session SCHEDULED
+- actor can manage class/session
+- duplicate enrollmentId in payload => 400
+- every enrollmentId must be in frozen roster
+- note max 500
+- transaction all-or-nothing
+- omitted learners remain UNMARKED
+- upsert by (sessionId,enrollmentId)
+- retry same payload is safe
+
+Server-derived:
+- studentId from roster
+- markedBy/updatedBy from actor
+- markedAt UTC
+
+Do NOT accept client:
+studentId
+userId
+parishId
+classId
+markedBy
+markedAt
+
+NOTE POLICY
+-----------
+Optional note max 500.
+No pastoral/confessional semantics.
+Never log note body.
+Do not require note for ABSENT/EXCUSED unless project requirement says so.
+
+ACCESS SERVICE
+--------------
+Implement full staff access helpers.
+
+Required behavior:
+SUPER_ADMIN -> global
+PARISH_ADMIN -> own parish only
+CATECHIST -> ACTIVE assignment only
+PARENT/STUDENT -> staff endpoint denied
+
+Reuse existing public scope APIs.
+Do not query foreign repositories directly.
+
+PERMISSIONS
+-----------
+Use:
+class-sessions.read
+class-sessions.manage
+attendance.read
+attendance.manage
+
+Use JwtAuthGuard + PermissionGuard + existing decorators.
+Permission never replaces scope.
+
+ERROR CONTRACT
+--------------
+Map consistently:
+
+400:
+- malformed UUID/query
+- duplicate attendance input
+- bad time/status payload
+
+401:
+- unauthenticated
+
+403:
+- wrong actor/scope
+- unassigned Catechist
+- cross-parish ParishAdmin
+
+404:
+- unknown class/session where safe
+
+409:
+- update/cancel/complete non-SCHEDULED
+- roster refresh after first mark
+- attendance write after complete/cancel
+
+422 or 400:
+- enrollment not in frozen roster
+Use existing project convention.
+
+Never expose SQL errors.
+
+DTO / OPENAPI
+-------------
+Create module-owned DTOs:
+- CreateClassSessionDto
+- UpdateClassSessionDto
+- ListClassSessionsQueryDto
+- ClassSessionResponseDto
+- ClassSessionListResponseDto
+- SessionAttendanceResponseDto
+- AttendanceRosterItemDto
+- BulkAttendanceUpsertDto
+- AttendanceRecordInputDto
+
+All 9 endpoints:
+- bearer auth
+- summary
+- permission/scope semantics
+- params/query
+- response DTO
+- 400/401/403/404/409 as applicable
+
+PAGINATION / PERFORMANCE
+------------------------
+Session list max 50.
+Stable tie-breaker by id.
+
+Attendance roster may be unpaginated if project class-size assumptions justify it; document.
+
+No service call per student.
+No service call per session for counts.
+
+Create/refresh roster:
+- class snapshot
+- scope
+- active enrollment batch
+- student batch
+- own-table transaction
+
+Attendance GET:
+- session
+- roster rows
+- attendance rows
+- in-memory merge
+
+Bulk PUT:
+- session
+- roster set
+- transactional upsert
+
+TRANSACTION / CONCURRENCY
+-------------------------
+Use own-table transactions for:
+- session create + roster
+- roster refresh
+- bulk attendance
+
+Foreign module reads happen through public APIs.
+
+Within transaction:
+- recheck session SCHEDULED before attendance write
+- recheck SCHEDULED + zero marks before roster refresh
+
+MVP concurrency:
+last successful write wins per enrollment.
+
+No version column/clientRequestId yet.
+
+DB E2E REQUIRED
+---------------
+Add real MSSQL tests:
+
+AUTH:
+1. unauthenticated 401
+
+CATECHIST:
+2. assigned create session
+3. initial roster snapshot
+4. list
+5. detail
+6. update SCHEDULED
+7. attendance GET
+8. bulk mixed statuses
+9. repeat identical PUT safe
+10. omitted learner UNMARKED
+11. duplicate enrollment input 400
+12. non-roster enrollment rejected
+13. refresh before marks works
+14. refresh after marks 409
+15. complete locks attendance
+16. PUT after complete 409
+17. update after complete 409
+18. cancel scheduled
+19. PUT after cancel 409
+20. unassigned Catechist 403
+
+PARISH_ADMIN:
+21. own parish success
+22. cross-parish 403
+
+SUPER_ADMIN:
+23. valid manage/read success
+
+WRONG ACTORS:
+24. Parent session manage 403
+25. Student session manage 403
+26. Parent attendance GET 403
+27. Student attendance GET 403
+
+DATA:
+28. response excludes PII
+29. note not leaked outside authorized endpoint
+30. stable ordering
+
+UNIT TESTS
+----------
+Cover:
+- create orchestration
+- ACTIVE class requirement
+- actor scope
+- roster freeze
+- refresh guards
+- duplicate payload
+- roster membership
+- lifecycle recheck in transaction
+- complete/cancel
+- no reopen
+- mapper/data minimization
+- N+1 call budgets
+- HTTP error mapping
+
+INTEGRATION
+-----------
+Real MSSQL:
+- create session + roster atomically
+- roster refresh replacement
+- bulk upsert
+- lifecycle lock
+- list filters/pagination
+- bounded counts if included
+- historical retention unchanged
+
+README
+------
+Add/update Class Operations section:
+- module purpose
+- ownership
+- session lifecycle
+- attendance statuses
+- roster snapshot
+- 9 staff endpoints
+- actor/scope policy
+- bulk PUT semantics
+- no hard delete
+- Parent/Student reads deferred to #004
+- recurring schedules deferred
+
+Do NOT claim phase complete.
+
+MODULE BOUNDARIES
+-----------------
+Re-run/update boundary tests:
+- owns only its 3 tables
+- no FamilyPortal/LearningProgress imports
+- no forwardRef
+- facade-only export
+- no reverse imports
+
+FULL VALIDATION
+---------------
+Run:
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then:
+npm run quality:full
+
+Require PASS.
+
+DOCKER
+------
+Run:
+docker build --target production -t catechism-api:class-operations-staff .
+
+Use WSL equivalent if required.
+
+Require PASS + 0 moderate+ production vulnerabilities.
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- Parent attendance routes
+- Student attendance routes
+- enrollment attendance history/summary for external actors
+- demo seed
+- Postman
+- recurring schedules
+- notifications
+- FamilyPortal attendance composition
+- LearningProgress writes
+- attendance revision history
+- session reopen
+- DELETE session
+
+REQUIRED REPORT
+---------------
+Create:
+docs/ATTENDANCE_CLASS_OPERATIONS_003_CATECHIST_ADMIN_SESSION_ROSTER_BULK_ATTENDANCE_APIS_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited
+3 Files created
+4 Files modified
+5 Final staff route inventory
+6 Controller ownership
+7 Session create flow
+8 Initial roster freeze
+9 Catechist scope
+10 ParishAdmin scope
+11 SuperAdmin scope
+12 Wrong-actor denial
+13 Session list
+14 Session detail
+15 Session update
+16 Cancel flow
+17 Complete flow
+18 Roster refresh
+19 Attendance GET
+20 Bulk attendance PUT
+21 Idempotency
+22 Transaction boundaries
+23 Concurrency lifecycle recheck
+24 Attendance note policy
+25 DTO boundaries
+26 HTTP error contract
+27 OpenAPI
+28 Pagination/sorting
+29 Performance/N+1
+30 Data minimization
+31 README
+32 Module boundaries
+33 Unit tests
+34 Integration tests
+35 DB e2e
+36 Full regression
+37 Self-contained quality:full
+38 npm audit
+39 Docker
+40 Commands
+41 Validation matrix
+42 Risks/deferred
+43 BLOCKER/HIGH/MEDIUM/LOW
+44 #004 readiness
+45 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+STAFF SESSION API READY: YES/NO
+SESSION CREATE + ROSTER FREEZE READY: YES/NO
+SESSION LIST/DETAIL READY: YES/NO
+SESSION UPDATE READY: YES/NO
+SESSION CANCEL READY: YES/NO
+SESSION COMPLETE READY: YES/NO
+ROSTER REFRESH READY: YES/NO
+STAFF ATTENDANCE READ READY: YES/NO
+BULK ATTENDANCE WRITE READY: YES/NO
+CATECHIST SCOPE SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+SUPER ADMIN SCOPE READY: YES/NO
+PARENT/STUDENT STAFF-ENDPOINT DENIAL SAFE: YES/NO
+TRANSACTIONAL SAFETY READY: YES/NO
+CONCURRENCY LIFECYCLE GUARD READY: YES/NO
+N+1/PERFORMANCE READY: YES/NO
+DATA MINIMIZATION READY: YES/NO
+OPENAPI READY: YES/NO
+README READY: YES/NO
+MODULE BOUNDARY READY: YES/NO
+FULL INTEGRATION: PASS/FAIL
+DB E2E: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#004 READINESS: YES/NO
+
+#004 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- all 9 staff routes ready
+- Catechist/Admin scope safe
+- Parent/Student staff-route denial safe
+- lifecycle locking correct
+- roster refresh rules correct
+- bulk attendance transactional/idempotent
+- N+1/performance ready
+- OpenAPI/README ready
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- Docker PASS
+
+Then recommend exactly:
+
+ATTENDANCE + CLASS OPERATIONS #004/5 —
+PARENT / STUDENT ATTENDANCE READS + SUMMARY + SECURITY / PERFORMANCE HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #003 status
+- staff routes
+- session lifecycle
+- roster refresh
+- bulk attendance
+- Catechist/Admin scope
+- wrong-actor denial
+- integration/DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(class-operations): add session roster and attendance APIs"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

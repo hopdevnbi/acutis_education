@@ -6,6 +6,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ClassNotFoundError } from '../../class/errors/class.errors';
+import { EnrollmentNotFoundError } from '../../enrollment/errors/enrollment.errors';
 import {
   AttendanceAlreadyFinalizedError,
   AttendanceEnrollmentNotInSessionRosterError,
@@ -24,11 +25,14 @@ describe('rethrowClassOperationsServiceError', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('maps not found to 404', () => {
+  it('maps not found to 404 including enrollment', () => {
     expect(() => rethrowClassOperationsServiceError(new ClassSessionNotFoundError())).toThrow(
       NotFoundException,
     );
     expect(() => rethrowClassOperationsServiceError(new ClassNotFoundError())).toThrow(
+      NotFoundException,
+    );
+    expect(() => rethrowClassOperationsServiceError(new EnrollmentNotFoundError())).toThrow(
       NotFoundException,
     );
   });

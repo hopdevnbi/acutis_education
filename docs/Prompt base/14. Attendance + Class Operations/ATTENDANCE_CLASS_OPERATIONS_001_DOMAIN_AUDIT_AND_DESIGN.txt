@@ -1,0 +1,683 @@
+CURSOR PROMPT — ATTENDANCE + CLASS OPERATIONS #001/5
+DOMAIN AUDIT + OWNERSHIP + WORKFLOW + API DESIGN
+AUDIT ONLY — NO IMPLEMENTATION
+
+CONTEXT
+-------
+Previous phase:
+CATECHIST + PARENT SUPPORTING APIs PHASE COMPLETE
+
+Verified final state:
+- Family Portal backend ready
+- Catechist FE/Mobile contracts ready
+- Parent FE/Mobile contracts ready
+- demo seed idempotent
+- Postman ready
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- npm audit PASS
+- Docker PASS
+- BLOCKER/HIGH/MEDIUM = 0
+
+Next backend phase:
+ATTENDANCE + CLASS OPERATIONS
+
+Estimated 4–5 prompts.
+Use 5 prompts unless audit proves 4 is cleaner.
+
+Current:
+#001/5 — AUDIT / DESIGN ONLY
+
+Do NOT implement production code.
+
+PERMANENT WORKFLOW
+------------------
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+Audit-only prompt: no commit recommendation unless tracked code was unexpectedly modified.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read relevant final reports:
+docs/CLASS_007A_FINAL_ARCHITECTURE_AND_CONTRACT_AUDIT_REPORT.md
+docs/CATECHIST_PARENT_005_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+docs/LEARNING_PROGRESS_004_FINAL_AUDIT_AND_CONTRACT_READINESS_REPORT.md
+docs/EXAM_008_FINAL_AUDIT_DEMO_POSTMAN_PHASE_COMPLETION_REPORT.md
+
+Also inspect relevant Auth/RBAC, Student, Enrollment, Parish, Academic Year reports if needed.
+
+Inspect actual code:
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/family-portal/
+src/modules/auth/
+src/modules/access-control/
+src/modules/parish/
+src/modules/academic-year/
+src/modules/catechism-level/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+src/database/migrations/
+src/database/seeds/
+test/
+README.md
+package.json
+
+Do NOT audit unrelated internals unless a direct dependency requires it.
+
+PRIMARY OBJECTIVE
+-----------------
+Define the Attendance + Class Operations bounded context before implementation.
+
+Answer:
+1. What belongs to Attendance?
+2. What belongs to Class Operations?
+3. One module or two related modules?
+4. Who owns class session occurrences?
+5. Who owns attendance records?
+6. How are session dates/times represented?
+7. Does MVP need recurring schedule templates?
+8. What is attendance status model?
+9. How are late/excused/absent represented?
+10. Who may mark/edit/finalize attendance?
+11. Can Parent/Student read attendance?
+12. How does Catechist scope work?
+13. Exact Web/Mobile APIs?
+14. Exact tables?
+15. Cross-module scalar/FK strategy?
+16. Duplicate-prevention?
+17. Cancel/reschedule semantics?
+18. History/audit?
+19. Deferred scope?
+20. Correct prompt count?
+
+MODULE STRATEGY
+---------------
+Compare:
+
+A. One `class-operations` module owning sessions + attendance
+B. Two modules `class-schedule` + `attendance`
+C. Attendance module consuming Class-owned sessions
+
+Evaluate:
+- ownership clarity
+- microservice extraction
+- coupling
+- future recurring schedules
+- Family Portal integration
+- reporting
+- notifications/events
+
+Avoid turning existing ClassModule into a god module.
+
+Required:
+FINAL MODULE STRATEGY
+FINAL MODULE NAME(S)
+
+DOMAIN OWNERSHIP
+----------------
+Potential:
+ClassSession/ClassMeeting:
+- actual occurrence
+- classId/parishId/academicYearId
+- startsAt/endsAt UTC
+- status
+- location/title optional
+- createdBy/updatedBy
+- timestamps
+
+AttendanceRecord:
+- sessionId
+- enrollmentId
+- studentId only if justified as denormalized history
+- status
+- markedByUserId
+- markedAt
+- optional note/reason
+- timestamps/version if needed
+
+Evaluate optional:
+ClassScheduleTemplate
+ClassSessionRoster
+AttendanceRevision
+
+Choose exact MVP ownership.
+
+SESSION MODEL
+-------------
+Evaluate whether session is:
+- generated from recurring template
+- directly created occurrence
+- both
+
+Strong MVP candidate:
+ClassSession is authoritative occurrence.
+Future Schedule module may generate it later.
+
+Possible lifecycle:
+SCHEDULED
+COMPLETED
+CANCELLED
+
+Avoid hard-delete.
+Evaluate whether RESCHEDULED is needed or time edit is enough.
+
+TIME
+----
+Persist UTC.
+Audit existing parish timezone support.
+Do not use local-time strings as source of truth.
+
+ATTENDANCE STATUS
+-----------------
+Evaluate:
+PRESENT
+ABSENT
+LATE
+EXCUSED
+
+Decide whether UNMARKED:
+- absence of row
+or
+- explicit persisted status
+
+Required final status model.
+
+ATTENDANCE IDENTITY
+-------------------
+Strong expected unique key:
+(sessionId, enrollmentId)
+
+Attendance is enrollment/class-contextual.
+
+No duplicate attendance per session/enrollment.
+
+ENROLLMENT ELIGIBILITY
+----------------------
+Define:
+- active enrollment
+- withdrawn enrollment
+- transferred enrollment
+- enrollment added after session
+- historical student
+
+Critical decision:
+A. live enrollment membership
+B. session roster snapshot
+C. hybrid
+
+Historical correctness must survive transfers/deactivation.
+
+SESSION ROSTER SNAPSHOT
+-----------------------
+Evaluate:
+- class_session_roster table
+- attendance rows only
+- snapshot JSON
+
+Prefer relational/queryable/extraction-safe.
+
+Required:
+SESSION ROSTER SNAPSHOT REQUIRED: YES/NO
+
+ATTENDANCE WRITE POLICY
+-----------------------
+Expected writers:
+- CATECHIST assigned to class
+- PARISH_ADMIN own parish
+- SUPER_ADMIN global
+
+Parent: NO
+Student: NO
+
+Evaluate assistant catechist based on current assignment model.
+
+Never use global role-only scope.
+
+SESSION WRITE POLICY
+--------------------
+Who can create/edit/cancel sessions?
+Likely assigned Catechist, ParishAdmin, SuperAdmin.
+
+Audit whether new permissions are needed:
+class-session.read
+class-session.manage
+attendance.read
+attendance.manage
+
+Do not overload classes.manage without analysis.
+
+LOCKING / FINALIZATION
+----------------------
+Compare:
+A. COMPLETED session locks attendance
+B. separate attendanceFinalizedAt
+C. always editable with audit fields
+
+Choose MVP.
+
+HISTORY / REVISIONS
+-------------------
+Evaluate whether immutable history table is required now.
+
+Could use updatedBy/updatedAt/reason for MVP if sufficient.
+
+Required:
+ATTENDANCE HISTORY TABLE REQUIRED NOW: YES/NO
+
+BULK MARKING
+------------
+Expected primary workflow:
+open session roster → mark many → save.
+
+Candidate:
+PUT /api/v1/class-sessions/:sessionId/attendance
+
+Payload:
+{
+  records: [
+    { enrollmentId, status, note? }
+  ]
+}
+
+Define:
+- transactional all-or-nothing?
+- omitted learners?
+- validation
+- upsert semantics
+- retry behavior
+
+Compare optional per-record PATCH.
+
+IDEMPOTENCY / CONCURRENCY
+-------------------------
+Evaluate:
+- whether PUT semantics + unique(session,enrollment) are sufficient
+- whether clientRequestId needed
+- whether optimistic version needed
+- save collision behavior
+- mobile retry
+
+Required:
+IDEMPOTENCY MODEL
+CONCURRENCY MODEL
+
+SESSION API DESIGN
+------------------
+Evaluate exact MVP:
+
+POST /api/v1/classes/:classId/sessions
+GET /api/v1/classes/:classId/sessions
+GET /api/v1/class-sessions/:sessionId
+PATCH /api/v1/class-sessions/:sessionId
+POST /api/v1/class-sessions/:sessionId/cancel
+
+Prefer status cancellation over DELETE.
+
+ATTENDANCE READ API DESIGN
+--------------------------
+Candidate:
+GET /api/v1/class-sessions/:sessionId/attendance
+
+Potential Parent:
+GET /api/v1/me/parent/enrollments/:enrollmentId/attendance
+
+Potential Student:
+GET /api/v1/me/learner/enrollments/:enrollmentId/attendance
+
+Decide whether Parent/Student reads belong in this phase.
+
+ATTENDANCE SUMMARY
+------------------
+Define:
+totalSessions
+presentCount
+absentCount
+lateCount
+excusedCount
+attendanceRatePercent
+
+Explicitly define denominator:
+- cancelled sessions excluded
+- future sessions excluded
+- unmarked behavior
+- late treatment
+- excused treatment
+
+Do not leave formula ambiguous.
+
+CLASS OPERATIONS DASHBOARD
+--------------------------
+Potential minimal Catechist operations read model:
+- upcoming/recent sessions
+- today's session
+- roster
+- attendance completion state
+- session status
+
+Do NOT include Prayer, Notifications, messaging, lesson planner, full calendar engine.
+
+FUTURE SCHEDULE
+---------------
+Do not accidentally build a full calendar/scheduling platform.
+
+If recurring templates deferred:
+document future integration point.
+
+FAMILY PORTAL BOUNDARY
+----------------------
+Family Portal is COMPLETE.
+
+Do NOT make Attendance depend on FamilyPortal.
+
+Future direction:
+FamilyPortal -> Attendance public API
+
+Attendance owns all attendance data.
+FamilyPortal never writes attendance tables.
+
+LEARNING PROGRESS BOUNDARY
+--------------------------
+Do NOT write attendance into LearningProgress tables.
+
+Attendance is operational participation data.
+
+Potential future LP composition through public AttendanceService only.
+No cycle/direct table writes.
+
+TABLE DESIGN
+------------
+Propose exact MVP table set.
+
+Candidate:
+1. class_sessions
+2. attendance_records
+
+Possible:
+3. class_session_roster
+4. attendance_revisions
+
+Choose exact count.
+
+For each:
+- PK
+- columns
+- unique indexes
+- checks
+- timestamps
+- lifecycle
+- deletion semantics
+- cross-module scalar IDs/FKs
+
+Prefer extraction-safe scalar IDs across module boundaries.
+
+HISTORICAL SAFETY
+-----------------
+No hard deletion may erase attendance history.
+
+Audit Class/Enrollment lifecycle/deletion.
+
+Define behavior when:
+- class archived
+- enrollment deactivated
+- student deactivated
+- session cancelled
+
+ERROR CONTRACT
+--------------
+Design stable errors:
+ClassSessionNotFound
+ClassSessionAccessDenied
+ClassSessionNotEditable
+AttendanceEnrollmentNotInClass
+AttendanceAlreadyFinalized
+AttendanceWriteConflict
+
+Only keep needed errors.
+
+Expected HTTP:
+400 invalid input
+401 unauthenticated
+403 scope
+404 not found
+409 lifecycle/concurrency
+422 domain validation if consistent with project convention
+
+FE / MOBILE CONTRACT
+--------------------
+Catechist Web/Mobile:
+- list sessions
+- create/edit/cancel session
+- open roster
+- bulk attendance
+- completion/finalization state
+
+Parent:
+- linked-child attendance history/summary if included
+
+Student:
+- own attendance history/summary if included
+
+Recommend exact MVP.
+
+SECURITY / MINORS
+-----------------
+Attendance is sensitive child-related educational data.
+
+Require:
+- no global student attendance lookup
+- Parent linked child only
+- Student self only
+- Catechist assigned class only
+- ParishAdmin own parish only
+- SuperAdmin global
+- no public endpoints
+- minimal student display PII
+- no sensitive notes/logging
+
+Audit whether free-text note belongs in MVP.
+
+TEST STRATEGY
+-------------
+Unit:
+- lifecycle
+- statuses
+- summary math
+- scope
+- bulk upsert
+- concurrency/idempotency
+
+Integration MSSQL:
+- session create
+- roster eligibility
+- bulk attendance
+- historical retention
+- summaries
+- Parent/Student scoped read if included
+
+DB e2e:
+- assigned Catechist
+- unassigned 403
+- Parent own child
+- foreign child 403
+- Student self
+- ParishAdmin own parish
+- cross-parish
+- SuperAdmin
+- invalid lifecycle
+- duplicate attendance prevented
+
+Performance:
+- bounded roster/attendance query
+- no per-student N+1
+
+BASELINE VALIDATION
+-------------------
+Audit-only baseline:
+
+node --version
+npm --version
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm audit --audit-level=moderate
+
+If Docker/MSSQL already ready, also run:
+npm run quality:full
+
+Do not modify production code.
+
+REQUIRED REPORT
+---------------
+Create:
+
+docs/ATTENDANCE_CLASS_OPERATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Required sections:
+1 Objective
+2 Roadmap position
+3 Existing Class/Enrollment ownership
+4 Existing Catechist/Parent integration
+5 Module strategy options
+6 Final module strategy
+7 Final module name(s)
+8 Bounded-context definition
+9 Table ownership
+10 Exact MVP table set
+11 Class session model
+12 Session lifecycle
+13 Time/timezone model
+14 Attendance status model
+15 Attendance identity
+16 Enrollment eligibility
+17 Session roster snapshot decision
+18 Historical integrity
+19 Catechist write policy
+20 Admin write policy
+21 Parent/Student write policy
+22 Session permission model
+23 Attendance permission model
+24 New RBAC permissions
+25 Attendance locking/finalization
+26 History/revision decision
+27 Bulk marking contract
+28 Idempotency model
+29 Concurrency model
+30 Session CRUD/API design
+31 Attendance read API design
+32 Parent read API decision
+33 Student read API decision
+34 Attendance summary formula
+35 Class operations dashboard scope
+36 Future Schedule integration
+37 FamilyPortal integration boundary
+38 LearningProgress boundary
+39 Cross-module dependency graph
+40 FK/scalar-ID strategy
+41 Deletion/cascade safety
+42 Error contract
+43 DTO design
+44 FE contract
+45 Mobile contract
+46 Privacy/data minimization
+47 Performance/N+1 strategy
+48 Demo seed strategy
+49 Postman strategy
+50 Test strategy
+51 Risks/deferred
+52 BLOCKER/HIGH/MEDIUM/LOW
+53 Baseline validation
+54 Exact API inventory
+55 Exact prompt plan
+56 #002 readiness
+57 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+GO / NO-GO FOR IMPLEMENTATION: GO/NO-GO
+FINAL MODULE STRATEGY: <one module/two modules>
+FINAL MODULE NAME(S): <name>
+NEW TABLES REQUIRED: <count>
+SESSION ROSTER SNAPSHOT REQUIRED: YES/NO
+ATTENDANCE HISTORY TABLE REQUIRED NOW: YES/NO
+NEW RBAC PERMISSIONS REQUIRED: YES/NO
+CATECHIST WRITE CONTRACT READY: YES/NO
+PARENT READ CONTRACT READY: YES/NO
+STUDENT READ CONTRACT READY: YES/NO
+BULK ATTENDANCE CONTRACT READY: YES/NO
+IDEMPOTENCY MODEL READY: YES/NO
+CONCURRENCY MODEL READY: YES/NO
+HISTORICAL RETENTION SAFE BY DESIGN: YES/NO
+FAMILY PORTAL INTEGRATION BOUNDARY READY: YES/NO
+FE CONTRACT READY: YES/NO
+MOBILE CONTRACT READY: YES/NO
+FINAL RECOMMENDED PROMPT COUNT: 4/5
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+PROMPT PLAN
+-----------
+Preferred:
+#001/5 Domain audit + schema/API design
+#002/5 Persistence foundation + session/attendance schema
+#003/5 Catechist/Admin class operations + bulk attendance APIs
+#004/5 Parent/Student reads + summaries + security/performance hardening
+#005/5 Final audit + demo seed + Postman + quality/Docker
+
+Do not auto-proceed.
+
+#002 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- module strategy decided
+- table set decided
+- lifecycle ready
+- status model ready
+- roster snapshot decision ready
+- RBAC ready
+- historical retention safe
+- bulk contract ready
+- idempotency/concurrency ready
+
+Then recommend:
+ATTENDANCE + CLASS OPERATIONS #002/5 —
+PERSISTENCE FOUNDATION + SESSION / ATTENDANCE SCHEMA
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #001 audit status
+- module strategy/name
+- table count
+- session model
+- attendance status model
+- roster snapshot yes/no
+- permissions
+- Parent/Student read decision
+- bulk/idempotency
+- prompt count
+- BLOCKER/HIGH
+- #002 readiness
+- report path
+
+Do NOT print git add.
+Do NOT run git add/commit/push.

@@ -1,0 +1,713 @@
+CURSOR PROMPT — ATTENDANCE + CLASS OPERATIONS #002/5
+PERSISTENCE FOUNDATION + SESSION / ATTENDANCE SCHEMA
+
+CONTEXT
+-------
+Current phase:
+ATTENDANCE + CLASS OPERATIONS
+
+Completed:
+#001/5 — Domain audit + ownership + workflow + API design
+
+Audit verdict:
+GO FOR IMPLEMENTATION
+
+Final design:
+- one module: `class-operations`
+- owns authoritative class session occurrences
+- owns session roster snapshots
+- owns attendance records
+- recurring schedule templates deferred
+- FamilyPortal remains separate
+- LearningProgress remains separate
+- no hard-delete attendance history
+
+Exact MVP tables:
+1. class_sessions
+2. class_session_roster
+3. attendance_records
+
+This prompt is:
+#002/5 — PERSISTENCE FOUNDATION
+
+Do NOT implement full HTTP business APIs yet.
+Do NOT implement Parent/Student routes yet.
+Do NOT implement demo seed/Postman yet.
+
+PERMANENT WORKFLOW
+------------------
+AUDIT → PLAN → IMPLEMENT → REVIEW → FIX
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "feat(class-operations): add session attendance persistence foundation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/ATTENDANCE_CLASS_OPERATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Also inspect:
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/auth/
+src/modules/access-control/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+src/database/migrations/
+src/database/seeds/
+package.json
+test/
+
+Do NOT deeply audit unrelated modules.
+
+PART A — WINDOWS EOL / FORMAT HYGIENE
+-------------------------------------
+Audit #001 found pre-existing CRLF/Prettier noise on ~17 #004-era files.
+
+Before implementation:
+
+1. Run:
+   git status --short
+   git diff --stat
+
+2. Run:
+   npm run format
+
+3. Re-run:
+   npm run format:check
+   npm run lint
+
+Goal:
+normalize workspace formatting so new persistence work is validated cleanly.
+
+IMPORTANT:
+- Do NOT treat EOL-only noise as business changes.
+- Do NOT intentionally rewrite unrelated business logic.
+- Report exactly which unrelated files changed only because of formatter/EOL normalization.
+- If formatting causes huge unrelated semantic diffs, STOP and report before proceeding.
+- Do not alter `.gitattributes` / `core.autocrlf` policy unless absolutely necessary and explicitly justified.
+
+PART B — MODULE SHELL
+---------------------
+Create:
+
+src/modules/class-operations/
+
+Recommended structure:
+
+class-operations.module.ts
+
+entities/
+  class-session.entity.ts
+  class-session-roster.entity.ts
+  attendance-record.entity.ts
+
+enums/
+  class-session-status.enum.ts
+  attendance-status.enum.ts
+
+interfaces/
+  class-session.interface.ts
+  attendance.interface.ts
+
+services/
+  class-operations.service.ts
+  class-session.service.ts
+  class-session-roster.service.ts
+  attendance.service.ts
+  class-operations-access.service.ts
+
+errors/
+  class-operations.errors.ts
+
+Do NOT create controllers in #002 unless a tiny internal shell is required by project convention.
+No real HTTP business routes in #002.
+
+PART C — MODULE OWNERSHIP
+-------------------------
+ClassOperationsModule owns:
+- class_sessions
+- class_session_roster
+- attendance_records
+
+It may import public APIs from:
+- ClassModule
+- EnrollmentModule
+- StudentModule
+- AuthModule
+- AccessControlModule
+- ParishModule only if required for scope infrastructure
+
+Do NOT import:
+- FamilyPortalModule
+- LearningProgressModule
+- PracticeModule
+- ExamModule
+- CurriculumModule
+- LocalizationModule
+- MediaModule
+- NotificationModule
+
+No reverse dependency from owning modules into ClassOperations.
+No forwardRef.
+
+PART D — CLASS SESSION ENTITY / TABLE
+-------------------------------------
+Create migration + entity for `class_sessions`.
+
+Columns:
+- id uniqueidentifier PK, app-generated UUID
+- class_id uniqueidentifier NOT NULL, FK → classes.id, ON DELETE NO ACTION
+- parish_id uniqueidentifier NOT NULL, FK → parishes.id, ON DELETE NO ACTION
+- academic_year_id uniqueidentifier NOT NULL, FK → academic_years.id, ON DELETE NO ACTION
+- title nvarchar(128) NULL
+- starts_at datetime2 NOT NULL UTC
+- ends_at datetime2 NOT NULL UTC
+- status varchar(32) NOT NULL
+- cancelled_at datetime2 NULL
+- completed_at datetime2 NULL
+- created_by_user_id uniqueidentifier NOT NULL, FK → users.id, ON DELETE NO ACTION
+- updated_by_user_id uniqueidentifier NULL, FK → users.id, ON DELETE NO ACTION
+- created_at / updated_at project-standard UTC datetime2
+
+Allowed status:
+SCHEDULED
+COMPLETED
+CANCELLED
+
+Checks:
+- ends_at > starts_at
+- valid status
+- CANCELLED => cancelled_at NOT NULL
+- non-CANCELLED => cancelled_at NULL
+- COMPLETED => completed_at NOT NULL
+- non-COMPLETED => completed_at NULL
+
+Indexes:
+- (class_id, starts_at)
+- (parish_id, starts_at)
+- status
+- add (class_id, status, starts_at) only if it replaces rather than duplicates another index
+
+No hard delete.
+
+PART E — SESSION STATUS ENUM
+----------------------------
+Create ClassSessionStatus:
+SCHEDULED
+COMPLETED
+CANCELLED
+
+No RESCHEDULED, DRAFT, DELETED.
+
+PART F — SESSION ROSTER SNAPSHOT TABLE
+--------------------------------------
+Create `class_session_roster`.
+
+Columns:
+- id uniqueidentifier PK
+- session_id uniqueidentifier NOT NULL, FK → class_sessions.id, ON DELETE NO ACTION
+- enrollment_id uniqueidentifier NOT NULL, FK → enrollments.id, ON DELETE NO ACTION
+- student_id uniqueidentifier NOT NULL, FK → students.id, ON DELETE NO ACTION
+- display_name_snapshot nvarchar using existing Student fullName constraint, NOT NULL
+- created_at datetime2 NOT NULL UTC
+
+Unique:
+(session_id, enrollment_id)
+
+Indexes:
+- session_id
+- enrollment_id
+- student_id only if justified
+
+No JSON roster blob.
+No cross-module TypeORM relation graph.
+Scalar IDs only.
+
+PART G — ATTENDANCE RECORD TABLE
+--------------------------------
+Create `attendance_records`.
+
+Columns:
+- id uniqueidentifier PK
+- session_id uniqueidentifier NOT NULL, FK → class_sessions.id, ON DELETE NO ACTION
+- enrollment_id uniqueidentifier NOT NULL, FK → enrollments.id, ON DELETE NO ACTION
+- student_id uniqueidentifier NOT NULL, FK → students.id, ON DELETE NO ACTION
+- status varchar(32) NOT NULL
+- note nvarchar(500) NULL
+- marked_by_user_id uniqueidentifier NOT NULL, FK → users.id, ON DELETE NO ACTION
+- marked_at datetime2 NOT NULL UTC
+- updated_by_user_id uniqueidentifier NULL, FK → users.id, ON DELETE NO ACTION
+- created_at / updated_at project-standard UTC
+
+Allowed:
+PRESENT
+ABSENT
+LATE
+EXCUSED
+
+Unique:
+(session_id, enrollment_id)
+
+Indexes:
+- session_id
+- enrollment_id
+- possibly (enrollment_id, session_id) if useful
+- status only if justified
+
+Do NOT persist UNMARKED.
+UNMARKED = roster row with no attendance row.
+
+PART H — ATTENDANCE STATUS ENUM
+-------------------------------
+Create AttendanceStatus:
+PRESENT
+ABSENT
+LATE
+EXCUSED
+
+PART I — FK / DELETION SAFETY
+-----------------------------
+All cross-module SQL FKs:
+ON DELETE NO ACTION
+
+Do NOT cascade-delete historical attendance/session data.
+
+PART J — MIGRATION
+------------------
+Create one clean migration for all 3 tables if consistent with project convention.
+
+Creation order:
+1. class_sessions
+2. class_session_roster
+3. attendance_records
+
+Rollback reverse order.
+
+No synchronize=true.
+Do not edit old migrations.
+
+PART K — DOMAIN SNAPSHOT TYPES
+------------------------------
+Create narrow snapshot types only.
+
+ClassSessionSnapshot:
+- id
+- classId
+- parishId
+- academicYearId
+- title
+- startsAt
+- endsAt
+- status
+- cancelledAt
+- completedAt
+
+SessionRosterEntrySnapshot:
+- sessionId
+- enrollmentId
+- studentId
+- displayNameSnapshot
+
+AttendanceRecordSnapshot:
+- sessionId
+- enrollmentId
+- studentId
+- status
+- note
+- markedAt
+
+No entity exposure.
+
+PART L — SERVICE FOUNDATION
+---------------------------
+Implement persistence/domain foundation only.
+
+ClassSessionService:
+- find/get snapshot
+- internal list support
+- create primitive
+- update primitive
+- transition primitive
+
+ClassSessionRosterService:
+- listBySessionId
+- countBySessionId
+- replace/freeze primitive
+- immutability support
+
+AttendanceService:
+- listBySessionId
+- listByEnrollmentId
+- countBySessionId
+- upsert persistence primitive(s)
+- summary query primitive if clean to establish now
+
+ClassOperationsService:
+- public facade
+- do not expose unsafe low-level mutations that bypass lifecycle/access
+
+No HTTP business routes yet.
+
+PART M — ACCESS SERVICE SHELL
+-----------------------------
+Create ClassOperationsAccessService shell using public APIs only.
+
+Prepare for:
+- assigned Catechist
+- ParishAdmin parish
+- SuperAdmin
+- Parent guardian
+- Student self
+
+Do not query foreign repositories directly.
+
+PART N — RBAC PERMISSIONS
+-------------------------
+Add permissions via existing auth/RBAC seed pattern:
+
+class-sessions.read
+class-sessions.manage
+attendance.read
+attendance.manage
+
+Expected matrix:
+
+SUPER_ADMIN: all 4
+PARISH_ADMIN: all 4
+CATECHIST: all 4
+PARENT: class-sessions.read + attendance.read
+STUDENT: class-sessions.read + attendance.read
+
+Permission != scope.
+
+Update RBAC tests.
+
+Do not invent class-operations.read.
+
+PART O — ROSTER FREEZE FOUNDATION
+---------------------------------
+Persistence must support:
+
+- snapshot ACTIVE enrollments at session creation
+- refresh only while SCHEDULED and zero attendance marks
+- immutable after first attendance mark or COMPLETED/CANCELLED
+
+Implement domain guard/helper methods if useful.
+No HTTP route yet.
+
+PART P — LIFECYCLE GUARDS
+-------------------------
+SCHEDULED:
+- editable
+- attendance writable
+- roster refresh potentially allowed
+
+COMPLETED:
+- immutable
+- attendance locked
+- roster immutable
+
+CANCELLED:
+- immutable
+- attendance locked
+- roster immutable
+
+Allowed:
+SCHEDULED -> COMPLETED
+SCHEDULED -> CANCELLED
+
+No reopen.
+
+PART Q — DOMAIN ERRORS
+----------------------
+Establish only necessary errors:
+- ClassSessionNotFoundError
+- ClassSessionNotEditableError
+- InvalidClassSessionTransitionError
+- AttendanceEnrollmentNotInSessionRosterError
+- AttendanceAlreadyFinalizedError
+- DuplicateAttendanceEnrollmentInputError
+
+Access errors may wait for #003/#004.
+
+PART R — NOTE / TIME
+--------------------
+note max 500 chars.
+Never log note body.
+UTC datetime2 source of truth.
+Do not add parish timezone migration.
+
+PART S — SUMMARY FOUNDATION
+---------------------------
+If summary helper is implemented now, formula must be:
+
+Eligible:
+- session COMPLETED
+- enrollment exists in session roster
+
+Metrics:
+totalSessions
+presentCount
+lateCount
+absentCount
+excusedCount
+unmarkedCount
+
+Rate:
+round(100 * (presentCount + lateCount) / totalSessions)
+when totalSessions > 0, else 0.
+
+CANCELLED/SCHEDULED excluded.
+UNMARKED lowers rate.
+EXCUSED is not present.
+
+PART T — MODULE EXPORT
+----------------------
+Strong preference:
+ClassOperationsModule exports ClassOperationsService only.
+
+No entities/repositories exported.
+No reverse imports.
+
+PART U — MODULE BOUNDARY TESTS
+------------------------------
+Update src/modules/module-boundaries.spec.ts.
+
+Assert:
+- ClassOperations exists
+- no forwardRef
+- only approved module imports
+- no FamilyPortal/LearningProgress/Practice/Exam/Curriculum/etc import
+- facade-only export
+- owning modules do not import ClassOperations
+- no foreign entity/repository imports where test framework supports it
+
+PART V — UNIT TESTS
+-------------------
+Add focused tests for:
+- lifecycle transitions
+- invalid transitions
+- valid attendance statuses
+- no UNMARKED persistence
+- roster immutability guards
+- attendance identity/upsert semantics
+- duplicate input detection helper if introduced
+- summary formula cases
+- module boundaries
+
+PART W — INTEGRATION TESTS
+--------------------------
+Real MSSQL persistence tests:
+1. migration creates all 3 tables
+2. create ClassSession
+3. endsAt <= startsAt rejected
+4. invalid session status rejected
+5. create roster rows
+6. duplicate roster key rejected
+7. create attendance
+8. duplicate attendance identity safely handled / prevented
+9. invalid attendance status rejected
+10. FK NO ACTION historical safety
+11. lifecycle timestamp constraints
+
+No full HTTP e2e for new APIs yet.
+
+PART X — VALIDATION
+-------------------
+Run:
+
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then:
+npm run quality:full
+
+Require PASS.
+
+PART Y — DOCKER
+---------------
+Run:
+docker build --target production -t catechism-api:class-operations-persistence .
+
+Use WSL equivalent if required.
+
+Require:
+- build PASS
+- 0 moderate+ production vulnerabilities
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- session HTTP CRUD routes
+- attendance HTTP routes
+- roster refresh HTTP route
+- Parent attendance routes
+- Student attendance routes
+- demo seed
+- Postman
+- recurring schedules
+- FamilyPortal composition
+- LearningProgress writes
+- notifications
+
+REQUIRED REPORT
+---------------
+Create:
+docs/ATTENDANCE_CLASS_OPERATIONS_002_PERSISTENCE_FOUNDATION_SESSION_ATTENDANCE_SCHEMA_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited
+3 EOL/format hygiene
+4 Files created
+5 Files modified
+6 Module shell
+7 Module imports
+8 Module exports
+9 Table ownership
+10 class_sessions schema
+11 class_session_roster schema
+12 attendance_records schema
+13 Session enum
+14 Attendance enum
+15 FK strategy
+16 Delete/cascade strategy
+17 Index strategy
+18 Migration
+19 Entity design
+20 Public snapshot/interface design
+21 ClassSessionService foundation
+22 RosterService foundation
+23 AttendanceService foundation
+24 ClassOperationsService facade
+25 Access service shell
+26 RBAC permissions
+27 RBAC role matrix
+28 Lifecycle guards
+29 Roster immutability guards
+30 Attendance identity
+31 Summary formula foundation
+32 Error model
+33 Note/time model
+34 Module boundaries
+35 Unit tests
+36 Integration tests
+37 DB migrations
+38 DB e2e regression
+39 quality:full
+40 npm audit
+41 Docker
+42 Commands
+43 Validation matrix
+44 Risks/deferred
+45 BLOCKER/HIGH/MEDIUM/LOW
+46 #003 readiness
+47 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+CLASS OPERATIONS MODULE FOUNDATION READY: YES/NO
+THREE-TABLE SCHEMA READY: YES/NO
+CLASS SESSION SCHEMA READY: YES/NO
+SESSION ROSTER SNAPSHOT SCHEMA READY: YES/NO
+ATTENDANCE RECORD SCHEMA READY: YES/NO
+HISTORICAL RETENTION SAFE: YES/NO
+FK/DELETE POLICY READY: YES/NO
+SESSION LIFECYCLE FOUNDATION READY: YES/NO
+ATTENDANCE STATUS FOUNDATION READY: YES/NO
+ROSTER IMMUTABILITY FOUNDATION READY: YES/NO
+RBAC PERMISSIONS READY: YES/NO
+MODULE BOUNDARY READY: YES/NO
+FULL INTEGRATION: PASS/FAIL
+DB E2E REGRESSION: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#003 READINESS: YES/NO
+
+#003 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- module foundation ready
+- all 3 tables/migration ready
+- lifecycle/status ready
+- roster snapshot foundation ready
+- historical retention safe
+- permissions ready
+- module boundaries clean
+- integration PASS
+- DB e2e regression PASS
+- quality:full PASS
+- Docker PASS
+
+Then recommend exactly:
+
+ATTENDANCE + CLASS OPERATIONS #003/5 —
+CATECHIST / ADMIN SESSION OPERATIONS + ROSTER + BULK ATTENDANCE APIs
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #002 status
+- format hygiene
+- module/table foundation
+- lifecycle/status
+- RBAC
+- historical retention
+- integration
+- DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #003 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(class-operations): add session attendance persistence foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

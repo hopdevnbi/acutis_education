@@ -277,15 +277,21 @@ Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activati
 
 ## Class Operations API (Attendance)
 
-Staff-facing class session and attendance APIs owned by `class-operations` (not Family Portal). Recurring schedule templates and Parent/Student attendance history reads are deferred.
+Class session and attendance APIs owned by `class-operations` (not Family Portal; not Learning Progress). Recurring schedule templates, demo seed, and Postman are deferred to a later prompt. This phase is **not** complete yet.
 
 **Ownership:** `class_sessions`, `class_session_roster`, `attendance_records`.
 
 **Session lifecycle:** `SCHEDULED` → `COMPLETED` | `CANCELLED` (no hard delete; no reopen).
 
-**Attendance statuses:** `PRESENT` | `ABSENT` | `LATE` | `EXCUSED`. UNMARKED = roster row with no attendance row.
+**Attendance statuses:** `PRESENT` | `ABSENT` | `LATE` | `EXCUSED`. UNMARKED = roster row with no `attendance_records` row (`attendanceStatus: null` in history responses).
 
-**Roster:** ACTIVE enrollments are snapshotted at session create. Refresh allowed only while `SCHEDULED` and zero attendance marks.
+**Roster:** ACTIVE enrollments are snapshotted at session create. Refresh allowed only while `SCHEDULED` and zero attendance marks. History/summary use the frozen roster ∩ `COMPLETED` sessions — historical rows remain after enrollment becomes `TRANSFERRED` / `WITHDRAWN` / `COMPLETED`. `SCHEDULED` and `CANCELLED` sessions are excluded (future scheduled sessions are not absences).
+
+**Summary formula (all actors):** `attendanceRatePercent = round(100 * (presentCount + lateCount) / totalSessions)` when `totalSessions > 0`, else `0`. `LATE` counts as present; `EXCUSED` does not; `UNMARKED` lowers the rate via the denominator. Counts are numeric `0`, never null.
+
+**Note privacy:** staff history may include `note`; Parent/Student (`/me`) history omits `note` entirely. Summaries never include notes. Audit actor IDs are never returned.
+
+### Staff session routes
 
 | Method | Route | Permission | Notes |
 | ------ | ----- | ---------- | ----- |
@@ -299,11 +305,24 @@ Staff-facing class session and attendance APIs owned by `class-operations` (not 
 | `GET` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.read` | Staff roster + marks |
 | `PUT` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.manage` | Bulk upsert; omitted learners stay UNMARKED |
 
-**Staff scope:** assigned Catechist (ACTIVE assignment), ParishAdmin (own parish), SuperAdmin. Parent/Student are denied on these staff routes even if they hold read permissions. Permission never replaces scope.
+### Enrollment attendance reads
+
+| Method | Route | Permission | Notes |
+| ------ | ----- | ---------- | ----- |
+| `GET` | `/api/v1/enrollments/:enrollmentId/attendance` | `attendance.read` | Staff history (paginated; may include `note`) |
+| `GET` | `/api/v1/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Staff summary |
+| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance` | `attendance.read` | PARENT + ACTIVE guardian only; learner-safe |
+| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Same Parent scope |
+| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance` | `attendance.read` | STUDENT self enrollment only; learner-safe |
+| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Same Student scope |
+
+**History pagination:** `page` default 1, `limit` default 20, max 50. Sort: `startsAt DESC`, `sessionId DESC`. Response: `page`, `limit`, `total`, `totalPages`, `items`. Summary is not paginated.
+
+**Staff scope (generic routes):** assigned Catechist (ACTIVE assignment), ParishAdmin (own parish), SuperAdmin. Parent/Student are denied on generic staff routes — use `/me/parent` or `/me/learner`. Permission never replaces scope.
+
+**`/me` semantics:** require genuine `PARENT` or `STUDENT` roles. No SuperAdmin/ParishAdmin/Catechist impersonation fallback on actor-specific routes.
 
 **Bulk PUT:** transactional all-or-nothing; unique `(sessionId, enrollmentId)`; enrollment must be on frozen roster; note max 500 (never logged).
-
-Parent/Student attendance history and enrollment summaries are planned for a later prompt. This phase is **not** complete until demo/Postman finalization.
 
 ## Student API
 

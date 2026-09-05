@@ -7,6 +7,10 @@ import {
 } from '@nestjs/common';
 import { ClassNotFoundError, InvalidClassIdError } from '../../class/errors/class.errors';
 import { ClassScopeAccessDeniedError } from '../../class/errors/class-scope.errors';
+import {
+  EnrollmentNotFoundError,
+  InvalidEnrollmentIdError,
+} from '../../enrollment/errors/enrollment.errors';
 import { ParishScopeAccessDeniedError } from '../../parish/errors/parish-scope.errors';
 import {
   AttendanceAlreadyFinalizedError,
@@ -34,7 +38,11 @@ export function rethrowClassOperationsServiceError(error: unknown): never {
     throw new ForbiddenException(error.message);
   }
 
-  if (error instanceof ClassSessionNotFoundError || error instanceof ClassNotFoundError) {
+  if (
+    error instanceof ClassSessionNotFoundError ||
+    error instanceof ClassNotFoundError ||
+    error instanceof EnrollmentNotFoundError
+  ) {
     throw new NotFoundException(error.message);
   }
 
@@ -54,6 +62,7 @@ export function rethrowClassOperationsServiceError(error: unknown): never {
   if (
     error instanceof InvalidClassSessionIdError ||
     error instanceof InvalidClassIdError ||
+    error instanceof InvalidEnrollmentIdError ||
     error instanceof InvalidClassSessionTimeRangeError ||
     error instanceof InvalidAttendanceStatusError ||
     error instanceof InvalidAttendanceNoteError ||

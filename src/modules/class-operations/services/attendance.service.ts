@@ -5,6 +5,7 @@ import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { AttendanceRecordEntity } from '../entities/attendance-record.entity';
 import { ClassSessionRosterEntity } from '../entities/class-session-roster.entity';
 import { ClassSessionEntity } from '../entities/class-session.entity';
+import { AttendanceStatus } from '../enums/attendance-status.enum';
 import { ClassSessionStatus } from '../enums/class-session-status.enum';
 import {
   AttendanceAlreadyFinalizedError,
@@ -13,6 +14,8 @@ import {
 import type {
   AttendanceEnrollmentSummary,
   AttendanceRecordSnapshot,
+  EnrollmentAttendanceHistoryResult,
+  ListEnrollmentAttendanceHistoryInput,
   UpsertAttendanceRecordInput,
 } from '../interfaces/attendance.interface';
 import { toAttendanceRecordSnapshot } from '../mappers/attendance-record.mapper';
@@ -21,10 +24,7 @@ import {
   normalizeAttendanceNote,
   parseAttendanceStatus,
 } from '../utils/attendance-bulk-input.util';
-import {
-  incrementStatusCount,
-  toAttendanceEnrollmentSummary,
-} from '../utils/attendance-summary.util';
+import { toAttendanceEnrollmentSummary } from '../utils/attendance-summary.util';
 import { isAttendanceWritable } from '../utils/class-session-lifecycle.util';
 
 @Injectable()
@@ -34,8 +34,6 @@ export class AttendanceService {
     private readonly attendanceRepository: Repository<AttendanceRecordEntity>,
     @InjectRepository(ClassSessionRosterEntity)
     private readonly rosterRepository: Repository<ClassSessionRosterEntity>,
-    @InjectRepository(ClassSessionEntity)
-    private readonly classSessionRepository: Repository<ClassSessionEntity>,
   ) {}
 
   async listBySessionId(rawSessionId: string): Promise<AttendanceRecordSnapshot[]> {
@@ -178,60 +176,123 @@ export class AttendanceService {
   ): Promise<AttendanceEnrollmentSummary> {
     const enrollmentId = normalizeUuid(rawEnrollmentId);
 
-    const rosterRows = await this.rosterRepository.find({
-      where: { enrollmentId },
-    });
+    const row = await this.rosterRepository
+      .createQueryBuilder('roster')
+      .innerJoin(ClassSessionEntity, 'session', 'session.id = roster.sessionId')
+      .leftJoin(
+        AttendanceRecordEntity,
+        'attendance',
+        'attendance.sessionId = roster.sessionId AND attendance.enrollmentId = roster.enrollmentId',
+      )
+      .select('COUNT(1)', 'totalSessions')
+      .addSelect(`SUM(CASE WHEN attendance.status = :present THEN 1 ELSE 0 END)`, 'presentCount')
+      .addSelect(`SUM(CASE WHEN attendance.status = :late THEN 1 ELSE 0 END)`, 'lateCount')
+      .addSelect(`SUM(CASE WHEN attendance.status = :absent THEN 1 ELSE 0 END)`, 'absentCount')
+      .addSelect(`SUM(CASE WHEN attendance.status = :excused THEN 1 ELSE 0 END)`, 'excusedCount')
+      .addSelect(`SUM(CASE WHEN attendance.status IS NULL THEN 1 ELSE 0 END)`, 'unmarkedCount')
+      .where('roster.enrollmentId = :enrollmentId', { enrollmentId })
+      .andWhere('session.status = :completedStatus', {
+        completedStatus: ClassSessionStatus.Completed,
+      })
+      .setParameters({
+        present: AttendanceStatus.Present,
+        late: AttendanceStatus.Late,
+        absent: AttendanceStatus.Absent,
+        excused: AttendanceStatus.Excused,
+      })
+      .getRawOne<{
+        totalSessions: string | number | null;
+        presentCount: string | number | null;
+        lateCount: string | number | null;
+        absentCount: string | number | null;
+        excusedCount: string | number | null;
+        unmarkedCount: string | number | null;
+      }>();
 
-    if (rosterRows.length === 0) {
-      return toAttendanceEnrollmentSummary({
-        enrollmentId,
-        totalSessions: 0,
-        presentCount: 0,
-        lateCount: 0,
-        absentCount: 0,
-        excusedCount: 0,
-        unmarkedCount: 0,
-      });
-    }
+    const toCount = (value: string | number | null | undefined): number => {
+      if (value === null || value === undefined) {
+        return 0;
+      }
 
-    const sessionIds = [...new Set(rosterRows.map((row) => normalizeUuid(row.sessionId)))];
-    const completedSessions = await this.classSessionRepository.find({
-      where: {
-        id: In(sessionIds),
-        status: ClassSessionStatus.Completed,
-      },
-    });
-    const completedSessionIds = new Set(
-      completedSessions.map((session) => normalizeUuid(session.id)),
-    );
-
-    const attendanceRows = await this.attendanceRepository.find({
-      where: {
-        enrollmentId,
-        sessionId: In([...completedSessionIds]),
-      },
-    });
-    const attendanceBySessionId = new Map(
-      attendanceRows.map((row) => [normalizeUuid(row.sessionId), row.status] as const),
-    );
-
-    const counts = {
-      presentCount: 0,
-      lateCount: 0,
-      absentCount: 0,
-      excusedCount: 0,
-      unmarkedCount: 0,
+      return Number(value);
     };
-
-    for (const sessionId of completedSessionIds) {
-      const status = attendanceBySessionId.get(sessionId) ?? null;
-      incrementStatusCount(status, counts);
-    }
 
     return toAttendanceEnrollmentSummary({
       enrollmentId,
-      totalSessions: completedSessionIds.size,
-      ...counts,
+      totalSessions: toCount(row?.totalSessions),
+      presentCount: toCount(row?.presentCount),
+      lateCount: toCount(row?.lateCount),
+      absentCount: toCount(row?.absentCount),
+      excusedCount: toCount(row?.excusedCount),
+      unmarkedCount: toCount(row?.unmarkedCount),
     });
+  }
+
+  async listEnrollmentAttendanceHistory(
+    input: ListEnrollmentAttendanceHistoryInput,
+  ): Promise<EnrollmentAttendanceHistoryResult> {
+    const enrollmentId = normalizeUuid(input.enrollmentId);
+    const page = input.page;
+    const limit = input.limit;
+
+    const baseQuery = this.rosterRepository
+      .createQueryBuilder('roster')
+      .innerJoin(ClassSessionEntity, 'session', 'session.id = roster.sessionId')
+      .leftJoin(
+        AttendanceRecordEntity,
+        'attendance',
+        'attendance.sessionId = roster.sessionId AND attendance.enrollmentId = roster.enrollmentId',
+      )
+      .where('roster.enrollmentId = :enrollmentId', { enrollmentId })
+      .andWhere('session.status = :completedStatus', {
+        completedStatus: ClassSessionStatus.Completed,
+      });
+
+    const total = await baseQuery.clone().getCount();
+
+    const rows = await baseQuery
+      .select('session.id', 'sessionId')
+      .addSelect('session.classId', 'classId')
+      .addSelect('session.title', 'title')
+      .addSelect('session.startsAt', 'startsAt')
+      .addSelect('session.endsAt', 'endsAt')
+      .addSelect('session.status', 'sessionStatus')
+      .addSelect('attendance.status', 'attendanceStatus')
+      .addSelect('attendance.note', 'note')
+      .addSelect('attendance.markedAt', 'markedAt')
+      .orderBy('session.startsAt', 'DESC')
+      .addOrderBy('session.id', 'DESC')
+      .offset((page - 1) * limit)
+      .limit(limit)
+      .getRawMany<{
+        sessionId: string;
+        classId: string;
+        title: string | null;
+        startsAt: Date;
+        endsAt: Date;
+        sessionStatus: string;
+        attendanceStatus: AttendanceStatus | null;
+        note: string | null;
+        markedAt: Date | null;
+      }>();
+
+    return {
+      enrollmentId,
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+      items: rows.map((row) => ({
+        sessionId: normalizeUuid(row.sessionId),
+        classId: normalizeUuid(row.classId),
+        title: row.title,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        sessionStatus: row.sessionStatus,
+        attendanceStatus: row.attendanceStatus ?? null,
+        note: row.note ?? null,
+        markedAt: row.markedAt ?? null,
+      })),
+    };
   }
 }

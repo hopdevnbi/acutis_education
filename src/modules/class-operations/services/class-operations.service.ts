@@ -10,6 +10,8 @@ import { StudentService } from '../../student/services/student.service';
 import {
   CLASS_SESSION_LIST_DEFAULT_LIMIT,
   CLASS_SESSION_LIST_DEFAULT_PAGE,
+  ENROLLMENT_ATTENDANCE_HISTORY_DEFAULT_LIMIT,
+  ENROLLMENT_ATTENDANCE_HISTORY_DEFAULT_PAGE,
 } from '../constants/class-operations.constants';
 import { AttendanceRecordEntity } from '../entities/attendance-record.entity';
 import { ClassSessionEntity } from '../entities/class-session.entity';
@@ -22,6 +24,7 @@ import {
 import type {
   AttendanceEnrollmentSummary,
   AttendanceRecordSnapshot,
+  EnrollmentAttendanceHistoryResult,
   UpsertAttendanceRecordInput,
 } from '../interfaces/attendance.interface';
 import type {
@@ -120,6 +123,18 @@ export class ClassOperationsService {
 
   listAttendanceByEnrollmentId(rawEnrollmentId: string): Promise<AttendanceRecordSnapshot[]> {
     return this.attendanceService.listByEnrollmentId(rawEnrollmentId);
+  }
+
+  listEnrollmentAttendanceHistory(input: {
+    readonly enrollmentId: string;
+    readonly page?: number;
+    readonly limit?: number;
+  }): Promise<EnrollmentAttendanceHistoryResult> {
+    return this.attendanceService.listEnrollmentAttendanceHistory({
+      enrollmentId: input.enrollmentId,
+      page: input.page ?? ENROLLMENT_ATTENDANCE_HISTORY_DEFAULT_PAGE,
+      limit: input.limit ?? ENROLLMENT_ATTENDANCE_HISTORY_DEFAULT_LIMIT,
+    });
   }
 
   getEnrollmentAttendanceSummary(rawEnrollmentId: string): Promise<AttendanceEnrollmentSummary> {

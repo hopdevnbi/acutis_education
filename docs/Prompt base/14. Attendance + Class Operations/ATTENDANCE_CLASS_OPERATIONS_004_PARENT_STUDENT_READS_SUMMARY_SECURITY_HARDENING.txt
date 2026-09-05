@@ -1,0 +1,779 @@
+CURSOR PROMPT — ATTENDANCE + CLASS OPERATIONS #004/5
+PARENT / STUDENT ATTENDANCE READS + SUMMARY + SECURITY / PERFORMANCE / CONTRACT HARDENING
+
+CONTEXT
+-------
+Completed:
+- #001/5 Domain audit + schema/API design
+- #002/5 Persistence foundation + 3-table schema
+- #003/5 Catechist/Admin session operations + roster + bulk attendance APIs
+
+#003 verified:
+- 9 staff endpoints READY
+- session create + roster freeze READY
+- list/detail/update/cancel/complete READY
+- roster refresh READY
+- staff attendance GET READY
+- bulk attendance PUT READY
+- Catechist scope SAFE
+- ParishAdmin scope SAFE
+- SuperAdmin scope READY
+- Parent/Student staff endpoint denial SAFE
+- transactional safety READY
+- lifecycle concurrency guard READY
+- N+1/performance READY
+- data minimization READY
+- OpenAPI/README READY
+- integration PASS
+- DB e2e PASS
+- self-contained quality:full PASS
+- npm audit PASS
+- Docker PASS
+- BLOCKER/HIGH/MEDIUM = 0
+
+Current:
+ATTENDANCE + CLASS OPERATIONS #004/5
+
+Remaining:
+#005/5 — FINAL AUDIT + DEMO SEED + POSTMAN + PHASE COMPLETION
+
+PRIMARY OBJECTIVE
+-----------------
+Complete learner/guardian attendance read contracts and harden the whole Class Operations module before final phase completion.
+
+Implement:
+1. enrollment attendance history
+2. enrollment attendance summary
+3. Parent linked-child attendance history/summary
+4. Student self attendance history/summary
+5. strict guardian/self scope
+6. staff generic enrollment reads with proper scope
+7. final RBAC/security hardening
+8. summary correctness
+9. pagination/sorting
+10. N+1/performance
+11. OpenAPI/README contract readiness
+12. full cross-actor denial matrix
+
+Do NOT implement demo seed/Postman yet.
+Do NOT declare phase complete yet.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(class-operations): add parent student attendance reads"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read:
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+docs/ATTENDANCE_CLASS_OPERATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_002_PERSISTENCE_FOUNDATION_SESSION_ATTENDANCE_SCHEMA_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_003_CATECHIST_ADMIN_SESSION_ROSTER_BULK_ATTENDANCE_APIS_REPORT.md
+
+Inspect only relevant code:
+src/modules/class-operations/
+src/modules/enrollment/
+src/modules/student/
+src/modules/class/
+src/modules/auth/
+src/modules/access-control/
+src/modules/family-portal/
+src/modules/module-boundaries.spec.ts
+test/
+README.md
+package.json
+
+FINAL READ API INVENTORY
+------------------------
+Add exactly these 6 read endpoints:
+
+10. GET /api/v1/enrollments/:enrollmentId/attendance
+11. GET /api/v1/enrollments/:enrollmentId/attendance-summary
+
+12. GET /api/v1/me/parent/enrollments/:enrollmentId/attendance
+13. GET /api/v1/me/parent/enrollments/:enrollmentId/attendance-summary
+
+14. GET /api/v1/me/learner/enrollments/:enrollmentId/attendance
+15. GET /api/v1/me/learner/enrollments/:enrollmentId/attendance-summary
+
+Together with #003 there should be exactly 15 Class Operations endpoints.
+
+Do not add:
+- global student attendance lookup
+- class aggregate analytics
+- Parent writes
+- Student writes
+
+GENERIC STAFF HISTORY
+---------------------
+GET /api/v1/enrollments/:enrollmentId/attendance
+
+Permission:
+attendance.read
+
+Strong recommended actors:
+- SUPER_ADMIN: global
+- PARISH_ADMIN: enrollment parish only
+- CATECHIST: ACTIVE assignment to enrollment class
+- PARENT: deny generic route, use /me/parent
+- STUDENT: deny generic route, use /me/learner
+
+Return paginated history.
+
+Staff history item may include:
+- sessionId
+- classId
+- title?
+- startsAt
+- endsAt
+- sessionStatus
+- attendanceStatus nullable/derived
+- note nullable
+- markedAt nullable
+
+Do not expose audit actor IDs.
+
+GENERIC STAFF SUMMARY
+---------------------
+GET /api/v1/enrollments/:enrollmentId/attendance-summary
+
+Permission:
+attendance.read
+
+Response:
+- enrollmentId
+- totalSessions
+- presentCount
+- lateCount
+- absentCount
+- excusedCount
+- unmarkedCount
+- attendanceRatePercent
+
+PARENT HISTORY
+--------------
+GET /api/v1/me/parent/enrollments/:enrollmentId/attendance
+
+Require:
+- PARENT actor
+- attendance.read
+- resolve enrollment
+- derive studentId server-side
+- ACTIVE guardian relationship
+
+Foreign enrollment -> 403.
+Unknown enrollment -> 404.
+
+Do not expose:
+- note
+- markedBy
+- updatedBy
+- other learner data
+- roster internals
+
+PARENT SUMMARY
+--------------
+GET /api/v1/me/parent/enrollments/:enrollmentId/attendance-summary
+
+Same scope.
+Compact summary only.
+
+STUDENT HISTORY
+---------------
+GET /api/v1/me/learner/enrollments/:enrollmentId/attendance
+
+Require:
+- STUDENT actor
+- attendance.read
+- self enrollment only
+
+No client-controlled studentId.
+Foreign enrollment -> 403.
+Unknown enrollment -> 404.
+
+Learner-safe history:
+no note
+no actor IDs
+no other student data
+
+STUDENT SUMMARY
+---------------
+GET /api/v1/me/learner/enrollments/:enrollmentId/attendance-summary
+
+Same self scope.
+Compact summary only.
+
+HISTORY SEMANTICS
+-----------------
+History uses SESSION ROSTER membership, not current enrollment status.
+
+Historical sessions remain visible after enrollment later becomes:
+- TRANSFERRED
+- WITHDRAWN
+- COMPLETED
+
+Once access is authorized, do not filter old attendance away because enrollment is no longer ACTIVE.
+
+SESSION ELIGIBILITY
+-------------------
+For MVP attendance history:
+- COMPLETED => included
+- CANCELLED => excluded
+- SCHEDULED => excluded
+
+Do not treat future scheduled sessions as absences.
+
+SUMMARY FORMULA
+---------------
+Canonical formula:
+
+Eligible sessions:
+status COMPLETED
+AND enrollment exists in class_session_roster
+
+totalSessions = eligible count
+presentCount = PRESENT
+lateCount = LATE
+absentCount = ABSENT
+excusedCount = EXCUSED
+unmarkedCount = no attendance row
+
+attendanceRatePercent =
+round(100 * (presentCount + lateCount) / totalSessions)
+if totalSessions > 0
+else 0
+
+Rules:
+- LATE counts as present
+- EXCUSED does not count as present
+- UNMARKED lowers rate
+- CANCELLED excluded
+- SCHEDULED excluded
+
+No variant formulas per actor.
+
+ZERO / UNMARKED CONTRACT
+------------------------
+Counts and rate use numeric 0, never null.
+
+Choose one history status contract:
+A. nullable attendanceStatus
+or
+B. derived response-only "UNMARKED"
+
+Do NOT alter persistence enum.
+
+Whichever is chosen:
+- document it
+- apply consistently
+- test it
+
+PAGINATION
+----------
+History endpoints:
+page default 1
+limit project default
+max 50
+
+Stable sort:
+startsAt DESC
+sessionId DESC tie-breaker
+
+Return:
+page
+limit
+total
+items
+
+Summary is not paginated.
+
+ACCESS / ACTOR MATRIX
+---------------------
+GENERIC:
+- assigned Catechist allowed
+- unassigned Catechist 403
+- ParishAdmin own parish allowed
+- ParishAdmin foreign parish 403
+- SuperAdmin allowed
+- Parent 403
+- Student 403
+
+PARENT ME:
+- linked Parent allowed
+- foreign child 403
+- Catechist 403
+- Student 403
+- ParishAdmin 403
+- SuperAdmin 403 unless genuinely Parent under actual multi-role model; no impersonation fallback
+
+STUDENT ME:
+- Student self allowed
+- foreign enrollment 403
+- Parent 403
+- Catechist 403
+- ParishAdmin 403
+- SuperAdmin 403 unless genuinely Student under actual role model; no impersonation fallback
+
+Preserve actor-specific `/me` semantics.
+
+PARENT GUARDIAN SCOPE
+---------------------
+Reuse public guardian scope APIs.
+
+Order:
+1. resolve enrollment
+2. derive studentId
+3. assert Parent actor
+4. assert ACTIVE guardian link
+5. query attendance
+
+Do not query Student/Enrollment repositories directly from ClassOperations.
+
+STUDENT SELF SCOPE
+------------------
+Reuse existing learner self-scope APIs.
+
+Order:
+1. resolve enrollment
+2. assert Student actor
+3. verify enrollment belongs to actor
+4. query attendance
+
+Do not duplicate user→student logic.
+
+NOTE PRIVACY
+------------
+Staff attendance history may include note.
+
+Parent/Student history MUST omit note entirely.
+
+No note in summary.
+
+Do not expose:
+markedByUserId
+updatedByUserId
+createdByUserId
+internal row IDs unless needed
+
+DTO OWNERSHIP
+-------------
+Create ClassOperations-owned HTTP DTOs.
+
+Suggested:
+- EnrollmentAttendanceHistoryQueryDto
+- StaffEnrollmentAttendanceHistoryResponseDto
+- LearnerAttendanceHistoryResponseDto
+- StaffAttendanceHistoryItemDto
+- LearnerAttendanceHistoryItemDto
+- AttendanceSummaryResponseDto
+
+Parent and Student may share same learner-safe DTO.
+
+No entity leakage.
+
+CONTROLLERS
+-----------
+Recommended:
+- EnrollmentAttendanceController
+- ParentAttendanceController
+- LearnerAttendanceController
+
+All inside class-operations.
+
+Do not extend FamilyPortal or Enrollment controllers.
+
+FAMILY PORTAL BOUNDARY
+----------------------
+FamilyPortal remains unchanged.
+
+Do NOT import ClassOperations into FamilyPortal in #004.
+Do NOT add attendance fields to FamilyPortal responses.
+
+ClassOperations owns its own `/me/parent/.../attendance` routes.
+
+LEARNING PROGRESS BOUNDARY
+--------------------------
+Do not import LearningProgressModule.
+Do not write attendance into learning progress.
+Attendance remains independent operational data.
+
+QUERY / PERFORMANCE
+-------------------
+History query should be set-based:
+
+class_session_roster
+JOIN class_sessions
+LEFT JOIN attendance_records
+
+Filter:
+enrollmentId
+session status COMPLETED
+
+Paginate/order in SQL.
+
+Summary:
+prefer one bounded aggregate query.
+
+Avoid:
+- loading all sessions then querying each attendance row
+- per-session service loops
+- per-row Class/Student lookups
+
+No N+1.
+
+INDEX REVIEW
+------------
+Audit existing indexes.
+
+If needed, add a NEW migration for a narrow index such as:
+class_session_roster(enrollment_id, session_id)
+
+Do not edit #002 migration.
+
+Do not add speculative indexes without evidence.
+
+SECURITY / DATA MINIMIZATION
+----------------------------
+Require:
+- no global learner lookup
+- no foreign child history
+- Parent guardian only
+- Student self only
+- Catechist assigned class only
+- ParishAdmin own parish
+- SuperAdmin generic staff only
+- no /me impersonation
+- no note leak to Parent/Student
+- no learner PII
+- no audit actor IDs
+
+OPENAPI
+-------
+Document all 6 new endpoints:
+- bearer auth
+- permission
+- actor/scope semantics
+- enrollmentId UUID
+- pagination
+- response DTO
+- 400/401/403/404
+
+Parent docs:
+ACTIVE guardian relationship required.
+
+Learner docs:
+self enrollment only.
+
+Generic docs:
+staff scoped; Parent/Student use actor-specific routes.
+
+README
+------
+Update Class Operations section:
+- generic staff history/summary
+- Parent linked-child history/summary
+- Student self history/summary
+- summary formula
+- completed roster snapshot semantics
+- scheduled/cancelled exclusion
+- LATE / EXCUSED / UNMARKED rules
+- note privacy
+- generic vs /me access
+- pagination
+
+Do NOT claim phase complete.
+
+UNIT TESTS
+----------
+Add:
+- zero summary
+- PRESENT
+- LATE as present
+- ABSENT
+- EXCUSED
+- UNMARKED
+- mixed rounding
+- CANCELLED excluded
+- SCHEDULED excluded
+- generic staff matrix
+- Parent guardian
+- Parent foreign child
+- Student self
+- Student foreign
+- no /me admin impersonation
+- learner-safe mapper omits note/audit IDs
+- stable pagination
+- bounded service calls
+
+INTEGRATION TESTS
+-----------------
+Real MSSQL:
+1. COMPLETED history included
+2. CANCELLED excluded
+3. SCHEDULED excluded
+4. unmarked completed roster included
+5. transfer/withdraw preserves old history
+6. summary counts exact
+7. percentage exact
+8. stable pagination/sort
+9. note omitted in learner-safe mapper
+10. summary query bounded
+
+DB E2E
+------
+GENERIC:
+1 assigned Catechist 200
+2 unassigned Catechist 403
+3 ParishAdmin own parish 200
+4 ParishAdmin foreign 403
+5 SuperAdmin 200
+6 Parent generic 403
+7 Student generic 403
+
+PARENT:
+8 linked history 200
+9 linked summary 200
+10 foreign child 403
+11 unknown enrollment 404
+12 Catechist parent-me 403
+13 Student parent-me 403
+14 ParishAdmin parent-me 403
+15 SuperAdmin parent-me 403
+
+STUDENT:
+16 self history 200
+17 self summary 200
+18 foreign enrollment 403
+19 Parent learner-me 403
+20 Catechist learner-me 403
+21 ParishAdmin learner-me 403
+22 SuperAdmin learner-me 403
+
+DATA:
+23 Parent response no note
+24 Student response no note
+25 no PII/audit IDs
+26 CANCELLED excluded
+27 SCHEDULED excluded
+28 unmarked semantics correct
+29 deterministic pagination
+30 unauthenticated 401
+
+Retain #003 staff regressions.
+
+MODULE BOUNDARY
+---------------
+Reconfirm:
+- one module
+- exactly 3 owned tables
+- facade-only export
+- no FamilyPortal
+- no LearningProgress
+- no forwardRef
+- no reverse imports
+- no foreign entities/repositories
+
+FULL VALIDATION
+---------------
+Run:
+node --version
+npm --version
+npm run format
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+npm audit --audit-level=moderate
+npm run quality
+
+DB:
+npm run test:db:prepare -- --reset
+npm run test:db:migrations
+npm run test:integration
+npm run test:e2e:db
+
+Then:
+npm run quality:full
+
+Require PASS.
+
+DOCKER
+------
+Run:
+docker build --target production -t catechism-api:class-operations-reads .
+
+Use WSL/ASCII junction if needed.
+Require PASS + 0 moderate+ production vulnerabilities.
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- demo seed
+- Postman
+- final phase completion
+- recurring schedules
+- notifications
+- attendance revision history
+- session reopen
+- DELETE session
+- FamilyPortal composition
+- LearningProgress writes
+- class-wide attendance analytics
+- Parent/Student writes
+- public endpoints
+
+REQUIRED REPORT
+---------------
+Create:
+docs/ATTENDANCE_CLASS_OPERATIONS_004_PARENT_STUDENT_READS_SUMMARY_SECURITY_HARDENING_REPORT.md
+
+Required sections:
+1 Objective
+2 State inherited
+3 Files created
+4 Files modified
+5 Final route inventory
+6 Generic enrollment history
+7 Generic enrollment summary
+8 Generic staff actor scope
+9 Parent history
+10 Parent summary
+11 Parent guardian scope
+12 Student history
+13 Student summary
+14 Student self scope
+15 Cross-actor denial matrix
+16 Historical roster semantics
+17 Session eligibility
+18 Summary formula
+19 Zero/UNMARKED semantics
+20 Note privacy
+21 Audit-field privacy
+22 DTO boundaries
+23 Controller ownership
+24 Pagination/sorting
+25 Query design
+26 Index review
+27 N+1/performance
+28 FamilyPortal boundary
+29 LearningProgress boundary
+30 Security/data minimization
+31 HTTP error contract
+32 OpenAPI
+33 README
+34 Module boundaries
+35 Unit tests
+36 Integration tests
+37 DB e2e
+38 Staff API regression
+39 Self-contained quality:full
+40 npm audit
+41 Docker
+42 Commands
+43 Validation matrix
+44 Risks/deferred
+45 BLOCKER/HIGH/MEDIUM/LOW
+46 #005 readiness
+47 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+GENERIC STAFF ATTENDANCE HISTORY READY: YES/NO
+GENERIC STAFF ATTENDANCE SUMMARY READY: YES/NO
+GENERIC ATTENDANCE READ ACTORS: <list>
+PARENT ATTENDANCE HISTORY READY: YES/NO
+PARENT ATTENDANCE SUMMARY READY: YES/NO
+PARENT GUARDIAN SCOPE SAFE: YES/NO
+STUDENT ATTENDANCE HISTORY READY: YES/NO
+STUDENT ATTENDANCE SUMMARY READY: YES/NO
+STUDENT SELF SCOPE SAFE: YES/NO
+ADMIN / STAFF SCOPE SAFE: YES/NO
+ACTOR-SPECIFIC /ME IMPERSONATION SAFE: YES/NO
+SUMMARY FORMULA READY: YES/NO
+HISTORICAL ROSTER SEMANTICS READY: YES/NO
+NOTE PRIVACY SAFE: YES/NO
+DATA MINIMIZATION READY: YES/NO
+PAGINATION/SORTING READY: YES/NO
+N+1/PERFORMANCE READY: YES/NO
+OPENAPI READY: YES/NO
+README READY: YES/NO
+MODULE BOUNDARY READY: YES/NO
+STAFF API REGRESSION: PASS/FAIL
+FULL INTEGRATION: PASS/FAIL
+DB E2E: PASS/FAIL
+SELF-CONTAINED QUALITY:FULL: PASS/FAIL
+NPM AUDIT: PASS/FAIL
+DOCKER: PASS/FAIL
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#005 READINESS: YES/NO
+
+#005 GATE
+---------
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- Parent scope safe
+- Student scope safe
+- generic staff scope safe
+- no /me admin impersonation
+- summary formula correct
+- historical roster semantics correct
+- learner-safe note privacy
+- data minimization ready
+- pagination/N+1 ready
+- OpenAPI/README ready
+- #003 staff APIs regress clean
+- integration PASS
+- DB e2e PASS
+- quality:full PASS
+- npm audit PASS
+- Docker PASS
+
+Then recommend exactly:
+
+ATTENDANCE + CLASS OPERATIONS #005/5 —
+FINAL AUDIT + DEMO SEED + POSTMAN + PHASE COMPLETION
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #004 status
+- generic staff reads
+- Parent reads/scope
+- Student reads/scope
+- summary formula
+- history semantics
+- note/privacy
+- performance
+- staff regression
+- integration/DB e2e
+- quality:full
+- Docker
+- BLOCKER/HIGH/MEDIUM
+- #005 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(class-operations): add parent student attendance reads"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.
