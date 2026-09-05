@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { NotificationDeviceEntity } from '../entities/notification-device.entity';
 import {
   NotificationDevicePlatform,
@@ -10,6 +10,16 @@ import {
   NotificationDeviceNotFoundError,
 } from '../errors/notification.errors';
 import { NotificationDeviceService } from './notification-device.service';
+
+function createMssqlUniqueError(number: 2601 | 2627): QueryFailedError {
+  const error = new QueryFailedError(
+    'query',
+    [],
+    new Error(`Violation of UNIQUE KEY constraint (error ${number})`),
+  );
+  (error as any).driverError = { number };
+  return error;
+}
 
 describe('NotificationDeviceService', () => {
   let service: NotificationDeviceService;
@@ -129,6 +139,44 @@ describe('NotificationDeviceService', () => {
 
       expect(existingEntity.userId).toBe(callerId);
       expect(existingEntity.appVersion).toBe('2.0.0');
+      expect(result.userId).toBe(callerId);
+    });
+
+    it('reconciles concurrent token insert collision via 2601/2627 and reassigns ownership to caller', async () => {
+      const concurrentEntity = {
+        id: 'd0000000-0000-0000-0000-000000000002',
+        userId: previousUserId,
+        platform: NotificationDevicePlatform.Ios,
+        provider: NotificationDeviceProvider.Expo,
+        token: 'concurrent-token-456',
+        isActive: true,
+        lastSeenAt: mockDate,
+        createdAt: mockDate,
+        updatedAt: mockDate,
+      } as NotificationDeviceEntity;
+
+      // 1. Initial findOne -> null
+      // 2. Initial save -> throws 2601
+      // 3. Catch findOne -> finds concurrentEntity
+      // 4. Recovery save -> saves concurrentEntity updated to callerId
+      repository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(concurrentEntity);
+
+      repository.create.mockReturnValue({} as any);
+      repository.save
+        .mockRejectedValueOnce(createMssqlUniqueError(2601))
+        .mockResolvedValueOnce(concurrentEntity);
+
+      const result = await service.registerDevice({
+        userId: callerId,
+        platform: NotificationDevicePlatform.Ios,
+        provider: NotificationDeviceProvider.Expo,
+        token: 'concurrent-token-456',
+        appVersion: '3.0.0',
+      });
+
+      expect(concurrentEntity.userId).toBe(callerId);
       expect(result.userId).toBe(callerId);
     });
   });

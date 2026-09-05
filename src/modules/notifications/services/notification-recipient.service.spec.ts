@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { NotificationRecipientEntity } from '../entities/notification-recipient.entity';
 import { NotificationEntity } from '../entities/notification.entity';
 import {
@@ -7,6 +7,26 @@ import {
 } from '../enums/notification.enums';
 import { NotificationNotFoundError } from '../errors/notification.errors';
 import { NotificationRecipientService } from './notification-recipient.service';
+
+function createMssqlUniqueError(number: 2601 | 2627): QueryFailedError {
+  const error = new QueryFailedError(
+    'query',
+    [],
+    new Error(`Violation of UNIQUE KEY constraint (error ${number})`),
+  );
+  (error as any).driverError = { number };
+  return error;
+}
+
+function createMssqlNonUniqueError(): QueryFailedError {
+  const error = new QueryFailedError(
+    'query',
+    [],
+    new Error('Transaction (Process ID 54) was deadlocked on lock resources'),
+  );
+  (error as any).driverError = { number: 1205 };
+  return error;
+}
 
 describe('NotificationRecipientService', () => {
   let service: NotificationRecipientService;
@@ -63,6 +83,119 @@ describe('NotificationRecipientService', () => {
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({ notificationId: nid, recipientUserId: u2 }),
       );
+    });
+
+    it('skips batch insert entirely when all requested recipients already exist (sequential replay)', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+
+      repository.find.mockResolvedValue([
+        { recipientUserId: u1 } as NotificationRecipientEntity,
+      ]);
+
+      const count = await service.fanOutRecipients(nid, [u1]);
+
+      expect(count).toBe(0);
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('reconciles MSSQL 2601 concurrent race when re-query finds all recipients now exist', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+
+      // 1. Initial query: u1 is missing
+      repository.find.mockResolvedValueOnce([]);
+      repository.create.mockImplementation((dto) => dto as NotificationRecipientEntity);
+      // 2. Batch save throws MSSQL 2601
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2601));
+      // 3. Re-query after race: u1 was inserted by concurrent thread
+      repository.find.mockResolvedValueOnce([
+        { recipientUserId: u1 } as NotificationRecipientEntity,
+      ]);
+
+      const count = await service.fanOutRecipients(nid, [u1]);
+
+      expect(count).toBe(0); // 0 inserted by us, but successfully reconciled
+    });
+
+    it('reconciles MSSQL 2627 concurrent race when re-query finds all recipients now exist', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+
+      // 1. Initial query: u1 is missing
+      repository.find.mockResolvedValueOnce([]);
+      repository.create.mockImplementation((dto) => dto as NotificationRecipientEntity);
+      // 2. Batch save throws MSSQL 2627
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2627));
+      // 3. Re-query after race: u1 was inserted by concurrent thread
+      repository.find.mockResolvedValueOnce([
+        { recipientUserId: u1 } as NotificationRecipientEntity,
+      ]);
+
+      const count = await service.fanOutRecipients(nid, [u1]);
+
+      expect(count).toBe(0);
+    });
+
+    it('handles mixed race: re-queries chunk and inserts only still-missing recipients', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+      const u2 = 'u0000000-0000-0000-0000-000000000002';
+
+      // 1. Initial query: both u1 and u2 missing
+      repository.find.mockResolvedValueOnce([]);
+      repository.create.mockImplementation((dto) => dto as NotificationRecipientEntity);
+      // 2. Batch save fails with 2601 because concurrent thread inserted u1
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2601));
+      // 3. Re-query finds u1 exists, but u2 is still missing
+      repository.find.mockResolvedValueOnce([
+        { recipientUserId: u1 } as NotificationRecipientEntity,
+      ]);
+      // 4. Retry for u2 succeeds
+      repository.save.mockResolvedValueOnce({
+        recipientUserId: u2,
+      } as NotificationRecipientEntity);
+
+      const count = await service.fanOutRecipients(nid, [u1, u2]);
+
+      expect(count).toBe(1);
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ notificationId: nid, recipientUserId: u2 }),
+      );
+    });
+
+    it('safely handles concurrent insert collision during single-row retry in mixed race', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+      const u2 = 'u0000000-0000-0000-0000-000000000002';
+
+      // 1. Initial query: both missing
+      repository.find.mockResolvedValueOnce([]);
+      repository.create.mockImplementation((dto) => dto as NotificationRecipientEntity);
+      // 2. Batch save throws 2627
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2627));
+      // 3. Re-query finds u1 exists, u2 still missing
+      repository.find.mockResolvedValueOnce([
+        { recipientUserId: u1 } as NotificationRecipientEntity,
+      ]);
+      // 4. Single-row retry for u2 ALSO encounters 2601 because concurrent worker just inserted u2
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2601));
+
+      // Should complete without error because invariant is satisfied
+      const count = await service.fanOutRecipients(nid, [u1, u2]);
+
+      expect(count).toBe(0);
+    });
+
+    it('rethrows non-unique database errors immediately (e.g. deadlock 1205)', async () => {
+      const nid = 'n0000000-0000-0000-0000-000000000001';
+      const u1 = 'u0000000-0000-0000-0000-000000000001';
+
+      repository.find.mockResolvedValueOnce([]);
+      repository.create.mockImplementation((dto) => dto as NotificationRecipientEntity);
+      repository.save.mockRejectedValueOnce(createMssqlNonUniqueError());
+
+      await expect(service.fanOutRecipients(nid, [u1])).rejects.toThrow(QueryFailedError);
     });
   });
 

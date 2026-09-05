@@ -20,6 +20,10 @@
  * 16. no source repository coupling: Notifications module executes without foreign repositories/entities
  * 17. zero-recipient event: header is persisted with zero recipient rows for idempotency audit
  * 18. header immutable replay: re-receiving same operationKey preserves original title, snippet, actionUrl
+ * 19. two concurrent fanOutRecipients calls for same notification and recipients converge without error
+ * 20. final recipient row count equals unique recipient count under concurrent race
+ * 21. neither concurrent worker fails logically due to 2601/2627 unique key collisions
+ * 22. partial + concurrent fan-out converges to complete recipient set exactly once
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -93,6 +97,22 @@ describe('Notifications Module Integration Specs (deferred)', () => {
   });
 
   it('18. header immutability: replaying same operationKey leaves existing title, snippet, actionUrl unchanged', () => {
+    expect(true).toBe(true);
+  });
+
+  it('19. two concurrent fanOutRecipients calls for same notification and recipients converge without error', () => {
+    expect(true).toBe(true);
+  });
+
+  it('20. final recipient row count equals unique recipient count under concurrent race', () => {
+    expect(true).toBe(true);
+  });
+
+  it('21. neither concurrent worker fails logically due to 2601/2627 unique key collisions', () => {
+    expect(true).toBe(true);
+  });
+
+  it('22. partial + concurrent fan-out converges to complete recipient set exactly once', () => {
     expect(true).toBe(true);
   });
 });

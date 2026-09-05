@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import {
   NotificationDevicePlatform,
   NotificationDeviceProvider,
@@ -15,6 +15,16 @@ import {
   NotificationInternalService,
   toNotificationSnapshot,
 } from './notification.service';
+
+function createMssqlUniqueError(number: 2601 | 2627): QueryFailedError {
+  const error = new QueryFailedError(
+    'query',
+    [],
+    new Error(`Violation of UNIQUE KEY constraint (error ${number})`),
+  );
+  (error as any).driverError = { number };
+  return error;
+}
 
 describe('NotificationEnumsAndContracts', () => {
   it('contains expected NotificationSourceType values', () => {
@@ -183,6 +193,82 @@ describe('NotificationInternalService', () => {
           sourceId: 'b0000000-0000-0000-0000-000000000001',
           notificationType: NotificationType.AnnouncementPublished,
           title: 'Conflict Test',
+          snippet: 'Snippet',
+          actionUrl: '/test',
+        }),
+      ).rejects.toThrow(NotificationEventIdentityConflictError);
+    });
+
+    it('reconciles concurrent operationKey insert collision via 2601/2627 unique error catch', async () => {
+      const existingEntity = {
+        id: 'c0000000-0000-0000-0000-000000000001',
+        applicationEventId: 'a0000000-0000-0000-0000-000000000001',
+        operationKey: 'CONCURRENT_OP_KEY',
+        sourceType: NotificationSourceType.Announcement,
+        sourceId: 'b0000000-0000-0000-0000-000000000001',
+        notificationType: NotificationType.AnnouncementPublished,
+        title: 'Title',
+        snippet: 'Snippet',
+        actionUrl: '/test',
+        createdAt: mockDate,
+      } as NotificationEntity;
+
+      // 1. Initial check by opKey -> null
+      // 2. Initial check by eventId -> null
+      // 3. Save fails with 2601
+      // 4. Recovery check by opKey -> finds existingEntity
+      repository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingEntity);
+
+      repository.create.mockReturnValue({} as any);
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2601));
+
+      const result = await service.createOrGetHeader({
+        applicationEventId: 'a0000000-0000-0000-0000-000000000001',
+        operationKey: 'CONCURRENT_OP_KEY',
+        sourceType: NotificationSourceType.Announcement,
+        sourceId: 'b0000000-0000-0000-0000-000000000001',
+        notificationType: NotificationType.AnnouncementPublished,
+        title: 'Title',
+        snippet: 'Snippet',
+        actionUrl: '/test',
+      });
+
+      expect(result.isNew).toBe(false);
+      expect(result.notification.id).toBe(existingEntity.id);
+    });
+
+    it('detects concurrent applicationEventId identity collision during 2601/2627 unique error catch', async () => {
+      const concurrentEntityWithDiffOpKey = {
+        id: 'c0000000-0000-0000-0000-000000000001',
+        applicationEventId: 'a0000000-0000-0000-0000-000000000001',
+        operationKey: 'PRIOR_COMMITTED_OP_KEY',
+      } as NotificationEntity;
+
+      // 1. Initial check by opKey -> null
+      // 2. Initial check by eventId -> null (race: other thread committed right after)
+      // 3. Save fails with 2627
+      // 4. Recovery check by opKey -> null
+      // 5. Recovery check by eventId -> finds concurrentEntityWithDiffOpKey
+      repository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(concurrentEntityWithDiffOpKey);
+
+      repository.create.mockReturnValue({} as any);
+      repository.save.mockRejectedValueOnce(createMssqlUniqueError(2627));
+
+      await expect(
+        service.createOrGetHeader({
+          applicationEventId: 'a0000000-0000-0000-0000-000000000001',
+          operationKey: 'NEW_DIFFERENT_OP_KEY',
+          sourceType: NotificationSourceType.Announcement,
+          sourceId: 'b0000000-0000-0000-0000-000000000001',
+          notificationType: NotificationType.AnnouncementPublished,
+          title: 'Title',
           snippet: 'Snippet',
           actionUrl: '/test',
         }),

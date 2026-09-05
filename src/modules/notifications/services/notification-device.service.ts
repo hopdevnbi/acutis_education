@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import {
   NOTIFICATION_DEVICE_TOKEN_MAX_LENGTH,
@@ -16,6 +16,7 @@ import type {
   NotificationDeviceSnapshot,
   RegisterNotificationDeviceInput,
 } from '../interfaces/notification.interfaces';
+import { isMssqlUniqueViolation } from '../utils/notifications-http.util';
 
 export function toNotificationDeviceSnapshot(
   entity: NotificationDeviceEntity,
@@ -33,14 +34,6 @@ export function toNotificationDeviceSnapshot(
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
   };
-}
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) {
-    return false;
-  }
-  const driverError = error.driverError as { number?: number };
-  return driverError?.number === 2627 || driverError?.number === 2601;
 }
 
 @Injectable()
@@ -120,7 +113,7 @@ export class NotificationDeviceService {
       const saved = await this.repository.save(entity);
       return toNotificationDeviceSnapshot(saved);
     } catch (error: unknown) {
-      if (isUniqueConstraintViolation(error)) {
+      if (isMssqlUniqueViolation(error)) {
         // Race condition: concurrent thread inserted with same token
         const concurrent = await this.repository.findOne({ where: { token } });
         if (concurrent) {

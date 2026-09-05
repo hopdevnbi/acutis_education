@@ -1,0 +1,500 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006A
+CORRECTIVE IMPLEMENTATION
+NOTIFICATION RECIPIENT FAN-OUT CONCURRENCY / UNIQUE-RACE HARDENING
+FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- narrowly scoped Notifications corrective code
+- corrective tests/specs
+- report
+
+DO NOT RUN by default:
+- tests / Jest
+- lint/typecheck/build/format
+- quality/quality:full
+- npm audit
+- DB/migrations/seeds
+- Docker
+- Postman/Newman
+- push provider calls
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "fix(notifications): harden concurrent recipient fanout"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#006/7 Notifications implementation
+
+Read completely:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_006_NOTIFICATIONS_MODULE_REPORT.md
+
+Current route contract:
+
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+Total = 36
+
+Do NOT change route counts.
+
+==================================================
+ISSUE — RECIPIENT CHECK-THEN-INSERT RACE
+==================================================
+
+#006 correctly has:
+
+notification_recipients UNIQUE(notification_id, recipient_user_id)
+
+and fan-out flow described as:
+
+1. query existing recipients for chunk
+2. filter missing user IDs
+3. insert missing rows
+
+This is idempotent for sequential retries.
+
+However it is not necessarily concurrency-safe.
+
+Race:
+
+Handler A:
+- queries recipient X => missing
+
+Handler B:
+- queries recipient X => missing
+
+Handler A:
+- inserts X successfully
+
+Handler B:
+- attempts insert X
+- receives MSSQL unique violation 2601 / 2627
+
+If this exception escapes:
+- handler B fails
+- concurrent replay is not cleanly idempotent
+- partial fan-out retry safety claim is incomplete
+
+DB uniqueness prevents duplicate rows, but application-level fan-out must also treat duplicate insert races as successful reconciliation.
+
+==================================================
+PART A — INSPECT ACTUAL RECIPIENT INSERT CODE
+==================================================
+
+Inspect:
+
+src/modules/notifications/services/notification-recipient.service.ts
+
+Determine exact insert implementation:
+
+- repository.save?
+- repository.insert?
+- QueryBuilder insert?
+- chunk insert?
+- transaction?
+
+Do not assume.
+
+Required report:
+CURRENT RECIPIENT INSERT STRATEGY
+
+==================================================
+PART B — CONCURRENT UNIQUE-RACE RECOVERY
+==================================================
+
+Implement a robust strategy.
+
+Preferred behavior:
+
+For each bounded recipient chunk:
+
+1. normalize + dedupe user IDs
+2. query existing recipient IDs
+3. derive missing IDs
+4. attempt batch insert
+5. if MSSQL unique violation 2601 or 2627 occurs:
+   - do NOT treat the whole logical fan-out as failed immediately
+   - re-query the chunk
+   - determine which requested recipients now exist
+   - insert only any still-missing recipients
+   - if all requested rows exist => treat as success
+   - if genuinely missing rows remain, retry those missing rows once using safe bounded logic
+   - if non-unique error occurs => rethrow
+
+Do not infinite-loop.
+
+Alternative:
+use an MSSQL-safe atomic insert-if-not-exists strategy if cleanly supported by current TypeORM/project conventions.
+
+Do NOT use MERGE unless project already trusts it and there is a strong reason.
+
+Strong preference:
+unique-violation recovery + re-query.
+
+==================================================
+PART C — ERROR CLASSIFICATION
+==================================================
+
+Create/reuse helper:
+
+isMssqlUniqueViolation(error): boolean
+
+Recognize:
+2601
+2627
+
+Do not swallow:
+- connection errors
+- deadlocks
+- timeout
+- syntax errors
+- FK errors
+- other DB failures
+
+Only expected duplicate race becomes successful reconciliation.
+
+==================================================
+PART D — BATCH RECONCILIATION
+==================================================
+
+Keep:
+NOTIFICATION_RECIPIENT_BATCH_SIZE = 250
+
+For a chunk, final success condition:
+
+Every normalized requested recipient user ID has exactly one persisted recipient row for the notification.
+
+No requirement that this handler inserted it itself.
+
+This is the correct idempotent invariant.
+
+Return useful counts if service currently returns stats:
+
+requested
+alreadyExisting
+inserted
+reconciledConcurrent
+
+Do not expose internal stats over public API unless already designed.
+
+==================================================
+PART E — PARTIAL FAILURE + CONCURRENT RETRY
+==================================================
+
+Validate these logical cases in specs:
+
+A. Sequential replay:
+- existing rows skipped
+
+B. Concurrent duplicate race:
+- insert throws 2601/2627
+- re-query shows all rows now exist
+- fan-out succeeds
+
+C. Mixed race:
+- batch contains A,B,C
+- concurrent process inserted A,B
+- current batch unique failure occurs
+- re-query finds A,B but C missing
+- service inserts C
+- final set A,B,C exists exactly once
+
+D. Genuine DB error:
+- non-unique DB error
+- propagate failure
+
+E. Retry after partial fan-out:
+- existing rows retained
+- missing rows inserted
+
+==================================================
+PART F — HEADER IDENTITY RACE SANITY CHECK
+==================================================
+
+While here, statically verify `NotificationInternalService.createOrGetHeader` handles BOTH unique keys correctly:
+
+1. operation_key collision
+2. application_event_id collision
+
+Cases:
+
+same operationKey + different applicationEventId:
+- reuse logical header by operationKey
+
+different operationKey + same applicationEventId:
+- detect identity conflict
+- do NOT incorrectly re-query only by operationKey and return undefined/generic failure
+- throw `NotificationEventIdentityConflictError`
+
+If current implementation already handles this correctly:
+do not change it.
+
+If not:
+fix narrowly and add specs.
+
+Required verdict:
+APPLICATION EVENT ID UNIQUE-RACE HANDLING CORRECT: YES/NO
+
+==================================================
+PART G — DEVICE TOKEN RACE SANITY CHECK
+==================================================
+
+Static inspection only unless defect found.
+
+For globally unique token:
+
+Two users may concurrently POST same device token.
+
+Verify final invariant:
+- exactly one notification_devices row exists for token
+- token belongs to one user only
+- no duplicate rows
+
+If current update/reassignment relies on unique row and is race-safe enough by DB constraint:
+document only.
+
+If create path can throw unhandled 2601/2627 during concurrent first registration:
+add narrow recovery:
+- on token unique collision, fetch token row
+- reassign/update to current caller according to existing policy
+
+Do not overbuild locking.
+
+Required verdict:
+DEVICE TOKEN UNIQUE-RACE HANDLING READY: YES/NO
+
+==================================================
+PART H — NO CONTRACT EXPANSION
+==================================================
+
+No new routes.
+No new tables.
+No new communication event fields.
+No provider delivery.
+
+Keep:
+Notifications = 6
+Community total = 36
+
+==================================================
+PART I — MODULE BOUNDARY
+==================================================
+
+Reconfirm:
+- NotificationsModule exports NotificationsService only
+- no Announcement repository/entity
+- no Event repository/entity
+- no forwardRef
+- public facades only
+- ApplicationEvents neutral
+
+==================================================
+PART J — TESTS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Unit specs:
+
+NotificationRecipientService:
+- sequential replay
+- MSSQL 2601 concurrent race
+- MSSQL 2627 concurrent race
+- mixed batch race
+- re-query reconciliation
+- still-missing recipient retry
+- non-unique error propagation
+- exact final recipient invariant
+
+NotificationInternalService:
+- operationKey race
+- applicationEventId identity conflict race
+
+NotificationDeviceService:
+- concurrent token unique collision recovery if correction needed
+
+Integration future MSSQL:
+1. two concurrent fanOutRecipients calls for same notification/recipients
+2. final row count equals unique recipient count
+3. neither logical handler fails solely due duplicate race
+4. partial + concurrent fan-out converges to complete set
+
+DB E2E/concurrency future:
+- same communication event dispatched concurrently twice
+- one header only
+- one recipient row per user
+- inbox has no duplicates
+
+==================================================
+PART K — STATIC INSPECTION
+==================================================
+
+Before finish verify:
+
+1. recipient duplicate race cannot escape as logical failure
+2. only MSSQL unique violations are reconciled
+3. non-unique DB errors still fail
+4. bounded chunking remains
+5. no infinite retry
+6. partial fan-out retry remains safe
+7. header identity semantics correct
+8. device token unique race checked
+9. no new routes/tables
+10. privacy unaffected
+11. no provider calls
+12. module boundaries retained
+13. tests/specs written
+14. runtime validation not run
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_006A_RECIPIENT_FANOUT_CONCURRENCY_HARDENING_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 Gap inherited from #006
+4 Current recipient insert strategy
+5 Concurrent check-then-insert race
+6 MSSQL unique violation detection
+7 Final recipient reconciliation algorithm
+8 Sequential replay behavior
+9 Concurrent replay behavior
+10 Mixed batch race behavior
+11 Genuine DB error behavior
+12 Partial fan-out retry behavior
+13 Header operationKey race sanity
+14 Header applicationEventId race sanity
+15 Device token unique-race sanity
+16 Route/table contract unchanged
+17 Module boundary
+18 Unit tests written
+19 Integration tests written
+20 DB E2E/concurrency specs written
+21 Tests executed
+22 DB validation
+23 quality:full
+24 Docker
+25 npm audit
+26 Static inspection
+27 Risks/deferred
+28 BLOCKER/HIGH/MEDIUM/LOW
+29 #007 readiness
+30 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+RECIPIENT FANOUT CONCURRENTLY IDEMPOTENT: YES/NO
+MSSQL 2601 RECOVERY READY: YES/NO
+MSSQL 2627 RECOVERY READY: YES/NO
+MIXED BATCH RECONCILIATION READY: YES/NO
+NON-UNIQUE DB ERRORS PROPAGATE: YES/NO
+PARTIAL FANOUT RETRY STILL SAFE: YES/NO
+
+HEADER OPERATION KEY RACE READY: YES/NO
+APPLICATION EVENT ID UNIQUE-RACE HANDLING CORRECT: YES/NO
+
+DEVICE TOKEN UNIQUE-RACE HANDLING READY: YES/NO
+
+NO NEW ROUTES: YES/NO
+NO NEW TABLES: YES/NO
+
+FINAL NOTIFICATION ROUTE COUNT: 6
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E / CONCURRENCY SPECS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#007 READINESS: YES/NO
+
+==================================================
+#007 GATE
+==================================================
+
+Proceed only if:
+
+- recipient fan-out is concurrently idempotent
+- 2601/2627 races reconcile successfully
+- partial retry remains safe
+- applicationEventId identity collision is correctly handled
+- device token race is safe
+- no contract expansion
+- BLOCKER=0
+- HIGH=0
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #007/7 —
+FAST-MODE FINALIZATION — DEMO SEED + POSTMAN + README/OPENAPI + STATIC FINAL AUDIT
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #006A status
+- recipient race fix
+- header identity race status
+- device token race status
+- route count
+- BLOCKER/HIGH/MEDIUM
+- #007 readiness
+- report path
+
+Then exactly:
+
+git commit -m "fix(notifications): harden concurrent recipient fanout"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #007 automatically.

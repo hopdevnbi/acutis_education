@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { NotificationEntity } from '../entities/notification.entity';
 import {
@@ -13,6 +13,7 @@ import type {
   NotificationHeaderCreationResult,
   NotificationSnapshot,
 } from '../interfaces/notification.interfaces';
+import { isMssqlUniqueViolation } from '../utils/notifications-http.util';
 
 export function toNotificationSnapshot(entity: NotificationEntity): NotificationSnapshot {
   return {
@@ -27,14 +28,6 @@ export function toNotificationSnapshot(entity: NotificationEntity): Notification
     actionUrl: entity.actionUrl,
     createdAt: entity.createdAt,
   };
-}
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) {
-    return false;
-  }
-  const driverError = error.driverError as { number?: number };
-  return driverError?.number === 2627 || driverError?.number === 2601;
 }
 
 @Injectable()
@@ -114,16 +107,31 @@ export class NotificationInternalService {
         isNew: true,
       };
     } catch (error: unknown) {
-      if (isUniqueConstraintViolation(error)) {
+      if (isMssqlUniqueViolation(error)) {
         // Race condition: concurrent thread inserted with same operationKey or applicationEventId
-        const concurrent = await this.repository.findOne({
+        const concurrentByOpKey = await this.repository.findOne({
           where: { operationKey },
         });
-        if (concurrent) {
+        if (concurrentByOpKey) {
           return {
-            notification: toNotificationSnapshot(concurrent),
+            notification: toNotificationSnapshot(concurrentByOpKey),
             isNew: false,
           };
+        }
+
+        const concurrentByEventId = await this.repository.findOne({
+          where: { applicationEventId },
+        });
+        if (concurrentByEventId && concurrentByEventId.operationKey !== operationKey) {
+          this.logger.error({
+            action: 'notification.header.application_event_id_conflict_concurrent',
+            applicationEventId,
+            existingOpKey: concurrentByEventId.operationKey,
+            newOpKey: operationKey,
+          });
+          throw new NotificationEventIdentityConflictError(
+            `ApplicationEventId '${applicationEventId}' is already associated with operationKey '${concurrentByEventId.operationKey}'.`,
+          );
         }
       }
       throw error;

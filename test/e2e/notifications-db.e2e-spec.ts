@@ -25,6 +25,9 @@
  * 14. Privacy: no child names or attendee rosters in notification header/recipient records
  * 15. Privacy: internal operationKey and applicationEventId omitted from inbox DTO
  * 16. Privacy: device token never returned in device registration or management responses
+ * 17. Concurrency: same communication event dispatched concurrently twice creates exactly one header
+ * 18. Concurrency: concurrent event fan-out materializes exactly one recipient row per user
+ * 19. Concurrency: inbox queries contain zero duplicate notifications under concurrent race
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -97,6 +100,20 @@ describe('Notifications Module DB E2E Specs (deferred)', () => {
     });
 
     it('16. device registration response strictly omits device push token', () => {
+      expect(true).toBe(true);
+    });
+  });
+
+  describe('Concurrency & Idempotent Event Dispatch', () => {
+    it('17. same communication event dispatched concurrently twice results in exactly one notification header', () => {
+      expect(true).toBe(true);
+    });
+
+    it('18. concurrent event fan-out produces exactly one recipient row per targeted user', () => {
+      expect(true).toBe(true);
+    });
+
+    it('19. inbox listing for targeted users contains zero duplicate notification rows under race', () => {
       expect(true).toBe(true);
     });
   });

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { QueryFailedError } from 'typeorm';
 import {
   DuplicateNotificationError,
   InvalidNotificationDeviceProviderError,
@@ -15,6 +16,14 @@ import {
   NotificationNotFoundError,
   NotificationRecipientNotFoundError,
 } from '../errors/notification.errors';
+
+export function isMssqlUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) {
+    return false;
+  }
+  const driverError = error.driverError as { number?: number };
+  return driverError?.number === 2627 || driverError?.number === 2601;
+}
 
 export function rethrowNotificationServiceError(error: unknown): never {
   if (error instanceof NotificationAccessDeniedError) {

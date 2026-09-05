@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { NOTIFICATION_RECIPIENT_BATCH_SIZE } from '../constants/notifications-permissions.constants';
 import { NotificationRecipientEntity } from '../entities/notification-recipient.entity';
@@ -20,6 +20,7 @@ import type {
   NotificationRecipientSnapshot,
   PaginatedNotificationInbox,
 } from '../interfaces/notification.interfaces';
+import { isMssqlUniqueViolation } from '../utils/notifications-http.util';
 
 export function toNotificationRecipientSnapshot(
   entity: NotificationRecipientEntity,
@@ -34,14 +35,6 @@ export function toNotificationRecipientSnapshot(
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
   };
-}
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) {
-    return false;
-  }
-  const driverError = error.driverError as { number?: number };
-  return driverError?.number === 2627 || driverError?.number === 2601;
 }
 
 @Injectable()
@@ -100,24 +93,60 @@ export class NotificationRecipientService {
           const saved = await this.repository.save(toInsert);
           totalInserted += saved.length;
         } catch (error: unknown) {
-          if (isUniqueConstraintViolation(error)) {
-            // Concurrent insert race: some recipients were already inserted; retry one by one in chunk
-            this.logger.warn({
-              action: 'notification.fanout.batch_unique_race_retry',
-              notificationId: nid,
-            });
-            for (const entity of toInsert) {
-              try {
-                await this.repository.save(entity);
-                totalInserted += 1;
-              } catch (singleError: unknown) {
-                if (!isUniqueConstraintViolation(singleError)) {
-                  throw singleError;
-                }
-              }
-            }
-          } else {
+          if (!isMssqlUniqueViolation(error)) {
             throw error;
+          }
+
+          // MSSQL 2601 / 2627 concurrent unique race:
+          // Re-query the chunk to determine which requested recipients now exist in DB
+          this.logger.warn({
+            action: 'notification.fanout.batch_unique_race_detected',
+            notificationId: nid,
+            chunkSize: chunk.length,
+            missingCount: missingUserIds.length,
+          });
+
+          const recheckExisting = await this.repository.find({
+            where: chunk.map((uid) => ({ notificationId: nid, recipientUserId: uid })),
+            select: ['recipientUserId'],
+          });
+          const recheckExistingUserIds = new Set(
+            recheckExisting.map((e) => normalizeUuid(e.recipientUserId)),
+          );
+
+          const stillMissingUserIds = chunk.filter((uid) => !recheckExistingUserIds.has(uid));
+
+          if (stillMissingUserIds.length === 0) {
+            // All requested rows for this chunk were inserted by the concurrent process.
+            // Successful reconciliation without error.
+            this.logger.log({
+              action: 'notification.fanout.batch_fully_reconciled_by_concurrent_worker',
+              notificationId: nid,
+              chunkSize: chunk.length,
+            });
+            continue;
+          }
+
+          // Mixed race: some rows exist, but some are genuinely still missing.
+          // Retry inserting only the still-missing rows with single-row unique error recovery.
+          for (const stillMissingUid of stillMissingUserIds) {
+            try {
+              const singleEntity = this.repository.create({
+                notificationId: nid,
+                recipientUserId: stillMissingUid,
+                isRead: false,
+                readAt: null,
+                isDismissed: false,
+              });
+              await this.repository.save(singleEntity);
+              totalInserted += 1;
+            } catch (singleError: unknown) {
+              if (isMssqlUniqueViolation(singleError)) {
+                // Concurrent process inserted this specific row right before save; invariant satisfied.
+                continue;
+              }
+              throw singleError;
+            }
           }
         }
       }
@@ -327,8 +356,20 @@ export class NotificationRecipientService {
       isDismissed: false,
     });
 
-    const saved = await this.repository.save(entity);
-    return toNotificationRecipientSnapshot(saved);
+    try {
+      const saved = await this.repository.save(entity);
+      return toNotificationRecipientSnapshot(saved);
+    } catch (error: unknown) {
+      if (isMssqlUniqueViolation(error)) {
+        const concurrent = await this.repository.findOne({
+          where: { notificationId, recipientUserId },
+        });
+        if (concurrent) {
+          return toNotificationRecipientSnapshot(concurrent);
+        }
+      }
+      throw error;
+    }
   }
 
   async addRecipientsBatch(
