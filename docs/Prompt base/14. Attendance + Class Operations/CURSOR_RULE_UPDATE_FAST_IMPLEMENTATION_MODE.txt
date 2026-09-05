@@ -1,0 +1,363 @@
+CURSOR PROMPT — GLOBAL PROJECT RULE UPDATE
+FAST IMPLEMENTATION MODE — CODE FIRST, VALIDATION DEFERRED
+
+PURPOSE
+-------
+Update the project's permanent Cursor rules so that future implementation prompts prioritize writing complete production code and test/spec files, while deferring expensive validation/execution until a later FE integration / stabilization phase.
+
+This is a PROJECT-WIDE WORKFLOW CHANGE requested explicitly by the user.
+
+DO NOT implement any business feature in this prompt.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+- git add
+- git commit
+- git push
+
+NEVER suggest `git add`.
+
+Do not commit this change.
+At the end, print one manual commit command only if tracked rule files changed.
+
+READ FIRST
+----------
+Read:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Do not weaken:
+- modular architecture rules
+- security/privacy rules
+- domain ownership rules
+- microservice extraction boundaries
+- no-forwardRef preference
+- public API boundaries
+- git restrictions
+
+This change affects IMPLEMENTATION/VALIDATION WORKFLOW ONLY.
+
+CREATE / UPDATE RULE
+--------------------
+Preferred:
+create a dedicated always-applied rule:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+If numbering conflicts with an existing rule file, choose the next appropriate number while preserving the filename meaning.
+
+The rule MUST have:
+`alwaysApply: true`
+
+Use repository's existing `.mdc` frontmatter format.
+
+RULE CONTENT
+============
+The rule must clearly encode all of the following.
+
+1. DEFAULT MODE = CODE FIRST
+----------------------------
+For normal implementation prompts, prioritize:
+- production functions
+- services
+- controllers
+- endpoints
+- DTOs
+- entities
+- migrations
+- interfaces/contracts
+- module wiring
+- seed code when requested
+- Postman artifacts when requested
+- unit test files
+- integration test files
+- DB e2e test files
+- documentation/report files
+
+Complete the requested code surface first.
+
+Do not spend significant time executing validation commands.
+
+2. TESTS MUST STILL BE WRITTEN
+------------------------------
+Implementation prompts MUST still create/update appropriate test files:
+- `.spec.ts`
+- integration specs
+- DB e2e specs
+- security/denial tests
+- module-boundary tests
+
+Tests are part of implementation.
+
+However, by default:
+DO NOT EXECUTE THEM.
+
+The purpose is to build the complete endpoint/function surface quickly, then validate later during FE integration / stabilization.
+
+3. DEFAULT: DO NOT RUN VALIDATION COMMANDS
+------------------------------------------
+Unless the user explicitly asks to validate/run checks, DO NOT run:
+- `npm test`
+- Jest commands
+- unit tests
+- integration tests
+- DB e2e tests
+- `npm run test:*`
+- `npm run quality`
+- `npm run quality:full`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm run format`
+- `npm run format:check`
+- `npm audit`
+- migrations against a live/test database
+- DB reset/prepare commands
+- seed execution
+- Postman/Newman execution
+
+Do not treat unexecuted tests as failures.
+
+4. DEFAULT: DO NOT OPERATE DOCKER
+---------------------------------
+Unless explicitly requested by the user, DO NOT:
+- `docker compose up`
+- `docker compose down`
+- start/stop/restart containers
+- start Docker daemon
+- build Docker images
+- inspect container logs for validation
+- wait for MSSQL/container health
+- troubleshoot Docker environment
+- create Windows/WSL path workarounds solely for testing
+
+Docker/runtime validation is deferred.
+
+5. DO NOT BLOCK IMPLEMENTATION ON LOCAL ENVIRONMENT
+---------------------------------------------------
+If:
+- Docker is down
+- MSSQL is unavailable
+- `.env` has a missing runtime-only value
+- registry/network is unavailable
+- test DB is not running
+- local Docker/WSL paths differ
+
+do NOT stop normal business implementation unless the missing information is genuinely required to design/code the feature correctly.
+
+Report environment issues as deferred validation concerns, not implementation blockers.
+
+6. MIGRATIONS
+-------------
+When schema changes are required:
+- WRITE migration files correctly
+- WRITE entity/schema changes
+- WRITE tests for migrations
+
+But do not execute migrations against DB by default.
+
+Never edit an already-landed migration if project architecture requires a new migration.
+
+7. REPORTING LANGUAGE
+---------------------
+Reports MUST distinguish:
+
+IMPLEMENTATION STATUS
+from
+VALIDATION STATUS
+
+Use wording such as:
+- `IMPLEMENTED: YES`
+- `TESTS WRITTEN: YES`
+- `TESTS EXECUTED: NO — deferred by Fast Implementation Mode`
+- `DB VALIDATION: NOT RUN — deferred`
+- `QUALITY:FULL: NOT RUN — deferred`
+- `DOCKER: NOT RUN — deferred`
+- `NPM AUDIT: NOT RUN — deferred`
+
+Never write `FAIL` merely because a command was intentionally not executed.
+
+8. READINESS / PROMPT GATES
+---------------------------
+During Fast Implementation Mode, moving to the next implementation prompt should be based primarily on:
+- requested code exists
+- architecture matches design
+- contracts are complete
+- security/scope logic is implemented
+- tests/specs are written
+- no known BLOCKER/HIGH defect from code inspection
+
+Do NOT require runtime test execution to advance between implementation prompts.
+
+Runtime validation gates are intentionally deferred to a later stabilization/integration phase.
+
+9. STATIC CODE INSPECTION
+-------------------------
+Cursor should still inspect the edited code carefully before finishing:
+- imports
+- obvious TypeScript syntax errors
+- route duplication
+- DTO mismatches
+- missing exports
+- circular imports
+- wrong module wiring
+- obvious entity/migration mismatch
+- scope/permission bypass
+- N+1 patterns visible from code
+- accidental entity leakage
+
+Fix obvious problems by code review.
+
+Do not launch a large command/test loop just to verify.
+
+10. ARCHITECTURE / SECURITY ARE NOT DEFERRED
+--------------------------------------------
+Fast mode does NOT mean careless implementation.
+
+Still enforce immediately:
+- module ownership
+- public API boundaries
+- no foreign repository/entity access
+- no unnecessary `forwardRef`
+- RBAC + scope separation
+- actor-specific `/me` semantics
+- child/minor privacy
+- no PII leakage
+- historical data safety
+- idempotency/concurrency design where required
+- deterministic API contracts
+- pagination/batching/N+1 design
+- no production secrets
+
+These are CODE REVIEW gates and remain mandatory.
+
+11. USER OVERRIDE
+-----------------
+If the user explicitly says:
+- run tests
+- validate
+- run Docker
+- run migrations
+- check quality
+- perform regression
+- verify npm audit
+
+then execute exactly the requested validation scope.
+
+Otherwise remain in Fast Implementation Mode.
+
+12. FUTURE STABILIZATION PHASE
+------------------------------
+Document that after endpoint/function implementation is broadly complete, the project will enter a separate:
+
+FE INTEGRATION / STABILIZATION / VALIDATION PHASE
+
+During that phase, tests and validation will be run incrementally:
+- compile/typecheck
+- unit
+- integration
+- DB e2e
+- migrations
+- Docker
+- API manual/Postman
+- FE contract integration
+- regression/security fixes
+
+Do not perform that stabilization early by default.
+
+UPDATE AGENTS.md IF NECESSARY
+-----------------------------
+If AGENTS.md contains workflow wording that would directly conflict with this new always-applied rule, add a concise section such as:
+
+"Fast Implementation Mode"
+
+that points to the new Cursor rule and states:
+- code + tests first
+- execution/validation deferred unless explicitly requested
+
+Do NOT duplicate the entire rule into AGENTS.md.
+
+Do not edit PROJECT_RULES.md unless there is a genuine contradiction that must be resolved.
+Prefer the dedicated Cursor rule.
+
+VERIFY BY INSPECTION ONLY
+-------------------------
+After editing:
+- read the new rule file
+- inspect frontmatter
+- inspect AGENTS.md change if any
+- inspect `git diff` for these rule/document files only
+
+DO NOT run:
+tests
+lint
+format
+build
+Docker
+quality
+npm audit
+
+This rule-update prompt itself must demonstrate the new behavior.
+
+REQUIRED REPORT
+---------------
+Create:
+docs/FAST_IMPLEMENTATION_MODE_RULE_UPDATE_REPORT.md
+
+Required sections:
+1. Objective
+2. Files created
+3. Files modified
+4. New rule filename
+5. alwaysApply status
+6. Code-first policy
+7. Test-writing policy
+8. Test-execution policy
+9. Docker policy
+10. DB/migration execution policy
+11. Validation command policy
+12. Reporting semantics
+13. Prompt-gate semantics
+14. Architecture/security exceptions
+15. User override behavior
+16. Future stabilization phase
+17. AGENTS.md impact
+18. PROJECT_RULES.md impact
+19. Git diff inspection
+20. Risks
+21. Final verdict
+22. Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+FAST IMPLEMENTATION MODE RULE ADDED: YES/NO
+ALWAYS APPLY: YES/NO
+TESTS STILL REQUIRED TO BE WRITTEN: YES/NO
+TEST EXECUTION DEFERRED BY DEFAULT: YES/NO
+DOCKER EXECUTION DEFERRED BY DEFAULT: YES/NO
+DB VALIDATION DEFERRED BY DEFAULT: YES/NO
+QUALITY/LINT/TYPECHECK/BUILD EXECUTION DEFERRED BY DEFAULT: YES/NO
+ARCHITECTURE RULES PRESERVED: YES/NO
+SECURITY/PRIVACY RULES PRESERVED: YES/NO
+USER CAN EXPLICITLY REQUEST VALIDATION: YES/NO
+FUTURE PROMPTS MAY ADVANCE WITHOUT RUNNING TESTS: YES/NO
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- rule path
+- alwaysApply
+- code-first behavior
+- tests written/not run behavior
+- Docker/DB validation behavior
+- whether AGENTS.md changed
+- report path
+
+Then, if tracked rule/docs changes exist, print exactly:
+
+git commit -m "chore: add fast implementation workflow rule"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.

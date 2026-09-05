@@ -24,3 +24,9 @@ Confirm module boundaries in the task report (see `PROJECT_RULES.md` §7.6):
 - Whether the design blocks future microservice extraction
 
 Do not implement auth, users, or RBAC until the active AUTH prompt explicitly allows it.
+
+## Fast Implementation Mode
+
+See always-applied `.cursor/rules/04-fast-implementation-mode.mdc`.
+
+For normal implementation prompts: complete production code **and** write test/spec files first; do **not** run tests, lint, typecheck, build, quality, Docker, DB prepare/migrations, or audit **unless the user explicitly requests validation**. Architecture, security, and module-boundary rules remain mandatory via code inspection. Runtime gates are deferred to a later FE integration / stabilization phase.

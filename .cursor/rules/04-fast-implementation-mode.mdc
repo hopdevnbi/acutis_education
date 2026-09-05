@@ -1,0 +1,132 @@
+---
+description: Fast Implementation Mode — code and tests first; defer expensive validation until explicitly requested or FE stabilization.
+alwaysApply: true
+---
+
+# Fast Implementation Mode
+
+Default workflow for implementation prompts: **code first, validation deferred**.
+
+This rule changes **implementation/validation workflow only**. It does **not** weaken modular architecture, security/privacy (minors), domain ownership, public API boundaries, microservice extraction readiness, or the no-`forwardRef` preference. Those remain mandatory code-review gates.
+
+## 1. Default mode = code first
+
+For normal implementation prompts, prioritize completing the requested production surface:
+
+- services, controllers, endpoints, DTOs, entities, migrations
+- interfaces/contracts, module wiring
+- seed / Postman artifacts when the prompt requests them
+- unit, integration, and DB e2e **test files**
+- documentation / handoff reports under `docs/`
+
+Finish the code surface first. Do **not** spend significant time executing validation commands.
+
+## 2. Tests must still be written
+
+Implementation prompts **must** create/update appropriate test files (`.spec.ts`, integration specs, DB e2e specs, security/denial matrices, module-boundary checks). Tests are part of implementation.
+
+By default: **write them, do not execute them**.
+
+## 3. Default: do not run validation commands
+
+Unless the user **explicitly** asks to validate or run checks, do **not** run:
+
+- `npm test`, Jest, unit / integration / DB e2e suites
+- `npm run test:*`, `npm run quality`, `npm run quality:full`
+- `npm run lint`, `npm run typecheck`, `npm run build`
+- `npm run format`, `npm run format:check`
+- `npm audit`
+- migrations against a live/test database
+- DB reset/prepare commands
+- seed execution
+- Postman / Newman execution
+
+Unexecuted tests are **not** failures.
+
+## 4. Default: do not operate Docker
+
+Unless explicitly requested, do **not**:
+
+- `docker compose up` / `down`, start/stop/restart containers
+- start Docker daemon, build images
+- inspect container logs for validation
+- wait for MSSQL/container health
+- troubleshoot Docker / create Windows–WSL path workarounds solely for testing
+
+Docker/runtime validation is deferred.
+
+## 5. Do not block implementation on local environment
+
+If Docker is down, MSSQL is unavailable, a runtime-only `.env` value is missing, network/registry is down, test DB is not running, or local WSL paths differ: **continue** normal business implementation unless that information is required to design/code the feature correctly.
+
+Report environment issues as **deferred validation concerns**, not implementation blockers.
+
+## 6. Migrations
+
+When schema changes are required:
+
+- **Write** migration files, entity/schema changes, and migration-related tests correctly
+- Do **not** execute migrations against a DB by default
+- Never edit an already-landed migration when architecture requires a new migration
+
+## 7. Reporting language
+
+Reports **must** distinguish **IMPLEMENTATION STATUS** from **VALIDATION STATUS**.
+
+Prefer wording such as:
+
+- `IMPLEMENTED: YES`
+- `TESTS WRITTEN: YES`
+- `TESTS EXECUTED: NO — deferred by Fast Implementation Mode`
+- `DB VALIDATION: NOT RUN — deferred`
+- `QUALITY:FULL: NOT RUN — deferred`
+- `DOCKER: NOT RUN — deferred`
+- `NPM AUDIT: NOT RUN — deferred`
+
+Never write `FAIL` merely because a command was intentionally not executed.
+
+## 8. Readiness / prompt gates
+
+Advancing to the next implementation prompt is based primarily on:
+
+- requested code exists
+- architecture matches design
+- contracts are complete
+- security/scope logic is implemented
+- tests/specs are written
+- no known BLOCKER/HIGH defect from **code inspection**
+
+Do **not** require runtime test execution to advance between implementation prompts. Runtime validation gates are deferred to a later stabilization/integration phase.
+
+## 9. Static code inspection
+
+Before finishing, still inspect edited code carefully (imports, obvious TypeScript/syntax issues, route duplication, DTO mismatches, missing exports, cyclic imports, wrong module wiring, entity/migration mismatch, scope/permission bypass, visible N+1, entity leakage). Fix obvious problems by review. Do **not** launch a large command/test loop just to verify.
+
+## 10. Architecture / security are not deferred
+
+Fast mode does **not** mean careless implementation. Still enforce immediately in code:
+
+- module ownership and public API boundaries
+- no foreign repository/entity access
+- no unnecessary `forwardRef`
+- RBAC + scope separation; actor-specific `/me` semantics
+- child/minor privacy; no PII leakage
+- historical data safety; idempotency/concurrency where required
+- deterministic contracts; pagination/batching/N+1 design
+- no production secrets
+
+These remain mandatory **code review** gates.
+
+## 11. User override
+
+If the user explicitly asks to run tests, validate, run Docker, run migrations, check quality, perform regression, or verify npm audit: execute **exactly** the requested validation scope.
+
+Otherwise remain in Fast Implementation Mode.
+
+## 12. Future stabilization phase
+
+After endpoint/function implementation is broadly complete, the project will enter a separate:
+
+**FE INTEGRATION / STABILIZATION / VALIDATION PHASE**
+
+In that phase, validation runs incrementally (compile/typecheck, unit, integration, DB e2e, migrations, Docker, Postman/manual API, FE contract integration, regression/security fixes). Do not perform that stabilization early by default.
