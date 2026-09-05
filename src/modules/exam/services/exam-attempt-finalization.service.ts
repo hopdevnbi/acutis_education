@@ -1,7 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
+import {
+  APPLICATION_EVENT_PUBLISHER,
+  REWARD_EVENT_TYPES,
+  type ApplicationEventPublisher,
+} from '../../application-events';
 import { QuestionBankService } from '../../question-bank/services/question-bank.service';
 import { ExamAssignmentEntity } from '../entities/exam-assignment.entity';
 import { ExamAttemptAnswerEntity } from '../entities/exam-attempt-answer.entity';
@@ -23,10 +28,14 @@ export class ExamAttemptFinalizationService {
     private readonly dataSource: DataSource,
     private readonly questionBankService: QuestionBankService,
     private readonly examService: ExamService,
+    @Inject(APPLICATION_EVENT_PUBLISHER)
+    private readonly applicationEventPublisher: ApplicationEventPublisher,
   ) {}
 
   async finalizeIfExpired(rawAttemptId: string): Promise<boolean> {
-    return this.dataSource.transaction(async (entityManager) => {
+    let gradedAttempt: ExamAttemptEntity | null = null;
+
+    const finalized = await this.dataSource.transaction(async (entityManager) => {
       const attempt = await this.lockAttemptEntity(rawAttemptId, entityManager);
 
       if (attempt === null || attempt.status !== ExamAttemptStatus.InProgress) {
@@ -41,6 +50,7 @@ export class ExamAttemptFinalizationService {
 
       const reason = await this.resolveAutoSubmitReason(attempt, now, entityManager);
       await this.finalizeAttemptInTransaction(attempt, reason, entityManager);
+      gradedAttempt = attempt;
 
       this.logger.log({
         action: 'exam.attempt.auto_finalized',
@@ -50,9 +60,17 @@ export class ExamAttemptFinalizationService {
 
       return true;
     });
+
+    if (finalized && gradedAttempt) {
+      await this.publishExamCompleted(gradedAttempt);
+    }
+
+    return finalized;
   }
 
   async submitAttempt(rawAttemptId: string): Promise<void> {
+    let gradedAttempt: ExamAttemptEntity | null = null;
+
     await this.dataSource.transaction(async (entityManager) => {
       const attempt = await this.lockAttemptEntity(rawAttemptId, entityManager);
 
@@ -76,12 +94,33 @@ export class ExamAttemptFinalizationService {
         ExamAutoSubmitReason.LearnerSubmit,
         entityManager,
       );
+      gradedAttempt = attempt;
 
       this.logger.log({
         action: 'exam.attempt.submitted',
         attemptId: attempt.id,
         reason: ExamAutoSubmitReason.LearnerSubmit,
       });
+    });
+
+    if (gradedAttempt) {
+      await this.publishExamCompleted(gradedAttempt);
+    }
+  }
+
+  private async publishExamCompleted(attempt: ExamAttemptEntity): Promise<void> {
+    await this.applicationEventPublisher.publishRewardEligibleEvent({
+      eventId: attempt.id,
+      eventType: REWARD_EVENT_TYPES.ExamCompleted,
+      occurredAt: attempt.gradedAt ?? new Date(),
+      studentId: attempt.studentId,
+      enrollmentId: attempt.enrollmentId,
+      parishId: attempt.parishId,
+      academicYearId: attempt.academicYearId,
+      sourceId: attempt.id,
+      metadata: {
+        scorePercent: attempt.scorePercent ?? 0,
+      },
     });
   }
 

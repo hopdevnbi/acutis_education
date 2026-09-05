@@ -47,6 +47,9 @@ export class RewardRuleEntity {
   @Column({ type: 'datetime2', name: 'effective_to', nullable: true })
   effectiveTo!: Date | null;
 
+  @Column({ type: 'nvarchar', length: 'MAX', name: 'condition_config_json', nullable: true })
+  conditionConfigJson!: string | null;
+
   @CreateDateColumn({ type: 'datetime2', name: 'created_at' })
   createdAt!: Date;
 

@@ -46,6 +46,7 @@ import { FamilyPortalModule } from './family-portal/family-portal.module';
 import { FamilyPortalService } from './family-portal/family-portal.service';
 import { ClassOperationsModule } from './class-operations/class-operations.module';
 import { ClassOperationsService } from './class-operations/services/class-operations.service';
+import { ApplicationEventsModule } from './application-events/application-events.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { GamificationService } from './gamification/gamification.service';
 import { LocalizationModule } from './localization/localization.module';
@@ -274,6 +275,7 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).toContain(ParishModule);
     expect(imports).toContain(AuthModule);
     expect(imports).toContain(AccessControlModule);
+    expect(imports).toContain(ApplicationEventsModule);
     expect(imports).not.toContain(FamilyPortalModule);
     expect(imports).not.toContain(LearningProgressModule);
     expect(imports).not.toContain(PracticeModule);
@@ -281,19 +283,6 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).not.toContain(ClassOperationsModule);
     expect(imports).not.toContain(LocalizationModule);
     expect(imports).not.toContain(MediaModule);
-  });
-
-  it('does not import ClassOperationsModule from ClassModule or EnrollmentModule', () => {
-    const classImports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, ClassModule);
-    const enrollmentImports: unknown = Reflect.getMetadata(
-      MODULE_METADATA.IMPORTS,
-      EnrollmentModule,
-    );
-
-    expect(Array.isArray(classImports)).toBe(true);
-    expect(Array.isArray(enrollmentImports)).toBe(true);
-    expect(classImports).not.toContain(ClassOperationsModule);
-    expect(enrollmentImports).not.toContain(ClassOperationsModule);
   });
 
   it('does not import GamificationModule from source reward modules', () => {
@@ -316,6 +305,38 @@ describe('Auth module persistence boundaries', () => {
     expect(practiceImports).not.toContain(GamificationModule);
     expect(examImports).not.toContain(GamificationModule);
     expect(classOpsImports).not.toContain(GamificationModule);
+  });
+
+  it('source reward modules do not import Gamification entities or service by source text', () => {
+    const sourcePaths = [
+      join(__dirname, 'learning-progress/learning-progress.module.ts'),
+      join(__dirname, 'practice/practice.module.ts'),
+      join(__dirname, 'exam/exam.module.ts'),
+      join(__dirname, 'class-operations/class-operations.module.ts'),
+      join(__dirname, 'learning-progress/services/lesson-progress.service.ts'),
+      join(__dirname, 'practice/services/practice-answer.service.ts'),
+      join(__dirname, 'exam/services/exam-attempt-finalization.service.ts'),
+      join(__dirname, 'class-operations/services/class-operations.service.ts'),
+    ];
+
+    for (const sourcePath of sourcePaths) {
+      const source = readFileSync(sourcePath, 'utf8');
+      expect(source).not.toMatch(/GamificationModule|GamificationService|modules\/gamification\//);
+      expect(source).not.toMatch(/forwardRef\s*\(/);
+    }
+  });
+
+  it('does not import ClassOperationsModule from ClassModule or EnrollmentModule', () => {
+    const classImports: unknown = Reflect.getMetadata(MODULE_METADATA.IMPORTS, ClassModule);
+    const enrollmentImports: unknown = Reflect.getMetadata(
+      MODULE_METADATA.IMPORTS,
+      EnrollmentModule,
+    );
+
+    expect(Array.isArray(classImports)).toBe(true);
+    expect(Array.isArray(enrollmentImports)).toBe(true);
+    expect(classImports).not.toContain(ClassOperationsModule);
+    expect(enrollmentImports).not.toContain(ClassOperationsModule);
   });
 
   it('imports only the public modules required by FamilyPortalModule', () => {

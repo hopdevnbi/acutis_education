@@ -1,4 +1,4 @@
-import { REWARD_EVENT_TYPES } from '../../../application-events/contracts/reward-eligible-event.contract';
+import { REWARD_EVENT_TYPES } from '../../application-events/contracts/reward-eligible-event.contract';
 import { InvalidRewardEventMetadataError } from '../errors/gamification.errors';
 import {
   assertRewardEligibleEventShape,

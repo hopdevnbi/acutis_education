@@ -25,6 +25,7 @@ import { QuestionBankModule } from './modules/question-bank/question-bank.module
 import { ParishModule } from './modules/parish/parish.module';
 import { StudentModule } from './modules/student/student.module';
 import { FamilyPortalModule } from './modules/family-portal/family-portal.module';
+import { ApplicationEventsModule } from './modules/application-events/application-events.module';
 import { ClassOperationsModule } from './modules/class-operations/class-operations.module';
 import { GamificationModule } from './modules/gamification/gamification.module';
 import { UsersModule } from './modules/users/users.module';
@@ -47,6 +48,7 @@ export class AppModule {
         DatabaseModule,
         HealthModule,
         UsersModule,
+        ApplicationEventsModule,
         AuthModule,
         AccessControlModule,
         ParishModule,

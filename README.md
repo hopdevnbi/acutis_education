@@ -624,7 +624,48 @@ The seed prints `enrollmentId` and `examAssignmentId` for Postman variables. Dem
 
 Postman collection: `docs/postman/Acutis-Education-Exam.postman_collection.json`
 
-## Localization API
+## Gamification API (Points Engine — #003)
+
+**IMPLEMENTATION IN PROGRESS** (prompts 003–007). Phase not complete.
+
+### Architecture
+
+- Module: `gamification` — export `GamificationService` only
+- Immutable append-only `point_ledger_entries` (balance = `SUM(points_delta)`)
+- Idempotent reward ingest via `processed_reward_events.event_id` + ledger unique identity
+- Neutral in-process `ApplicationEventsModule` / `ApplicationEventPublisher` (no outbox/queue yet)
+- Source modules emit `RewardEligibleEvent` after their own commit; they never import Gamification
+- Source-domain success is independent of reward handler success (handler errors isolated + logged)
+
+### Permissions
+
+| Permission | Purpose |
+| ---------- | ------- |
+| `gamification.read` | Summaries and point ledger reads |
+| `gamification.manage` | Reward rules / future definition admin (capability-scoped) |
+| `points.adjust` | Manual ledger adjustments |
+| `badges.award` | Reserved for #004 |
+
+**Capability note:** Catechist has `gamification.manage` for future CLASS missions, but **cannot** manage reward rules (service deny).
+
+### HTTP routes (#003)
+
+| Method | Path | Permission |
+| ------ | ---- | ---------- |
+| `GET` | `/api/v1/students/:studentId/gamification/summary` | `gamification.read` |
+| `GET` | `/api/v1/students/:studentId/points` | `gamification.read` |
+| `POST` | `/api/v1/students/:studentId/points/adjustments` | `points.adjust` |
+| `GET` | `/api/v1/me/learner/gamification/summary` | `gamification.read` |
+| `GET` | `/api/v1/me/learner/points` | `gamification.read` |
+| `GET` | `/api/v1/reward-rules` | `gamification.manage` |
+| `POST` | `/api/v1/reward-rules` | `gamification.manage` |
+| `PATCH` | `/api/v1/reward-rules/:id` | `gamification.manage` |
+
+Manual adjustment: server derives ACTIVE enrollment parish/year; `delta` abs ≤ 1000; reason required.  
+Learner ledger omits `staffNote` / `awardedByUserId`.  
+**PARENT FULL POINT LEDGER IN MVP: NO** (summary/Faith Journey later).
+
+### Localization API
 
 Parish-scoped translation resource registry, async machine-translation jobs, human review/approval workflow, and learner localized delivery for curriculum and practice content. Learner GET routes never call translation providers or auto-create registry rows — only `APPROVED` revisions with a matching current source hash are served.
 

@@ -1,0 +1,1151 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #003/7
+FAST IMPLEMENTATION MODE
+POINTS ENGINE + REWARD EVENT INGESTION + RULES + MANUAL ADJUSTMENTS
+
+IMPORTANT WORKFLOW
+------------------
+Fast Implementation Mode is ACTIVE.
+
+Read and obey:
+.cursor/rules/04-fast-implementation-mode.mdc
+
+WRITE CODE + TESTS.
+DO NOT RUN validation.
+
+DO NOT RUN:
+- npm test / Jest
+- lint
+- typecheck
+- build
+- format
+- quality / quality:full
+- npm audit
+- DB reset/migrate
+- Docker
+- seed execution
+- Postman/Newman
+
+Report intentionally unexecuted checks as DEFERRED, never FAIL.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(gamification): add points reward engine"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7 Domain audit/design
+#002/7 Persistence foundation
+
+#002 implementation includes:
+- one `gamification` module
+- 9 owned tables
+- immutable point ledger
+- `processed_reward_events`
+- reward rules
+- badge/mission/milestone persistence foundations
+- neutral RewardEligibleEvent contract
+- event type constants
+- RBAC:
+  gamification.read
+  gamification.manage
+  points.adjust
+  badges.award
+- access service foundation
+- tests/specs written
+- runtime validation deferred
+
+Current:
+#003/7 — POINTS ENGINE
+
+This prompt must implement:
+1. reward event ingestion engine
+2. reward rule matching
+3. automatic point ledger awards
+4. idempotency
+5. reward event listener infrastructure
+6. source module event emission
+7. manual points adjustments
+8. staff point reads/adjustments HTTP contracts
+9. learner point ledger/balance HTTP contracts if appropriate now
+10. tests/specs for all above
+
+Do NOT implement badges auto-award yet.
+Do NOT implement missions progress yet.
+Do NOT implement milestones yet.
+Do NOT implement Faith Journey composition yet.
+
+==================================================
+PART A — APPLICATION EVENTS INFRASTRUCTURE
+==================================================
+
+Audit current neutral contract from #002.
+
+Implement the smallest extraction-safe in-process application event mechanism.
+
+Preferred:
+- no heavyweight CQRS
+- no queue/outbox yet
+- no direct source-module -> GamificationService import
+
+If repository has no event package:
+prefer a tiny internal `ApplicationEventsModule` / `ApplicationEventBus` abstraction using Nest injectable publisher/subscriber semantics.
+
+Avoid adding external dependency unless clearly necessary.
+
+Required properties:
+- source modules depend only on neutral application-events contract/port
+- Gamification registers consumer/listener
+- no source module imports Gamification
+- no cycles
+- no forwardRef
+- future queue/outbox replacement possible
+
+Suggested contracts:
+
+ApplicationEventPublisher
+publishRewardEligibleEvent(event)
+
+RewardEligibleEventHandler
+handle(event)
+
+If a simple dispatcher registry is used:
+keep infrastructure generic, not Gamification-specific business logic.
+
+==================================================
+PART B — REWARD INGEST SERVICE
+==================================================
+
+Create:
+RewardIngestService
+
+Internal to Gamification.
+
+Input:
+RewardEligibleEvent
+
+Responsibilities:
+
+1. validate event contract
+2. begin own-module transaction
+3. check/record processed event idempotently
+4. find active matching reward rules
+5. evaluate rule scope/effective dates
+6. create immutable point ledger entries
+7. commit
+8. duplicate event returns already-processed result, not error 500
+
+Do not process badge/mission/milestone side effects yet except leave extension hooks/internal result shape for #004/#005.
+
+Suggested result:
+
+RewardIngestResult {
+  eventId
+  alreadyProcessed
+  ledgerEntriesCreated
+  totalPointsAwarded
+  matchedRuleCodes
+}
+
+No PII.
+
+==================================================
+PART C — TRANSACTION / IDEMPOTENCY ORDER
+==================================================
+
+This is critical.
+
+Do NOT mark event as processed before ledger writes can safely complete outside the same transaction.
+
+Within ONE Gamification DB transaction:
+
+- detect/insert event receipt
+- evaluate rules
+- append ledger
+- commit all together
+
+If duplicate `event_id`:
+return already processed.
+
+If duplicate ledger identity for one rule:
+treat as already awarded for that rule, not fatal.
+
+Event replay must never double points.
+
+If one event matches multiple reward rules:
+each rule may create at most one unique ledger entry per configured source/reason.
+
+==================================================
+PART D — REWARD RULE MATCHING
+==================================================
+
+Automatic rule matching:
+
+Event:
+eventType
+studentId
+parishId
+occurredAt
+sourceId
+
+Rule must:
+- status ACTIVE
+- eventType matches
+- effectiveFrom <= occurredAt when set
+- occurredAt < or <= effectiveTo based existing convention; choose and document
+- GLOBAL or matching PARISH
+- points >= 0
+
+Order:
+parish-specific + global rules can both apply if different codes.
+
+Do not silently override one with another.
+
+`maxAwardsPerSource`:
+MVP default 1.
+
+If values >1 are allowed in schema but engine does not have occurrence dimensions beyond sourceId:
+document that >1 has no practical effect for identical `(sourceId,reasonCode)` in MVP unless rule logic explicitly supports repeated source occurrence.
+
+Strong preference:
+enforce effective idempotency through unique identity.
+
+==================================================
+PART E — SOURCE TYPE MAPPING
+==================================================
+
+Map RewardEligibleEventType -> PointSourceType.
+
+Expected:
+
+LEARNING_LESSON_COMPLETED
+-> LESSON_COMPLETED
+
+PRACTICE_COMPLETED
+-> PRACTICE_COMPLETED
+
+EXAM_COMPLETED
+-> EXAM_COMPLETED
+and potentially EXAM_SCORE_THRESHOLD rule using score metadata
+
+ATTENDANCE_SESSION_COMPLETED_MARK
+with PRESENT
+-> ATTENDANCE_PRESENT
+
+with LATE
+-> ATTENDANCE_LATE
+
+ABSENT/EXCUSED:
+no automatic attendance point source unless explicit reward rule later says otherwise.
+For MVP ignore those events for points or do not emit them.
+
+Do not trust arbitrary event metadata to choose source type.
+
+==================================================
+PART F — EXAM SCORE THRESHOLD
+==================================================
+
+Support typed rule condition for score threshold WITHOUT generic expression engine.
+
+Current reward_rules may need a small bounded config field if #002 schema lacks it.
+
+Audit #002 schema first.
+
+If required, create NEW migration:
+- do not edit landed #002 migration
+
+Potential:
+`condition_config_json` on reward_rules
+
+For EXAM_COMPLETED only:
+{
+  "minScorePercent": 80
+}
+
+Validate bounded typed schema.
+
+If adding this substantially complicates #003:
+support EXAM_COMPLETED points now and explicitly defer score threshold rule to a later small extension.
+
+But #001 included EXAM_SCORE_THRESHOLD, so prefer completing it cleanly now.
+
+==================================================
+PART G — AUTOMATIC LEDGER ENTRY
+==================================================
+
+For matched rule:
+
+studentId = event.studentId
+enrollmentId = event.enrollmentId
+parishId = event.parishId
+academicYearId = event.academicYearId
+pointsDelta = rule.points
+sourceType = mapped source type
+sourceId = event.sourceId
+reasonCode = rule.code
+descriptionKey = stable reward rule key/code
+awardedByUserId = null
+createdAt = now/occurred processing UTC
+
+Never put event metadata/free text into staff_note.
+
+No auto reward may use client-provided points.
+
+==================================================
+PART H — SOURCE MODULE EMISSION
+==================================================
+
+Implement emission from source modules using neutral event publisher.
+
+Modify narrowly:
+
+LearningProgress:
+emit LEARNING_LESSON_COMPLETED only on first transition to COMPLETED.
+
+Practice:
+emit PRACTICE_COMPLETED only when session becomes terminal completed.
+
+Exam:
+emit EXAM_COMPLETED only when attempt finalizes successfully.
+Include scorePercent in allow-listed metadata.
+
+ClassOperations:
+emit ATTENDANCE_SESSION_COMPLETED_MARK when session transitions to COMPLETED, for roster marks PRESENT/LATE.
+
+Attendance event sourceId:
+must be a stable UUID.
+
+Prefer attendance record id as sourceId.
+
+Only emit durable recorded PRESENT/LATE marks.
+Do not emit UNMARKED.
+Do not emit draft SCHEDULED mark updates.
+
+==================================================
+PART I — EMISSION AFTER SOURCE COMMIT
+==================================================
+
+Avoid publishing an event that represents a source write which later rolls back.
+
+If existing architecture allows:
+publish after successful source transaction commit.
+
+Document limitation:
+no outbox in MVP.
+
+Delivery semantics:
+at-least-once best effort.
+
+Gamification idempotency protects retries.
+
+Do not build full outbox/queue now.
+
+==================================================
+PART J — FAILURE SEMANTICS
+==================================================
+
+Critical product/architecture choice:
+
+A source-domain operation should generally remain successful even if Gamification reward processing fails after source commit.
+
+Do NOT roll back:
+lesson completion
+practice completion
+exam finalization
+attendance completion
+
+solely because engagement reward processing failed.
+
+Preferred:
+event publisher invokes handlers with error isolation/logging appropriate to existing app infrastructure.
+
+However:
+do not swallow failures invisibly.
+
+Use structured log:
+event type + eventId + sourceId
+NO PII / NO attendance note / NO exam answer.
+
+Document eventual reconciliation as future stabilization/outbox concern.
+
+==================================================
+PART K — MANUAL POINT ADJUSTMENT SERVICE
+==================================================
+
+Implement service-level manual adjustment.
+
+Actors allowed:
+SUPER_ADMIN global
+PARISH_ADMIN own parish
+CATECHIST ACTIVE assigned class student
+
+PARENT/STUDENT:
+never
+
+Input:
+- studentId from route
+- delta signed integer
+- reason required 1..500
+
+Constraints:
+- delta != 0
+- abs(delta) <= 1000 MVP constant
+- actor scope
+- server-derived awardedByUserId
+- sourceType:
+  delta > 0 => MANUAL_AWARD
+  delta < 0 => ADJUSTMENT
+- sourceId = server-generated UUID for adjustment operation
+- reasonCode stable e.g. MANUAL_ADJUSTMENT
+- staff_note = reason
+
+No update/delete old ledger row.
+
+==================================================
+PART L — REVERSAL SERVICE
+==================================================
+
+Implement internal/service reversal capability.
+
+Given original ledgerEntryId:
+- resolve original
+- authorization scoped to original student
+- create new REVERSAL entry
+- pointsDelta = -original.pointsDelta
+- relatedLedgerEntryId = original.id
+- reason required
+- awardedBy actor
+
+Prevent duplicate reversal of same original if intended one-time.
+
+Strong preference:
+one reversal per ledger entry in MVP.
+
+If DB uniqueness needs a new index/migration:
+add NEW migration.
+
+No HTTP reversal endpoint unless useful and clearly within #003 scope.
+If omitted, document internal readiness.
+
+==================================================
+PART M — HTTP: STAFF POINT READS
+==================================================
+
+Implement:
+
+GET /api/v1/students/:studentId/gamification/summary
+GET /api/v1/students/:studentId/points
+
+Permission:
+gamification.read
+
+Staff actors:
+- assigned Catechist
+- ParishAdmin own parish
+- SuperAdmin
+
+Parent/Student generic routes denied.
+
+Summary may initially include point-centric fields plus existing zero counts for future badge/mission/milestone data if facade already supports them.
+
+Points list:
+paginated
+max 50
+createdAt DESC + id DESC
+
+Staff may see:
+- pointsDelta
+- sourceType
+- reasonCode
+- descriptionKey
+- staffNote only if appropriate for staff
+- createdAt
+
+No PII.
+
+==================================================
+PART N — HTTP: MANUAL ADJUSTMENT
+==================================================
+
+Implement:
+
+POST /api/v1/students/:studentId/points/adjustments
+
+Permission:
+points.adjust
+
+Body:
+{
+  "delta": 10,
+  "reason": "..."
+}
+
+Do not allow:
+awardedByUserId
+parishId
+enrollmentId
+sourceType
+sourceId
+reasonCode
+createdAt
+
+Server derives context.
+
+Return created ledger entry staff DTO.
+
+==================================================
+PART O — HTTP: LEARNER POINT READS
+==================================================
+
+Implement now because this is points-engine prompt:
+
+GET /api/v1/me/learner/gamification/summary
+GET /api/v1/me/learner/points
+
+Permission:
+gamification.read
+
+Student self only.
+
+No client studentId.
+
+Learner ledger DTO MUST omit:
+staffNote
+awardedByUserId
+internal audit IDs
+
+May expose:
+pointsDelta
+sourceType
+descriptionKey/reasonCode suitable for UI
+createdAt
+
+If reasonCode is internal-looking, map to stable public reason key.
+
+==================================================
+PART P — PARENT POINT DETAIL DECISION
+==================================================
+
+#001 MEDIUM deferred:
+full Parent ledger vs summary only.
+
+Resolve minimally now:
+
+Strong MVP decision:
+Parent does NOT get full detailed points ledger.
+
+Parent points information will be available in #006 via:
+gamification summary / Faith Journey compact items.
+
+Reason:
+privacy/data minimization and reduced endpoint surface.
+
+Document:
+
+PARENT FULL POINT LEDGER IN MVP: NO
+
+Do not implement Parent points endpoint in #003.
+
+==================================================
+PART Q — ACCESS SERVICE HARDENING
+==================================================
+
+Complete points-specific scope helpers:
+
+assertStaffCanReadStudentGamification
+assertStaffCanAdjustStudentPoints
+assertLearnerCanReadOwnGamification
+
+Need student/enrollment/class/parish context through PUBLIC APIs only.
+
+Catechist:
+ACTIVE assignment to student's relevant ACTIVE enrollment/class.
+
+Important ambiguity:
+A student may have historical enrollments.
+
+For staff current manual adjustment:
+must target a current/ACTIVE enrollment/class context.
+
+Resolve student -> active enrollment in authorized scope.
+
+Do not allow Catechist to adjust a student merely because they taught them historically.
+
+ParishAdmin:
+own parish active/current context.
+
+SuperAdmin:
+global.
+
+==================================================
+PART R — STUDENT CONTEXT FOR MANUAL ADJUSTMENT
+==================================================
+
+When creating manual ledger entry:
+derive:
+- parishId
+- enrollmentId
+- academicYearId
+
+from current active enrollment when available.
+
+If student has no ACTIVE enrollment:
+- SuperAdmin may optionally award parish-context-independent points only if model permits parishId mandatory.
+Current ledger parishId is mandatory.
+
+Strong recommendation:
+manual adjustment requires a current active enrollment/parish context in MVP.
+
+If no active enrollment:
+409 or 422 domain error.
+
+Do not ask client for parishId.
+
+==================================================
+PART S — HTTP CONTROLLERS
+==================================================
+
+Create module-owned controllers, e.g.:
+
+StaffGamificationController
+StaffPointsController
+LearnerGamificationController
+
+Do not extend:
+StudentController
+FamilyPortal
+Enrollment controllers.
+
+Use:
+JWT auth
+PermissionGuard
+module-owned DTOs
+module HTTP error mapper
+
+==================================================
+PART T — DTOs
+==================================================
+
+Create:
+
+ListPointsQueryDto
+PointLedgerItemStaffResponseDto
+PointLedgerItemLearnerResponseDto
+PointLedgerListStaffResponseDto
+PointLedgerListLearnerResponseDto
+GamificationSummaryResponseDto
+ManualPointAdjustmentDto
+ManualPointAdjustmentResponseDto
+
+Keep future badge/mission fields in summary if clean.
+
+No entity exposure.
+
+==================================================
+PART U — ERROR CONTRACT
+==================================================
+
+Add minimal errors:
+
+GamificationAccessDeniedError
+StudentGamificationContextNotFoundError
+InvalidPointAdjustmentError
+RewardEventAlreadyProcessedError
+RewardRuleConfigurationError
+PointLedgerEntryNotFoundError
+PointLedgerEntryAlreadyReversedError
+
+Map HTTP:
+400 invalid payload
+401 auth
+403 scope
+404 student/entry/rule when appropriate
+409 already reversed/lifecycle
+422 no active gamification context if project convention supports
+
+Internal duplicate event should normally be idempotent success, not HTTP conflict.
+
+==================================================
+PART V — REWARD RULE ADMIN SERVICE FOUNDATION
+==================================================
+
+#003 should complete business service logic for rules needed by ingest:
+- create/update validation
+- active/inactive
+- scope checks
+- effective dates
+- typed condition config
+
+HTTP CRUD for reward rules may be implemented now OR deferred to #004/#005 admin surface.
+
+Preferred:
+implement reward-rule HTTP admin now because points engine needs rules operationally.
+
+Endpoints:
+
+GET /api/v1/reward-rules
+POST /api/v1/reward-rules
+PATCH /api/v1/reward-rules/:id
+
+Permission:
+gamification.manage
+
+Scope:
+SuperAdmin GLOBAL/PARISH
+ParishAdmin own PARISH only
+Catechist:
+NO reward-rule management, despite having `gamification.manage` for CLASS missions later.
+
+This is where MEDIUM from #002 MUST be resolved:
+service-level capability-specific scope.
+
+`gamification.manage` permission does NOT mean Catechist can manage reward rules/badges/milestones globally.
+
+==================================================
+PART W — CAPABILITY-SPECIFIC MANAGE SCOPE
+==================================================
+
+Update access service methods so `gamification.manage` is subdivided by domain policy:
+
+Reward rules:
+- SuperAdmin
+- ParishAdmin own parish
+- Catechist DENIED
+
+Badge definitions:
+later #004:
+- SuperAdmin global
+- ParishAdmin own parish
+- Catechist denied definition management
+
+Missions:
+later #005:
+- Catechist may manage CLASS missions for assigned class
+
+Milestones:
+later #004:
+- SuperAdmin only
+
+This resolves the #002 MEDIUM.
+
+Write specs now for capability-specific access.
+
+==================================================
+PART X — EVENT INGEST PUBLIC SURFACE
+==================================================
+
+GamificationService public facade may expose:
+ingestRewardEvent(event)
+
+only if needed as infrastructure consumer entry.
+
+Do NOT expose HTTP endpoint for event ingest.
+
+Clients must not be able to submit reward events.
+
+Application event handler/listener calls internal/public facade programmatically.
+
+==================================================
+PART Y — REWARD EVENT LISTENER
+==================================================
+
+Create listener/handler inside Gamification:
+
+RewardEligibleEventListener
+
+On event:
+call RewardIngestService.ingest(event)
+
+Error handling:
+- idempotent duplicate => benign
+- other failure => structured error log
+- no PII
+
+Do not directly invoke badges/missions/milestones yet.
+
+Leave clear extension point for #004/#005.
+
+==================================================
+PART Z — UNIT TEST FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Reward ingestion:
+- first event applies points
+- duplicate event no-op
+- duplicate ledger identity no double award
+- multiple matching rule codes each apply once
+- inactive rule ignored
+- wrong parish ignored
+- effective date ignored/applied
+- score threshold below/above
+- attendance PRESENT/LATE mapping
+- ABSENT/EXCUSED no points
+
+Transactions:
+- event receipt + ledger atomic design
+- reward failure does not mark receipt as successful outside transaction
+
+Manual:
+- positive
+- negative
+- zero reject
+- >1000 reject
+- required reason
+- server actor
+- Catechist current assignment
+- historical-only assignment denied
+- Parent/Student denied
+
+Reversal:
+- compensating delta
+- one reversal
+- immutable original
+
+Access:
+- reward rule manage SuperAdmin/ParishAdmin
+- Catechist denied reward rule manage
+- points adjust scope matrix
+
+DTO:
+- learner strips staffNote/actor IDs
+- staff mapping
+
+Event publisher/listener:
+- neutral contracts
+- source does not import Gamification
+
+==================================================
+PART AA — INTEGRATION SPEC FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL integration cases:
+
+1. event receipt + ledger same transaction
+2. duplicate event produces one receipt / one ledger award
+3. multiple rules
+4. parish/global rule combination
+5. effective window
+6. score threshold
+7. ledger aggregate balance
+8. manual adjustment append
+9. reversal append
+10. original unchanged
+11. pagination deterministic
+12. no hard delete/update
+13. source event emissions generate stable event IDs
+14. source domain remains successful if reward handler fails (mock/integration architecture case)
+
+Do not start DB.
+
+==================================================
+PART AB — DB E2E SPEC FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Required future HTTP cases:
+
+Staff:
+- assigned Catechist student summary 200
+- assigned Catechist points list 200
+- unassigned Catechist 403
+- ParishAdmin own parish 200
+- cross parish 403
+- SuperAdmin 200
+
+Adjustment:
+- Catechist assigned +10 201/200
+- negative adjustment
+- zero 400
+- too large 400
+- Parent 403
+- Student 403
+
+Learner:
+- self summary 200
+- self points 200
+- no staffNote/audit IDs
+
+Generic:
+- Parent generic student route 403
+- Student generic student route 403
+
+Reward rules:
+- SuperAdmin global create/manage
+- ParishAdmin own parish create/manage
+- ParishAdmin foreign parish 403
+- Catechist reward-rule manage 403
+
+Unauthenticated 401.
+
+==================================================
+PART AC — SOURCE MODULE SPECS
+==================================================
+
+Write/update source-module unit specs:
+
+LearningProgress:
+- emits once on first COMPLETED transition
+- no duplicate emit on idempotent repeat
+
+Practice:
+- emits once at terminal completion
+
+Exam:
+- emits on finalized attempt with score metadata
+
+ClassOperations:
+- completion emits PRESENT/LATE records only
+- no emission while SCHEDULED
+- no ABSENT/EXCUSED reward event if MVP policy excludes them
+
+Do not run.
+
+==================================================
+PART AD — MODULE BOUNDARY SPECS
+==================================================
+
+Update boundary specs for event integration:
+
+Allowed:
+source modules -> ApplicationEvents infrastructure/contracts
+
+Forbidden:
+source modules -> GamificationModule/GamificationService/entities/repositories
+
+Gamification:
+may depend on ApplicationEvents consumer mechanism
+must not import source modules/repositories/entities
+
+No forwardRef.
+
+==================================================
+PART AE — OPENAPI / README
+==================================================
+
+Document implemented #003 HTTP routes:
+- staff summary/points
+- manual adjustment
+- learner summary/points
+- reward-rules admin
+
+OpenAPI static annotations:
+auth
+permissions
+scope
+pagination
+responses/errors
+
+README:
+- immutable ledger
+- reward events
+- idempotency
+- event delivery limitation (no outbox)
+- source-domain independence
+- manual adjustment rules
+- Parent full ledger deferred/NO MVP
+- capability-specific manage scope
+
+Do not claim phase complete.
+
+==================================================
+PART AF — STATIC INSPECTION
+==================================================
+
+Before finishing, inspect:
+
+- no source imports Gamification
+- no Gamification source module imports
+- event IDs stable/idempotent
+- event receipt transaction semantics
+- no reward points derived from client
+- no duplicate award race obvious
+- learner DTO privacy
+- Catechist reward-rule management denied
+- manual adjustment derives current context
+- no mutable ledger APIs
+- no forwardRef
+- no PII event metadata
+- no attendance notes
+- no exam answers
+
+Fix obvious issues by inspection only.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+- badge auto-award/manual HTTP (#004)
+- milestone processing/admin HTTP (#004)
+- mission progress engine/admin HTTP (#005)
+- Parent gamification/Faith Journey reads (#006)
+- Catechist mission progress dashboards (#006)
+- Faith Journey composition (#006)
+- demo seed (#007)
+- Postman (#007)
+- leaderboard
+- streaks
+- outbox/queue
+- sacramental milestones
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/GAMIFICATION_FAITH_JOURNEY_003_POINTS_ENGINE_REWARD_INGESTION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Application events infrastructure
+7 Reward event listener
+8 Reward ingest service
+9 Transaction/idempotency
+10 Reward rule matching
+11 Rule condition config
+12 Point source mapping
+13 Automatic ledger creation
+14 LearningProgress emission
+15 Practice emission
+16 Exam emission
+17 Attendance emission
+18 Post-commit/failure semantics
+19 Manual adjustment service
+20 Manual adjustment scope
+21 Current enrollment context
+22 Reversal service
+23 Ledger immutability
+24 Staff summary endpoint
+25 Staff points endpoint
+26 Manual adjustment endpoint
+27 Learner summary endpoint
+28 Learner points endpoint
+29 Parent full ledger decision
+30 Reward rule admin endpoints
+31 Capability-specific manage scope
+32 DTO boundaries
+33 Data minimization
+34 Error contract
+35 OpenAPI
+36 README
+37 Module boundaries
+38 Unit tests written
+39 Integration tests written
+40 DB e2e tests written
+41 Source-module emission tests written
+42 Tests executed
+43 DB validation
+44 quality:full
+45 Docker
+46 npm audit
+47 Static inspection
+48 Risks/deferred
+49 BLOCKER/HIGH/MEDIUM/LOW
+50 #004 readiness
+51 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+APPLICATION EVENT INFRASTRUCTURE READY: YES/NO
+SOURCE MODULES DECOUPLED FROM GAMIFICATION: YES/NO
+REWARD INGEST ENGINE READY: YES/NO
+EVENT IDEMPOTENCY READY: YES/NO
+RULE MATCHING READY: YES/NO
+EXAM SCORE THRESHOLD READY: YES/NO
+AUTOMATIC POINT AWARDS READY: YES/NO
+LEARNING PROGRESS EMISSION READY: YES/NO
+PRACTICE EMISSION READY: YES/NO
+EXAM EMISSION READY: YES/NO
+ATTENDANCE EMISSION READY: YES/NO
+MANUAL POINT ADJUSTMENTS READY: YES/NO
+REVERSAL MODEL READY: YES/NO
+LEDGER IMMUTABILITY PRESERVED: YES/NO
+STAFF POINT READ CONTRACT READY: YES/NO
+LEARNER POINT READ CONTRACT READY: YES/NO
+PARENT FULL POINT LEDGER IN MVP: NO
+REWARD RULE ADMIN READY: YES/NO
+CATECHIST REWARD-RULE MANAGEMENT DENIED: YES/NO
+CAPABILITY-SPECIFIC MANAGE SCOPE READY: YES/NO
+DATA MINIMIZATION READY: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+SOURCE EMISSION TESTS WRITTEN: YES/NO
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#004 READINESS: YES/NO
+
+#004 GATE
+---------
+Proceed if:
+- no BLOCKER/HIGH from static inspection
+- event infrastructure ready
+- sources decoupled
+- ingest/idempotency ready
+- rule matching ready
+- automatic points ready
+- source emissions written
+- manual adjustment ready
+- ledger immutable
+- capability-specific scope resolves #002 Catechist manage concern
+- HTTP contracts implemented
+- tests/specs written
+
+Runtime validation is not required.
+
+Then recommend exactly:
+
+GAMIFICATION + FAITH JOURNEY #004/7 —
+BADGES + MILESTONES — DEFINITIONS / AWARDS / ACHIEVEMENTS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #003 status
+- event infrastructure
+- source emissions
+- ingest/idempotency
+- automatic points
+- manual adjustments/reversal
+- HTTP contracts
+- reward rule admin/scope
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(gamification): add points reward engine"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

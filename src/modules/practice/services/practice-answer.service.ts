@@ -1,8 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { generateUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import { isUniqueConstraintViolation } from '../../academic-structure/utils/unique-constraint.util';
+import {
+  APPLICATION_EVENT_PUBLISHER,
+  REWARD_EVENT_TYPES,
+  type ApplicationEventPublisher,
+} from '../../application-events';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import type { GradeAnswerResult } from '../../question-bank/interfaces/question-bank.interface';
 import {
@@ -50,6 +55,8 @@ export class PracticeAnswerService {
     private readonly questionBankService: QuestionBankService,
     private readonly practiceAccessService: PracticeAccessService,
     private readonly practiceSessionQueryService: PracticeSessionQueryService,
+    @Inject(APPLICATION_EVENT_PUBLISHER)
+    private readonly applicationEventPublisher: ApplicationEventPublisher,
   ) {}
 
   async submitAnswer(input: SubmitPracticeAnswerInput): Promise<PracticeAnswerResult> {
@@ -79,7 +86,7 @@ export class PracticeAnswerService {
 
     this.assertSessionAcceptsAnswers(session.status);
 
-    return this.dataSource.transaction(async (entityManager) => {
+    const result = await this.dataSource.transaction(async (entityManager) => {
       const sessionQuestionRepository = entityManager.getRepository(PracticeSessionQuestionEntity);
       const sessionRepository = entityManager.getRepository(PracticeSessionEntity);
       const attemptRepository = entityManager.getRepository(PracticeAnswerAttemptEntity);
@@ -117,11 +124,15 @@ export class PracticeAnswerService {
       if (replayAttempt !== null) {
         this.assertMatchingIdempotentSelection(replayAttempt, normalizedSelectedOptionIds);
 
-        return this.buildAnswerResultFromExistingAttempt(
-          lockedSession,
-          lockedSessionQuestion.id,
-          replayAttempt,
-        );
+        return {
+          answer: await this.buildAnswerResultFromExistingAttempt(
+            lockedSession,
+            lockedSessionQuestion.id,
+            replayAttempt,
+          ),
+          newlyCompleted: false,
+          sessionId: lockedSession.id,
+        };
       }
 
       const attempts = await attemptRepository.find({
@@ -168,11 +179,15 @@ export class PracticeAnswerService {
           if (racedAttempt !== null) {
             this.assertMatchingIdempotentSelection(racedAttempt, normalizedSelectedOptionIds);
 
-            return this.buildAnswerResultFromExistingAttempt(
-              lockedSession,
-              lockedSessionQuestion.id,
-              racedAttempt,
-            );
+            return {
+              answer: await this.buildAnswerResultFromExistingAttempt(
+                lockedSession,
+                lockedSessionQuestion.id,
+                racedAttempt,
+              ),
+              newlyCompleted: false,
+              sessionId: lockedSession.id,
+            };
           }
 
           throw new PracticeQuestionFinalizedError();
@@ -200,29 +215,51 @@ export class PracticeAnswerService {
         sessionStatus: lockedSession.status,
       });
 
-      const sessionCompleted = updatedQuestionState.finalized
+      const completion = updatedQuestionState.finalized
         ? await this.tryAutoCompleteSession(entityManager, lockedSession)
-        : lockedSession.status === PracticeSessionStatus.Completed;
+        : {
+            sessionCompleted: lockedSession.status === PracticeSessionStatus.Completed,
+            newlyCompleted: false,
+          };
 
       const feedback = await this.resolveFeedbackIfRevealed(
         lockedSessionQuestion.questionVersionId,
-        updatedQuestionState.feedbackRevealed || sessionCompleted,
+        updatedQuestionState.feedbackRevealed || completion.sessionCompleted,
       );
 
       return {
-        attemptId: normalizeUuid(attempt.id),
-        clientAnswerId: normalizeUuid(attempt.clientAnswerId),
-        attemptNumber: attempt.attemptNumber,
-        isCorrect: attempt.isCorrect,
-        score: attempt.score as 0 | 1,
-        questionFinalized: updatedQuestionState.finalized,
-        canRetry: updatedQuestionState.canRetry,
-        remainingAttempts: updatedQuestionState.remainingAttempts,
-        sessionCompleted,
-        feedback,
-        replayed: false,
+        answer: {
+          attemptId: normalizeUuid(attempt.id),
+          clientAnswerId: normalizeUuid(attempt.clientAnswerId),
+          attemptNumber: attempt.attemptNumber,
+          isCorrect: attempt.isCorrect,
+          score: attempt.score as 0 | 1,
+          questionFinalized: updatedQuestionState.finalized,
+          canRetry: updatedQuestionState.canRetry,
+          remainingAttempts: updatedQuestionState.remainingAttempts,
+          sessionCompleted: completion.sessionCompleted,
+          feedback,
+          replayed: false,
+        },
+        newlyCompleted: completion.newlyCompleted,
+        sessionId: lockedSession.id,
       };
     });
+
+    if (result.newlyCompleted) {
+      await this.applicationEventPublisher.publishRewardEligibleEvent({
+        eventId: result.sessionId,
+        eventType: REWARD_EVENT_TYPES.PracticeCompleted,
+        occurredAt: new Date(),
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        parishId: enrollment.parishId,
+        academicYearId: enrollment.academicYearId,
+        sourceId: result.sessionId,
+      });
+    }
+
+    return result.answer;
   }
 
   private normalizeAnswerSelection(selectedOptionIds: readonly string[]): string[] {
@@ -360,9 +397,12 @@ export class PracticeAnswerService {
   private async tryAutoCompleteSession(
     entityManager: EntityManager,
     session: PracticeSessionEntity,
-  ): Promise<boolean> {
+  ): Promise<{ sessionCompleted: boolean; newlyCompleted: boolean }> {
     if (session.status !== PracticeSessionStatus.InProgress) {
-      return session.status === PracticeSessionStatus.Completed;
+      return {
+        sessionCompleted: session.status === PracticeSessionStatus.Completed,
+        newlyCompleted: false,
+      };
     }
 
     const sessionQuestionRepository = entityManager.getRepository(PracticeSessionQuestionEntity);
@@ -384,7 +424,7 @@ export class PracticeAnswerService {
       });
 
       if (!attemptState.finalized) {
-        return false;
+        return { sessionCompleted: false, newlyCompleted: false };
       }
     }
 
@@ -392,6 +432,6 @@ export class PracticeAnswerService {
     session.completedAt = new Date();
     await sessionRepository.save(session);
 
-    return true;
+    return { sessionCompleted: true, newlyCompleted: true };
   }
 }

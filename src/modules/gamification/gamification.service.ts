@@ -1,36 +1,47 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
+import type { RewardEligibleEvent } from '../application-events/contracts/reward-eligible-event.contract';
 import { MissionProgressStatus } from './enums/gamification.enums';
 import type {
   BadgeAwardSnapshot,
   GamificationSummarySnapshot,
+  ManualPointAdjustmentInput,
   MilestoneAchievementSnapshot,
   MissionProgressSnapshot,
   PointBalanceSummary,
   PointLedgerEntrySnapshot,
+  PointLedgerListResult,
+  RewardIngestResult,
   RewardRuleSnapshot,
 } from './interfaces/gamification.interfaces';
 import { BadgeService } from './badges/services/badge.service';
 import { MilestoneService } from './milestones/services/milestone.service';
 import { MissionService } from './missions/services/mission.service';
+import { PointAdjustmentService } from './points/services/point-adjustment.service';
 import { PointLedgerService } from './points/services/point-ledger.service';
+import { RewardIngestService } from './rewards/services/reward-ingest.service';
 import { RewardEventReceiptService } from './rewards/services/reward-event-receipt.service';
-import { RewardRuleService } from './rewards/services/reward-rule.service';
+import {
+  type CreateRewardRuleInput,
+  RewardRuleService,
+  type UpdateRewardRuleInput,
+} from './rewards/services/reward-rule.service';
 
-/**
- * Public facade for GamificationModule.
- * Exposes stable safe reads and foundation helpers only — not raw repositories
- * and not bypass mutation primitives for ingest (#003).
- */
 @Injectable()
 export class GamificationService {
   constructor(
     private readonly rewardRuleService: RewardRuleService,
     private readonly rewardEventReceiptService: RewardEventReceiptService,
+    private readonly rewardIngestService: RewardIngestService,
     private readonly pointLedgerService: PointLedgerService,
+    private readonly pointAdjustmentService: PointAdjustmentService,
     private readonly badgeService: BadgeService,
     private readonly missionService: MissionService,
     private readonly milestoneService: MilestoneService,
   ) {}
+
+  async ingestRewardEvent(event: RewardEligibleEvent): Promise<RewardIngestResult> {
+    return this.rewardIngestService.ingest(event);
+  }
 
   async getPointBalance(input: {
     readonly studentId: string;
@@ -48,6 +59,29 @@ export class GamificationService {
       take: options?.take,
       includeStaffNote: false,
     });
+  }
+
+  async listPointLedgerPaginated(input: {
+    readonly studentId: string;
+    readonly page: number;
+    readonly limit: number;
+    readonly includeStaffNote: boolean;
+  }): Promise<PointLedgerListResult> {
+    return this.pointLedgerService.listByStudentIdPaginated(input);
+  }
+
+  async adjustStudentPoints(
+    input: ManualPointAdjustmentInput,
+  ): Promise<PointLedgerEntrySnapshot> {
+    return this.pointAdjustmentService.adjustPoints(input);
+  }
+
+  async reversePointLedgerEntry(input: {
+    readonly originalEntryId: string;
+    readonly actorUserId: string;
+    readonly reason: string;
+  }): Promise<PointLedgerEntrySnapshot> {
+    return this.pointAdjustmentService.reverseLedgerEntry(input);
   }
 
   async listActiveBadgesForStudent(studentId: string): Promise<BadgeAwardSnapshot[]> {
@@ -74,6 +108,25 @@ export class GamificationService {
 
   async isRewardEventAlreadyProcessed(eventId: string): Promise<boolean> {
     return this.rewardEventReceiptService.isDuplicateEventId(eventId);
+  }
+
+  async listRewardRules(input?: {
+    readonly parishId?: string | null;
+    readonly includeGlobal?: boolean;
+  }): Promise<RewardRuleSnapshot[]> {
+    return this.rewardRuleService.list(input);
+  }
+
+  async getRewardRuleById(id: string): Promise<RewardRuleSnapshot> {
+    return this.rewardRuleService.getById(id);
+  }
+
+  async createRewardRule(input: CreateRewardRuleInput): Promise<RewardRuleSnapshot> {
+    return this.rewardRuleService.create(input);
+  }
+
+  async updateRewardRule(id: string, input: UpdateRewardRuleInput): Promise<RewardRuleSnapshot> {
+    return this.rewardRuleService.update(id, input);
   }
 
   async getGamificationSummary(input: {

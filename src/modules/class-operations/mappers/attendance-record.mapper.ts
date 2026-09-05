@@ -5,6 +5,7 @@ export function toAttendanceRecordSnapshot(
   entity: AttendanceRecordEntity,
 ): AttendanceRecordSnapshot {
   return {
+    id: entity.id,
     sessionId: entity.sessionId,
     enrollmentId: entity.enrollmentId,
     studentId: entity.studentId,

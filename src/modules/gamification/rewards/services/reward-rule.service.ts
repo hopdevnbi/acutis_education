@@ -15,6 +15,7 @@ import {
   assertRewardRuleScope,
   isRewardRuleEffectiveAt,
 } from '../utils/reward-rule.util';
+import { assertConditionConfigForRule } from '../utils/reward-source-mapping.util';
 import { RewardRuleEntity } from './entities/reward-rule.entity';
 
 export interface CreateRewardRuleInput {
@@ -28,6 +29,7 @@ export interface CreateRewardRuleInput {
   readonly parishId?: string | null;
   readonly effectiveFrom?: Date | null;
   readonly effectiveTo?: Date | null;
+  readonly conditionConfigJson?: string | null;
 }
 
 export interface UpdateRewardRuleInput {
@@ -36,6 +38,8 @@ export interface UpdateRewardRuleInput {
   readonly maxAwardsPerSource?: number;
   readonly effectiveFrom?: Date | null;
   readonly effectiveTo?: Date | null;
+  readonly conditionConfigJson?: string | null;
+  readonly sourceType?: string;
 }
 
 @Injectable()
@@ -58,6 +62,27 @@ export class RewardRuleService {
       throw new RewardRuleNotFoundError();
     }
     return toRewardRuleSnapshot(row);
+  }
+
+  async list(input: {
+    readonly parishId?: string | null;
+    readonly includeGlobal?: boolean;
+  } = {}): Promise<RewardRuleSnapshot[]> {
+    const rows = await this.rewardRuleRepository.find({
+      order: { code: 'ASC' },
+    });
+
+    return rows
+      .filter((row) => {
+        if (row.scopeType === RewardScopeType.Global) {
+          return input.includeGlobal !== false;
+        }
+        if (!input.parishId) {
+          return true;
+        }
+        return row.parishId === normalizeUuid(input.parishId);
+      })
+      .map(toRewardRuleSnapshot);
   }
 
   async findActiveMatchingRules(input: {
@@ -83,9 +108,7 @@ export class RewardRuleService {
       order: { code: 'ASC' },
     });
 
-    return rows
-      .filter((row) => isRewardRuleEffectiveAt(row, at))
-      .map(toRewardRuleSnapshot);
+    return rows.filter((row) => isRewardRuleEffectiveAt(row, at)).map(toRewardRuleSnapshot);
   }
 
   async create(input: CreateRewardRuleInput): Promise<RewardRuleSnapshot> {
@@ -95,6 +118,10 @@ export class RewardRuleService {
     }
     const maxAwards = input.maxAwardsPerSource ?? 1;
     assertMaxAwardsPerSource(maxAwards);
+    const conditionConfigJson = assertConditionConfigForRule({
+      sourceType: input.sourceType,
+      conditionConfigJson: input.conditionConfigJson,
+    });
 
     const entity = this.rewardRuleRepository.create({
       code: input.code.trim(),
@@ -107,6 +134,7 @@ export class RewardRuleService {
       parishId: input.parishId ? normalizeUuid(input.parishId) : null,
       effectiveFrom: input.effectiveFrom ?? null,
       effectiveTo: input.effectiveTo ?? null,
+      conditionConfigJson,
     });
 
     try {
@@ -144,6 +172,18 @@ export class RewardRuleService {
     }
     if (input.effectiveTo !== undefined) {
       row.effectiveTo = input.effectiveTo;
+    }
+    if (input.sourceType !== undefined) {
+      row.sourceType = input.sourceType;
+    }
+    if (input.conditionConfigJson !== undefined || input.sourceType !== undefined) {
+      row.conditionConfigJson = assertConditionConfigForRule({
+        sourceType: row.sourceType,
+        conditionConfigJson:
+          input.conditionConfigJson !== undefined
+            ? input.conditionConfigJson
+            : row.conditionConfigJson,
+      });
     }
     const saved = await this.rewardRuleRepository.save(row);
     return toRewardRuleSnapshot(saved);

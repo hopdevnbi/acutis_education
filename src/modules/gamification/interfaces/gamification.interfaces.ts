@@ -25,6 +25,7 @@ export interface RewardRuleSnapshot {
   readonly parishId: string | null;
   readonly effectiveFrom: Date | null;
   readonly effectiveTo: Date | null;
+  readonly conditionConfigJson: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -202,4 +203,35 @@ export interface AppendPointLedgerEntryInput {
   readonly staffNote?: string | null;
   readonly awardedByUserId?: string | null;
   readonly relatedLedgerEntryId?: string | null;
+}
+
+export interface PointLedgerListResult {
+  readonly items: readonly PointLedgerEntrySnapshot[];
+  readonly page: number;
+  readonly limit: number;
+  readonly total: number;
+  readonly totalPages: number;
+}
+
+export interface RewardIngestResult {
+  readonly eventId: string;
+  readonly alreadyProcessed: boolean;
+  readonly ledgerEntriesCreated: number;
+  readonly totalPointsAwarded: number;
+  readonly matchedRuleCodes: readonly string[];
+}
+
+export interface ManualPointAdjustmentInput {
+  readonly studentId: string;
+  readonly actorUserId: string;
+  readonly delta: number;
+  readonly reason: string;
+}
+
+export interface StudentGamificationContext {
+  readonly studentId: string;
+  readonly enrollmentId: string;
+  readonly parishId: string;
+  readonly academicYearId: string;
+  readonly classId: string;
 }

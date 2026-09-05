@@ -1,6 +1,7 @@
 import type { AttendanceStatus } from '../enums/attendance-status.enum';
 
 export interface AttendanceRecordSnapshot {
+  readonly id: string;
   readonly sessionId: string;
   readonly enrollmentId: string;
   readonly studentId: string;

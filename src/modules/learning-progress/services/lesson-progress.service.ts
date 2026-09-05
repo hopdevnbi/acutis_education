@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { isUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
+import {
+  APPLICATION_EVENT_PUBLISHER,
+  REWARD_EVENT_TYPES,
+  type ApplicationEventPublisher,
+} from '../../application-events';
 import { CanonicalLessonKeyNotInCurriculumError } from '../../curriculum/errors/curriculum.errors';
 import { CurriculumService } from '../../curriculum/services/curriculum.service';
 import { ClassService } from '../../class/services/class.service';
@@ -53,6 +58,8 @@ export class LessonProgressService {
     private readonly classService: ClassService,
     private readonly curriculumService: CurriculumService,
     private readonly learningProgressAccessService: LearningProgressAccessService,
+    @Inject(APPLICATION_EVENT_PUBLISHER)
+    private readonly applicationEventPublisher: ApplicationEventPublisher,
   ) {}
 
   async getLessonProgress(input: GetLessonProgressInput): Promise<LessonProgressSnapshot> {
@@ -85,18 +92,23 @@ export class LessonProgressService {
       input.canonicalLessonKey,
     );
 
-    return this.dataSource.transaction(async (manager) => {
+    const enrollmentForEmit = enrollment;
+
+    const result = await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(LessonProgressEntity);
       let row = await this.findProgressRowForUpdate(repository, context);
+      let newlyCompleted = false;
 
       if (row === null) {
         try {
-          return await this.insertLessonProgressRow(
+          const inserted = await this.insertLessonProgressRow(
             repository,
             context,
             input.targetStatus,
             input.actorUserId,
           );
+          newlyCompleted = input.targetStatus === LessonProgressStatus.Completed;
+          return { snapshot: inserted, newlyCompleted };
         } catch (error: unknown) {
           if (!isUniqueConstraintViolation(error)) {
             throw error;
@@ -110,13 +122,36 @@ export class LessonProgressService {
         }
       }
 
-      return this.applyTransitionToExistingRow(
+      const beforeStatus = this.toPublicStatus(row.status);
+      const snapshot = await this.applyTransitionToExistingRow(
         repository,
         row,
         input.targetStatus,
         input.actorUserId,
       );
+      newlyCompleted =
+        input.targetStatus === LessonProgressStatus.Completed &&
+        beforeStatus !== LessonProgressStatus.Completed &&
+        !isLessonProgressTransitionNoop(beforeStatus, input.targetStatus);
+
+      return { snapshot, newlyCompleted };
     });
+
+    if (result.newlyCompleted && result.snapshot.id) {
+      await this.applicationEventPublisher.publishRewardEligibleEvent({
+        eventId: result.snapshot.id,
+        eventType: REWARD_EVENT_TYPES.LearningLessonCompleted,
+        occurredAt: result.snapshot.completedAt ?? new Date(),
+        studentId: enrollmentForEmit.studentId,
+        enrollmentId: enrollmentForEmit.id,
+        parishId: enrollmentForEmit.parishId,
+        academicYearId: enrollmentForEmit.academicYearId,
+        sourceId: result.snapshot.id,
+        metadata: { canonicalLessonKey: result.snapshot.canonicalLessonKey },
+      });
+    }
+
+    return result.snapshot;
   }
 
   async listEnrollmentLessonProgress(

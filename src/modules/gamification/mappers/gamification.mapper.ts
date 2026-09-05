@@ -32,6 +32,7 @@ export function toRewardRuleSnapshot(entity: RewardRuleEntity): RewardRuleSnapsh
     parishId: entity.parishId,
     effectiveFrom: entity.effectiveFrom,
     effectiveTo: entity.effectiveTo,
+    conditionConfigJson: entity.conditionConfigJson,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
   };

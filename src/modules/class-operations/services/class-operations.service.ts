@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
+import {
+  APPLICATION_EVENT_PUBLISHER,
+  REWARD_EVENT_TYPES,
+  type ApplicationEventPublisher,
+} from '../../application-events';
 import { ClassStatus } from '../../class/enums/class-status.enum';
 import { ClassService } from '../../class/services/class.service';
 import { ENROLLMENT_LIST_MAX_LIMIT } from '../../enrollment/constants/enrollment.constants';
@@ -15,6 +20,7 @@ import {
 } from '../constants/class-operations.constants';
 import { AttendanceRecordEntity } from '../entities/attendance-record.entity';
 import { ClassSessionEntity } from '../entities/class-session.entity';
+import { AttendanceStatus } from '../enums/attendance-status.enum';
 import { ClassSessionStatus } from '../enums/class-session-status.enum';
 import {
   ClassSessionClassNotActiveError,
@@ -55,6 +61,8 @@ export class ClassOperationsService {
     private readonly attendanceService: AttendanceService,
     private readonly enrollmentService: EnrollmentService,
     private readonly studentService: StudentService,
+    @Inject(APPLICATION_EVENT_PUBLISHER)
+    private readonly applicationEventPublisher: ApplicationEventPublisher,
   ) {}
 
   getSessionById(rawSessionId: string): Promise<ClassSessionSnapshot> {
@@ -239,6 +247,27 @@ export class ClassOperationsService {
       ClassSessionStatus.Completed,
       updatedByUserId,
     );
+
+    const session = await this.classSessionService.getSessionById(rawSessionId);
+    const attendance = await this.attendanceService.listBySessionId(session.id);
+
+    for (const mark of attendance) {
+      if (mark.status !== AttendanceStatus.Present && mark.status !== AttendanceStatus.Late) {
+        continue;
+      }
+
+      await this.applicationEventPublisher.publishRewardEligibleEvent({
+        eventId: mark.id,
+        eventType: REWARD_EVENT_TYPES.AttendanceSessionCompletedMark,
+        occurredAt: session.completedAt ?? new Date(),
+        studentId: mark.studentId,
+        enrollmentId: mark.enrollmentId,
+        parishId: session.parishId,
+        academicYearId: session.academicYearId,
+        sourceId: mark.id,
+        metadata: { attendanceStatus: mark.status },
+      });
+    }
 
     return this.getSessionWithCounts(rawSessionId);
   }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../../database/uuid-v4.util';
 import { RewardEventAlreadyProcessedError } from '../../errors/gamification.errors';
 import type { ProcessedRewardEventSnapshot } from '../../interfaces/gamification.interfaces';
@@ -22,9 +22,16 @@ export class RewardEventReceiptService {
     private readonly receiptRepository: Repository<ProcessedRewardEventEntity>,
   ) {}
 
-  async findByEventId(rawEventId: string): Promise<ProcessedRewardEventSnapshot | null> {
+  private repo(manager?: EntityManager): Repository<ProcessedRewardEventEntity> {
+    return manager ? manager.getRepository(ProcessedRewardEventEntity) : this.receiptRepository;
+  }
+
+  async findByEventId(
+    rawEventId: string,
+    manager?: EntityManager,
+  ): Promise<ProcessedRewardEventSnapshot | null> {
     const eventId = normalizeUuid(rawEventId);
-    const row = await this.receiptRepository.findOne({ where: { eventId } });
+    const row = await this.repo(manager).findOne({ where: { eventId } });
     return row ? toProcessedRewardEventSnapshot(row) : null;
   }
 
@@ -33,8 +40,12 @@ export class RewardEventReceiptService {
     return existing != null;
   }
 
-  async recordProcessed(input: RecordProcessedRewardEventInput): Promise<ProcessedRewardEventSnapshot> {
-    const entity = this.receiptRepository.create({
+  async recordProcessed(
+    input: RecordProcessedRewardEventInput,
+    manager?: EntityManager,
+  ): Promise<ProcessedRewardEventSnapshot> {
+    const repository = this.repo(manager);
+    const entity = repository.create({
       eventId: normalizeUuid(input.eventId),
       eventType: input.eventType,
       studentId: normalizeUuid(input.studentId),
@@ -43,7 +54,7 @@ export class RewardEventReceiptService {
     });
 
     try {
-      const saved = await this.receiptRepository.save(entity);
+      const saved = await repository.save(entity);
       return toProcessedRewardEventSnapshot(saved);
     } catch (error) {
       if (isUniqueViolation(error)) {

@@ -144,3 +144,31 @@ export class InvalidRewardEventMetadataError extends Error {
     this.name = 'InvalidRewardEventMetadataError';
   }
 }
+
+export class StudentGamificationContextNotFoundError extends Error {
+  constructor() {
+    super('No ACTIVE enrollment context is available for gamification points.');
+    this.name = 'StudentGamificationContextNotFoundError';
+  }
+}
+
+export class InvalidPointAdjustmentError extends Error {
+  constructor(message = 'Invalid point adjustment.') {
+    super(message);
+    this.name = 'InvalidPointAdjustmentError';
+  }
+}
+
+export class RewardRuleConfigurationError extends Error {
+  constructor(message = 'Invalid reward rule configuration.') {
+    super(message);
+    this.name = 'RewardRuleConfigurationError';
+  }
+}
+
+export class PointLedgerEntryAlreadyReversedError extends Error {
+  constructor() {
+    super('Point ledger entry has already been reversed.');
+    this.name = 'PointLedgerEntryAlreadyReversedError';
+  }
+}
