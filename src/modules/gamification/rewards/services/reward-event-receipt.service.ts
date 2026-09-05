@@ -12,6 +12,9 @@ export interface RecordProcessedRewardEventInput {
   readonly eventType: string;
   readonly studentId: string;
   readonly sourceId: string;
+  readonly parishId?: string | null;
+  readonly enrollmentId?: string | null;
+  readonly occurredAt?: Date;
   readonly processedAt?: Date;
 }
 
@@ -45,11 +48,15 @@ export class RewardEventReceiptService {
     manager?: EntityManager,
   ): Promise<ProcessedRewardEventSnapshot> {
     const repository = this.repo(manager);
+    const occurredAt = input.occurredAt ?? input.processedAt ?? new Date();
     const entity = repository.create({
       eventId: normalizeUuid(input.eventId),
       eventType: input.eventType,
       studentId: normalizeUuid(input.studentId),
       sourceId: normalizeUuid(input.sourceId),
+      parishId: input.parishId ? normalizeUuid(input.parishId) : null,
+      enrollmentId: input.enrollmentId ? normalizeUuid(input.enrollmentId) : null,
+      occurredAt,
       processedAt: input.processedAt ?? new Date(),
     });
 

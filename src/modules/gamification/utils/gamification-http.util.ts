@@ -17,9 +17,25 @@ import {
 } from '../../student/errors/student.errors';
 import { LearnerSelfScopeDeniedError } from '../../student/errors/student-access.errors';
 import {
+  BadgeAlreadyAwardedError,
+  BadgeAlreadyRevokedError,
+  BadgeAwardNotAllowedError,
+  BadgeAwardNotFoundError,
+  BadgeDefinitionCodeAlreadyExistsError,
+  BadgeDefinitionNotActiveError,
+  BadgeDefinitionNotFoundError,
+  BadgeNotFoundError,
   GamificationAccessDeniedError,
+  InvalidBadgeRuleConfigError,
+  InvalidBadgeScopeError,
+  InvalidMilestoneTriggerConfigError,
   InvalidPointAdjustmentError,
   InvalidRewardRuleScopeError,
+  MilestoneDefinitionAccessDeniedError,
+  MilestoneDefinitionCodeAlreadyExistsError,
+  MilestoneDefinitionNotActiveError,
+  MilestoneDefinitionNotFoundError,
+  MilestoneNotFoundError,
   PointLedgerDuplicateIdentityError,
   PointLedgerEntryAlreadyReversedError,
   PointLedgerEntryNotFoundError,
@@ -33,6 +49,7 @@ import {
 export function rethrowGamificationServiceError(error: unknown): never {
   if (
     error instanceof GamificationAccessDeniedError ||
+    error instanceof MilestoneDefinitionAccessDeniedError ||
     error instanceof ClassScopeAccessDeniedError ||
     error instanceof ParishScopeAccessDeniedError ||
     error instanceof LearnerSelfScopeDeniedError
@@ -44,7 +61,12 @@ export function rethrowGamificationServiceError(error: unknown): never {
     error instanceof StudentNotFoundError ||
     error instanceof EnrollmentNotFoundError ||
     error instanceof RewardRuleNotFoundError ||
-    error instanceof PointLedgerEntryNotFoundError
+    error instanceof PointLedgerEntryNotFoundError ||
+    error instanceof BadgeDefinitionNotFoundError ||
+    error instanceof BadgeNotFoundError ||
+    error instanceof BadgeAwardNotFoundError ||
+    error instanceof MilestoneDefinitionNotFoundError ||
+    error instanceof MilestoneNotFoundError
   ) {
     throw new NotFoundException(error.message);
   }
@@ -52,7 +74,11 @@ export function rethrowGamificationServiceError(error: unknown): never {
   if (
     error instanceof PointLedgerEntryAlreadyReversedError ||
     error instanceof PointLedgerDuplicateIdentityError ||
-    error instanceof RewardRuleCodeAlreadyExistsError
+    error instanceof RewardRuleCodeAlreadyExistsError ||
+    error instanceof BadgeDefinitionCodeAlreadyExistsError ||
+    error instanceof BadgeAlreadyAwardedError ||
+    error instanceof BadgeAlreadyRevokedError ||
+    error instanceof MilestoneDefinitionCodeAlreadyExistsError
   ) {
     throw new ConflictException(error.message);
   }
@@ -67,7 +93,13 @@ export function rethrowGamificationServiceError(error: unknown): never {
     error instanceof InvalidRewardRuleScopeError ||
     error instanceof RewardRuleConfigurationError ||
     error instanceof InvalidStudentIdError ||
-    error instanceof InvalidEnrollmentIdError
+    error instanceof InvalidEnrollmentIdError ||
+    error instanceof InvalidBadgeScopeError ||
+    error instanceof InvalidBadgeRuleConfigError ||
+    error instanceof InvalidMilestoneTriggerConfigError ||
+    error instanceof BadgeDefinitionNotActiveError ||
+    error instanceof BadgeAwardNotAllowedError ||
+    error instanceof MilestoneDefinitionNotActiveError
   ) {
     throw new BadRequestException(error.message);
   }

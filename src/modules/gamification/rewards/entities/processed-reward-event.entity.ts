@@ -20,6 +20,15 @@ export class ProcessedRewardEventEntity {
   @Column({ type: 'uniqueidentifier', name: 'source_id' })
   sourceId!: string;
 
+  @Column({ type: 'uniqueidentifier', name: 'parish_id', nullable: true })
+  parishId!: string | null;
+
+  @Column({ type: 'uniqueidentifier', name: 'enrollment_id', nullable: true })
+  enrollmentId!: string | null;
+
+  @Column({ type: 'datetime2', name: 'occurred_at' })
+  occurredAt!: Date;
+
   @Column({ type: 'datetime2', name: 'processed_at' })
   processedAt!: Date;
 

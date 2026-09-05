@@ -10,9 +10,23 @@ import {
 import type { RewardIngestResult } from '../../interfaces/gamification.interfaces';
 import { assertRewardEligibleEventShape } from '../../utils/reward-event.util';
 import { doesRuleMatchEvent } from '../../utils/reward-source-mapping.util';
+import { BadgeAwardProcessor } from '../../badges/services/badge-award.processor';
+import { MilestoneAchievementProcessor } from '../../milestones/services/milestone-achievement.processor';
 import { PointLedgerService } from '../../points/services/point-ledger.service';
 import { RewardEventReceiptService } from './reward-event-receipt.service';
 import { RewardRuleService } from './reward-rule.service';
+
+function emptyAlreadyProcessed(eventId: string): RewardIngestResult {
+  return {
+    eventId: normalizeUuid(eventId),
+    alreadyProcessed: true,
+    ledgerEntriesCreated: 0,
+    totalPointsAwarded: 0,
+    matchedRuleCodes: [],
+    badgesAwarded: 0,
+    milestonesAchieved: 0,
+  };
+}
 
 @Injectable()
 export class RewardIngestService {
@@ -22,6 +36,8 @@ export class RewardIngestService {
     private readonly rewardEventReceiptService: RewardEventReceiptService,
     private readonly rewardRuleService: RewardRuleService,
     private readonly pointLedgerService: PointLedgerService,
+    private readonly badgeAwardProcessor: BadgeAwardProcessor,
+    private readonly milestoneAchievementProcessor: MilestoneAchievementProcessor,
   ) {}
 
   async ingest(event: RewardEligibleEvent): Promise<RewardIngestResult> {
@@ -30,13 +46,7 @@ export class RewardIngestService {
     return this.dataSource.transaction(async (manager) => {
       const existing = await this.rewardEventReceiptService.findByEventId(event.eventId, manager);
       if (existing) {
-        return {
-          eventId: normalizeUuid(event.eventId),
-          alreadyProcessed: true,
-          ledgerEntriesCreated: 0,
-          totalPointsAwarded: 0,
-          matchedRuleCodes: [],
-        };
+        return emptyAlreadyProcessed(event.eventId);
       }
 
       try {
@@ -46,19 +56,16 @@ export class RewardIngestService {
             eventType: event.eventType,
             studentId: event.studentId,
             sourceId: event.sourceId,
+            parishId: event.parishId,
+            enrollmentId: event.enrollmentId ?? null,
+            occurredAt: event.occurredAt,
             processedAt: new Date(),
           },
           manager,
         );
       } catch (error: unknown) {
         if (error instanceof RewardEventAlreadyProcessedError) {
-          return {
-            eventId: normalizeUuid(event.eventId),
-            alreadyProcessed: true,
-            ledgerEntriesCreated: 0,
-            totalPointsAwarded: 0,
-            matchedRuleCodes: [],
-          };
+          return emptyAlreadyProcessed(event.eventId);
         }
         throw error;
       }
@@ -110,13 +117,20 @@ export class RewardIngestService {
         }
       }
 
-      // #004/#005: badge / mission / milestone side-effect hooks after ledger awards.
+      const badgeResult = await this.badgeAwardProcessor.processEvent(event, manager);
+      const milestoneResult = await this.milestoneAchievementProcessor.processEvent(
+        event,
+        manager,
+      );
+
       return {
         eventId: normalizeUuid(event.eventId),
         alreadyProcessed: false,
         ledgerEntriesCreated,
         totalPointsAwarded,
         matchedRuleCodes,
+        badgesAwarded: badgeResult.badgesAwarded,
+        milestonesAchieved: milestoneResult.milestonesAchieved,
       };
     });
   }

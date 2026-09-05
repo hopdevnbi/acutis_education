@@ -5,6 +5,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -15,13 +16,19 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { GamificationAccessService } from '../access/gamification-access.service';
 import { GAMIFICATION_READ_PERMISSION } from '../constants/gamification-permissions.constants';
-import { GamificationSummaryResponseDto } from '../dto/gamification-response.dto';
+import {
+  GamificationSummaryResponseDto,
+  PointLedgerListStaffResponseDto,
+} from '../dto/gamification-response.dto';
+import { StaffStudentBadgeListResponseDto } from '../dto/badge.dto';
+import { StaffStudentMilestoneListResponseDto } from '../dto/milestone.dto';
 import { ListPointsQueryDto } from '../dto/list-points-query.dto';
-import { PointLedgerListStaffResponseDto } from '../dto/gamification-response.dto';
 import { GamificationService } from '../gamification.service';
 import {
   toGamificationSummaryResponseDto,
   toStaffPointLedgerListDto,
+  toStaffStudentBadgeListResponseDto,
+  toStaffStudentMilestoneListResponseDto,
 } from '../mappers/gamification-http.mapper';
 import { rethrowGamificationServiceError } from '../utils/gamification-http.util';
 
@@ -88,6 +95,59 @@ export class StaffGamificationController {
         includeStaffNote: true,
       });
       return toStaffPointLedgerListDto(result);
+    } catch (error: unknown) {
+      rethrowGamificationServiceError(error);
+    }
+  }
+
+  @Get('students/:studentId/badges')
+  @RequirePermissions(GAMIFICATION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Staff list student badge awards',
+    description:
+      'Scoped staff read. Omits awardedByUserId and ruleConfig. Parent deferred to #006.',
+  })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
+  @ApiOkResponse({ type: StaffStudentBadgeListResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async listStudentBadges(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+  ): Promise<StaffStudentBadgeListResponseDto> {
+    try {
+      await this.gamificationAccessService.assertStaffCanReadStudentGamification(
+        authenticatedUser.userId,
+        studentId,
+      );
+      const items = await this.gamificationService.listStaffStudentBadges(studentId);
+      return toStaffStudentBadgeListResponseDto(items);
+    } catch (error: unknown) {
+      rethrowGamificationServiceError(error);
+    }
+  }
+
+  @Get('students/:studentId/milestones')
+  @RequirePermissions(GAMIFICATION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Staff list student milestone achievements',
+    description: 'Scoped staff read. Omits internal source IDs. Parent deferred to #006.',
+  })
+  @ApiParam({ name: 'studentId', format: 'uuid' })
+  @ApiOkResponse({ type: StaffStudentMilestoneListResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async listStudentMilestones(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+    @Param('studentId') studentId: string,
+  ): Promise<StaffStudentMilestoneListResponseDto> {
+    try {
+      await this.gamificationAccessService.assertStaffCanReadStudentGamification(
+        authenticatedUser.userId,
+        studentId,
+      );
+      const items = await this.gamificationService.listStaffStudentMilestones(studentId);
+      return toStaffStudentMilestoneListResponseDto(items);
     } catch (error: unknown) {
       rethrowGamificationServiceError(error);
     }

@@ -102,19 +102,36 @@ export class PointLedgerService {
     return row ? toPointLedgerEntrySnapshot(row, { includeStaffNote: true }) : null;
   }
 
-  async getById(rawId: string): Promise<PointLedgerEntrySnapshot> {
-    const row = await this.ledgerRepository.findOne({ where: { id: normalizeUuid(rawId) } });
+  async getById(rawId: string, manager?: EntityManager): Promise<PointLedgerEntrySnapshot> {
+    const row = await this.repo(manager).findOne({ where: { id: normalizeUuid(rawId) } });
     if (!row) {
       throw new PointLedgerEntryNotFoundError();
     }
     return toPointLedgerEntrySnapshot(row, { includeStaffNote: true });
   }
 
-  async findReversalForEntry(rawOriginalEntryId: string): Promise<PointLedgerEntrySnapshot | null> {
-    const row = await this.ledgerRepository.findOne({
+  async findReversalForEntry(
+    rawOriginalEntryId: string,
+    manager?: EntityManager,
+  ): Promise<PointLedgerEntrySnapshot | null> {
+    const row = await this.repo(manager).findOne({
       where: {
         sourceType: PointSourceType.Reversal,
         relatedLedgerEntryId: normalizeUuid(rawOriginalEntryId),
+      },
+    });
+    return row ? toPointLedgerEntrySnapshot(row, { includeStaffNote: true }) : null;
+  }
+
+  /** Badge bonus ledger row: sourceType=BADGE_BONUS, sourceId=badgeAward.id */
+  async findBonusEntryForAward(
+    rawAwardId: string,
+    manager?: EntityManager,
+  ): Promise<PointLedgerEntrySnapshot | null> {
+    const row = await this.repo(manager).findOne({
+      where: {
+        sourceType: PointSourceType.BadgeBonus,
+        sourceId: normalizeUuid(rawAwardId),
       },
     });
     return row ? toPointLedgerEntrySnapshot(row, { includeStaffNote: true }) : null;
@@ -197,37 +214,43 @@ export class PointLedgerService {
     };
   }
 
-  async reverseEntry(input: {
-    readonly originalEntryId: string;
-    readonly awardedByUserId?: string | null;
-    readonly staffNote?: string | null;
-  }): Promise<PointLedgerEntrySnapshot> {
+  async reverseEntry(
+    input: {
+      readonly originalEntryId: string;
+      readonly awardedByUserId?: string | null;
+      readonly staffNote?: string | null;
+    },
+    manager?: EntityManager,
+  ): Promise<PointLedgerEntrySnapshot> {
     const originalId = normalizeUuid(input.originalEntryId);
-    const existingReversal = await this.findReversalForEntry(originalId);
+    const existingReversal = await this.findReversalForEntry(originalId, manager);
     if (existingReversal) {
       throw new PointLedgerEntryAlreadyReversedError();
     }
 
-    const original = await this.ledgerRepository.findOne({ where: { id: originalId } });
+    const original = await this.repo(manager).findOne({ where: { id: originalId } });
     if (!original) {
       throw new PointLedgerEntryNotFoundError();
     }
 
     try {
-      return await this.append({
-        studentId: original.studentId,
-        enrollmentId: original.enrollmentId,
-        parishId: original.parishId,
-        academicYearId: original.academicYearId,
-        pointsDelta: buildReversalDelta(original.pointsDelta),
-        sourceType: PointSourceType.Reversal,
-        sourceId: original.id,
-        reasonCode: buildReversalReasonCode(original.reasonCode),
-        descriptionKey: original.descriptionKey,
-        staffNote: input.staffNote ?? null,
-        awardedByUserId: input.awardedByUserId ?? null,
-        relatedLedgerEntryId: original.id,
-      });
+      return await this.append(
+        {
+          studentId: original.studentId,
+          enrollmentId: original.enrollmentId,
+          parishId: original.parishId,
+          academicYearId: original.academicYearId,
+          pointsDelta: buildReversalDelta(original.pointsDelta),
+          sourceType: PointSourceType.Reversal,
+          sourceId: original.id,
+          reasonCode: buildReversalReasonCode(original.reasonCode),
+          descriptionKey: original.descriptionKey,
+          staffNote: input.staffNote ?? null,
+          awardedByUserId: input.awardedByUserId ?? null,
+          relatedLedgerEntryId: original.id,
+        },
+        manager,
+      );
     } catch (error: unknown) {
       if (
         error instanceof PointLedgerDuplicateIdentityError ||

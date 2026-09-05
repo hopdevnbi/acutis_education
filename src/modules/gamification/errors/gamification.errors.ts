@@ -145,6 +145,62 @@ export class InvalidRewardEventMetadataError extends Error {
   }
 }
 
+export class BadgeDefinitionNotActiveError extends Error {
+  constructor() {
+    super('Badge definition is not ACTIVE.');
+    this.name = 'BadgeDefinitionNotActiveError';
+  }
+}
+
+export class BadgeAwardNotAllowedError extends Error {
+  constructor(message = 'Badge award is not allowed for this badge or actor.') {
+    super(message);
+    this.name = 'BadgeAwardNotAllowedError';
+  }
+}
+
+export class BadgeAlreadyAwardedError extends Error {
+  constructor() {
+    super('An active badge award already exists for this student and badge.');
+    this.name = 'BadgeAlreadyAwardedError';
+  }
+}
+
+export class BadgeAlreadyRevokedError extends Error {
+  constructor() {
+    super('Badge award is already revoked.');
+    this.name = 'BadgeAlreadyRevokedError';
+  }
+}
+
+export class MilestoneDefinitionNotActiveError extends Error {
+  constructor() {
+    super('Milestone definition is not ACTIVE.');
+    this.name = 'MilestoneDefinitionNotActiveError';
+  }
+}
+
+export class MilestoneDefinitionAccessDeniedError extends Error {
+  constructor() {
+    super('Milestone definition management is denied.');
+    this.name = 'MilestoneDefinitionAccessDeniedError';
+  }
+}
+
+export class InvalidBadgeRuleConfigError extends Error {
+  constructor(message = 'Invalid badge rule configuration.') {
+    super(message);
+    this.name = 'InvalidBadgeRuleConfigError';
+  }
+}
+
+export class InvalidMilestoneTriggerConfigError extends Error {
+  constructor(message = 'Invalid milestone trigger configuration.') {
+    super(message);
+    this.name = 'InvalidMilestoneTriggerConfigError';
+  }
+}
+
 export class StudentGamificationContextNotFoundError extends Error {
   constructor() {
     super('No ACTIVE enrollment context is available for gamification points.');
@@ -170,5 +226,29 @@ export class PointLedgerEntryAlreadyReversedError extends Error {
   constructor() {
     super('Point ledger entry has already been reversed.');
     this.name = 'PointLedgerEntryAlreadyReversedError';
+  }
+}
+
+/** Prompt-facing aliases for badge/milestone HTTP/error contracts. */
+export class BadgeNotFoundError extends BadgeDefinitionNotFoundError {
+  constructor() {
+    super();
+    this.name = 'BadgeNotFoundError';
+    this.message = 'Badge definition not found.';
+  }
+}
+
+export class MilestoneNotFoundError extends MilestoneDefinitionNotFoundError {
+  constructor() {
+    super();
+    this.name = 'MilestoneNotFoundError';
+    this.message = 'Milestone definition not found.';
+  }
+}
+
+export class MilestoneAlreadyAchievedError extends MilestoneAchievementAlreadyExistsError {
+  constructor() {
+    super();
+    this.name = 'MilestoneAlreadyAchievedError';
   }
 }

@@ -47,6 +47,9 @@ export function toProcessedRewardEventSnapshot(
     eventType: entity.eventType,
     studentId: entity.studentId,
     sourceId: entity.sourceId,
+    parishId: entity.parishId ?? null,
+    enrollmentId: entity.enrollmentId ?? null,
+    occurredAt: entity.occurredAt ?? entity.processedAt,
     processedAt: entity.processedAt,
     createdAt: entity.createdAt,
   };

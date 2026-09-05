@@ -80,3 +80,15 @@ export enum MilestoneTriggerType {
 
 export const MILESTONE_TRIGGER_TYPES: readonly MilestoneTriggerType[] =
   Object.values(MilestoneTriggerType);
+
+/** Typed badge automatic rule kinds stored in badge_definitions.rule_event_type */
+export enum BadgeRuleType {
+  FirstLessonCompleted = 'FIRST_LESSON_COMPLETED',
+  LessonsCompletedCount = 'LESSONS_COMPLETED_COUNT',
+  PracticeCompletedCount = 'PRACTICE_COMPLETED_COUNT',
+  FirstExamCompleted = 'FIRST_EXAM_COMPLETED',
+  ExamScoreThreshold = 'EXAM_SCORE_THRESHOLD',
+  AttendancePresentOrLateCount = 'ATTENDANCE_PRESENT_OR_LATE_COUNT',
+}
+
+export const BADGE_RULE_TYPES: readonly BadgeRuleType[] = Object.values(BadgeRuleType);

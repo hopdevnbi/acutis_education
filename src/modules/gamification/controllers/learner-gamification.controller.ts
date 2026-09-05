@@ -18,10 +18,14 @@ import {
   GamificationSummaryResponseDto,
   PointLedgerListLearnerResponseDto,
 } from '../dto/gamification-response.dto';
+import { LearnerBadgeListResponseDto } from '../dto/badge.dto';
+import { LearnerMilestoneListResponseDto } from '../dto/milestone.dto';
 import { ListPointsQueryDto } from '../dto/list-points-query.dto';
 import { GamificationService } from '../gamification.service';
 import {
   toGamificationSummaryResponseDto,
+  toLearnerBadgeListResponseDto,
+  toLearnerMilestoneListResponseDto,
   toLearnerPointLedgerListDto,
 } from '../mappers/gamification-http.mapper';
 import { rethrowGamificationServiceError } from '../utils/gamification-http.util';
@@ -83,6 +87,53 @@ export class LearnerGamificationController {
         includeStaffNote: false,
       });
       return toLearnerPointLedgerListDto(result);
+    } catch (error: unknown) {
+      rethrowGamificationServiceError(error);
+    }
+  }
+
+  @Get('badges')
+  @RequirePermissions(GAMIFICATION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Learner self active badges',
+    description:
+      'Self only. Omits awardedByUserId, ruleConfig, staff internals. Parent deferred to #006.',
+  })
+  @ApiOkResponse({ type: LearnerBadgeListResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async listBadges(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+  ): Promise<LearnerBadgeListResponseDto> {
+    try {
+      const studentId = await this.gamificationAccessService.assertLearnerCanReadOwnGamification(
+        authenticatedUser.userId,
+      );
+      const items = await this.gamificationService.listLearnerBadges(studentId);
+      return toLearnerBadgeListResponseDto(items);
+    } catch (error: unknown) {
+      rethrowGamificationServiceError(error);
+    }
+  }
+
+  @Get('milestones')
+  @RequirePermissions(GAMIFICATION_READ_PERMISSION)
+  @ApiOperation({
+    summary: 'Learner self milestone achievements',
+    description: 'Self only. Omits internal source IDs and staff fields. Parent deferred to #006.',
+  })
+  @ApiOkResponse({ type: LearnerMilestoneListResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async listMilestones(
+    @CurrentUser() authenticatedUser: AuthenticatedUser,
+  ): Promise<LearnerMilestoneListResponseDto> {
+    try {
+      const studentId = await this.gamificationAccessService.assertLearnerCanReadOwnGamification(
+        authenticatedUser.userId,
+      );
+      const items = await this.gamificationService.listLearnerMilestones(studentId);
+      return toLearnerMilestoneListResponseDto(items);
     } catch (error: unknown) {
       rethrowGamificationServiceError(error);
     }

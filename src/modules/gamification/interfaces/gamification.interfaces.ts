@@ -36,6 +36,9 @@ export interface ProcessedRewardEventSnapshot {
   readonly eventType: string;
   readonly studentId: string;
   readonly sourceId: string;
+  readonly parishId: string | null;
+  readonly enrollmentId: string | null;
+  readonly occurredAt: Date;
   readonly processedAt: Date;
   readonly createdAt: Date;
 }
@@ -219,6 +222,10 @@ export interface RewardIngestResult {
   readonly ledgerEntriesCreated: number;
   readonly totalPointsAwarded: number;
   readonly matchedRuleCodes: readonly string[];
+  /** Internal — badges awarded in this ingest (not HTTP). */
+  readonly badgesAwarded: number;
+  /** Internal — milestones achieved in this ingest (not HTTP). */
+  readonly milestonesAchieved: number;
 }
 
 export interface ManualPointAdjustmentInput {

@@ -14,9 +14,12 @@ import { ParishScopeService } from '../../parish/services/parish-scope.service';
 import { LearnerSelfScopeService } from '../../student/services/learner-self-scope.service';
 import { StudentGuardianService } from '../../student/services/student-guardian.service';
 import { StudentService } from '../../student/services/student.service';
-import { RewardScopeType } from '../enums/gamification.enums';
+import { RewardScopeType, BadgeScopeType } from '../enums/gamification.enums';
 import { GamificationAccessDeniedError } from '../errors/gamification.errors';
-import type { StudentGamificationContext } from '../interfaces/gamification.interfaces';
+import type {
+  BadgeDefinitionSnapshot,
+  StudentGamificationContext,
+} from '../interfaces/gamification.interfaces';
 
 @Injectable()
 export class GamificationAccessService {
@@ -247,5 +250,95 @@ export class GamificationAccessService {
     if (!(await this.canAccessAsParishAdmin(rawUserId, parishId))) {
       throw new GamificationAccessDeniedError();
     }
+  }
+
+  /**
+   * Badge definition manage: SuperAdmin GLOBAL+PARISH any; ParishAdmin own PARISH only;
+   * Catechist DENIED.
+   */
+  async assertCanManageBadgeDefinitions(
+    rawUserId: string,
+    input: { readonly scopeType: BadgeScopeType; readonly parishId?: string | null },
+  ): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+    if (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (!(await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE))) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (input.scopeType !== BadgeScopeType.Parish || !input.parishId) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (!(await this.canAccessAsParishAdmin(rawUserId, input.parishId))) {
+      throw new GamificationAccessDeniedError();
+    }
+  }
+
+  async assertCanReadBadgeDefinitions(
+    rawUserId: string,
+    parishId?: string | null,
+  ): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+    if (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (!(await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE))) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (!parishId) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (!(await this.canAccessAsParishAdmin(rawUserId, parishId))) {
+      throw new GamificationAccessDeniedError();
+    }
+  }
+
+  /** Milestone definition manage: SuperAdmin only. */
+  async assertCanManageMilestoneDefinitions(rawUserId: string): Promise<void> {
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+    throw new GamificationAccessDeniedError();
+  }
+
+  /**
+   * Manual badge award/revoke: SuperAdmin; ParishAdmin own parish; Catechist assigned class.
+   * Parent/Student denied.
+   */
+  async assertStaffCanAwardBadge(
+    rawUserId: string,
+    input: {
+      readonly studentId: string;
+      readonly context: StudentGamificationContext;
+      readonly definition: BadgeDefinitionSnapshot;
+    },
+  ): Promise<void> {
+    if (await this.hasRole(rawUserId, PARENT_ROLE_CODE)) {
+      throw new GamificationAccessDeniedError();
+    }
+    if (await this.hasRole(rawUserId, STUDENT_ROLE_CODE) && !(await this.isSuperAdmin(rawUserId))) {
+      const isStaff =
+        (await this.hasRole(rawUserId, CATECHIST_ROLE_CODE)) ||
+        (await this.hasRole(rawUserId, PARISH_ADMIN_ROLE_CODE));
+      if (!isStaff) {
+        throw new GamificationAccessDeniedError();
+      }
+    }
+
+    if (await this.isSuperAdmin(rawUserId)) {
+      return;
+    }
+    if (await this.canAccessAsParishAdmin(rawUserId, input.context.parishId)) {
+      return;
+    }
+    if (await this.canAccessAsCatechistAssignedClass(rawUserId, input.context.classId)) {
+      return;
+    }
+    throw new GamificationAccessDeniedError();
   }
 }

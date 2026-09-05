@@ -624,7 +624,7 @@ The seed prints `enrollmentId` and `examAssignmentId` for Postman variables. Dem
 
 Postman collection: `docs/postman/Acutis-Education-Exam.postman_collection.json`
 
-## Gamification API (Points Engine — #003)
+## Gamification API (Points + Badges + Milestones — #003/#004)
 
 **IMPLEMENTATION IN PROGRESS** (prompts 003–007). Phase not complete.
 
@@ -633,37 +633,74 @@ Postman collection: `docs/postman/Acutis-Education-Exam.postman_collection.json`
 - Module: `gamification` — export `GamificationService` only
 - Immutable append-only `point_ledger_entries` (balance = `SUM(points_delta)`)
 - Idempotent reward ingest via `processed_reward_events.event_id` + ledger unique identity
+- Same ingest transaction also applies automatic badge awards, optional badge bonus points, and milestone achievements
+- Count-based badge/milestone rules use Gamification-owned `processed_reward_events` history (enriched with non-PII `parish_id`, `enrollment_id`, `occurred_at`) — never source-domain repositories
 - Neutral in-process `ApplicationEventsModule` / `ApplicationEventPublisher` (no outbox/queue yet)
 - Source modules emit `RewardEligibleEvent` after their own commit; they never import Gamification
 - Source-domain success is independent of reward handler success (handler errors isolated + logged)
+- **No leaderboard. No streaks. No sacramental/pastoral milestone triggers.**
 
 ### Permissions
 
 | Permission | Purpose |
 | ---------- | ------- |
-| `gamification.read` | Summaries and point ledger reads |
-| `gamification.manage` | Reward rules / future definition admin (capability-scoped) |
+| `gamification.read` | Summaries, point ledger, badge/milestone reads |
+| `gamification.manage` | Reward rules, badge definitions, milestone definitions (capability-scoped) |
 | `points.adjust` | Manual ledger adjustments |
-| `badges.award` | Reserved for #004 |
+| `badges.award` | Manual badge award / soft revoke |
 
-**Capability note:** Catechist has `gamification.manage` for future CLASS missions, but **cannot** manage reward rules (service deny).
+**Capability notes:**
+- Catechist has `gamification.manage` for future CLASS missions, but **cannot** manage reward rules or badge definitions (service deny).
+- Milestone definition create/update/list manage is **SuperAdmin only** (ParishAdmin/Catechist denied).
+- Badge definition manage: SuperAdmin GLOBAL+PARISH any; ParishAdmin own PARISH only.
 
-### HTTP routes (#003)
+### HTTP routes (#003 + #004)
 
 | Method | Path | Permission |
 | ------ | ---- | ---------- |
 | `GET` | `/api/v1/students/:studentId/gamification/summary` | `gamification.read` |
 | `GET` | `/api/v1/students/:studentId/points` | `gamification.read` |
 | `POST` | `/api/v1/students/:studentId/points/adjustments` | `points.adjust` |
+| `GET` | `/api/v1/students/:studentId/badges` | `gamification.read` |
+| `GET` | `/api/v1/students/:studentId/milestones` | `gamification.read` |
+| `POST` | `/api/v1/students/:studentId/badges/:badgeId/awards` | `badges.award` |
+| `POST` | `/api/v1/students/:studentId/badges/:badgeId/revoke` | `badges.award` |
 | `GET` | `/api/v1/me/learner/gamification/summary` | `gamification.read` |
 | `GET` | `/api/v1/me/learner/points` | `gamification.read` |
+| `GET` | `/api/v1/me/learner/badges` | `gamification.read` |
+| `GET` | `/api/v1/me/learner/milestones` | `gamification.read` |
 | `GET` | `/api/v1/reward-rules` | `gamification.manage` |
 | `POST` | `/api/v1/reward-rules` | `gamification.manage` |
 | `PATCH` | `/api/v1/reward-rules/:id` | `gamification.manage` |
+| `GET` | `/api/v1/badges` | `gamification.manage` |
+| `GET` | `/api/v1/badges/:badgeId` | `gamification.manage` |
+| `POST` | `/api/v1/badges` | `gamification.manage` |
+| `PATCH` | `/api/v1/badges/:badgeId` | `gamification.manage` |
+| `GET` | `/api/v1/milestones` | `gamification.manage` |
+| `GET` | `/api/v1/milestones/:milestoneId` | `gamification.manage` |
+| `POST` | `/api/v1/milestones` | `gamification.manage` |
+| `PATCH` | `/api/v1/milestones/:milestoneId` | `gamification.manage` |
+
+### Badges (#004)
+
+- Lifecycle: `DRAFT` → `ACTIVE` → `ARCHIVED` (or `DRAFT` → `ARCHIVED`). No `ARCHIVED` → `ACTIVE` in MVP.
+- Award modes: `AUTOMATIC` / `MANUAL` / `BOTH`. Typed rule types only (no expression engine).
+- Automatic awards on reward ingest; at most one active award per student+badge; replay is no-op.
+- Optional `pointsBonus` appends immutable `BADGE_BONUS` ledger row (`sourceId` = award id). Duplicate bonus prevented by ledger identity.
+- Soft revoke via `revokedAt`; bonus reversed once via compensating `REVERSAL` (no mutate/delete of original bonus).
+- Duplicate manual award returns existing active award (idempotent).
+- Learner responses omit `awardedByUserId`, `ruleConfig`, staff internals.
+
+### Milestones (#004)
+
+- Lifecycle: `ACTIVE` / `ARCHIVED`. Archived definitions create no new achievements; history retained.
+- Typed system/learning triggers only (`FIRST_LESSON_COMPLETED`, `LESSONS_COMPLETED_COUNT`, `ATTENDANCE_COUNT`, `FIRST_EXAM_COMPLETED`, `FIRST_MISSION_COMPLETED`).
+- `FIRST_MISSION_COMPLETED` waits for mission completion events in #005.
+- **No sacramental milestones.** No points bonus on milestones by default.
 
 Manual adjustment: server derives ACTIVE enrollment parish/year; `delta` abs ≤ 1000; reason required.  
 Learner ledger omits `staffNote` / `awardedByUserId`.  
-**PARENT FULL POINT LEDGER IN MVP: NO** (summary/Faith Journey later).
+**PARENT FULL POINT LEDGER / PARENT BADGE-MILESTONE READS IN MVP: NO** (Faith Journey / Parent reads in #006).
 
 ### Localization API
 

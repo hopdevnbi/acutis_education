@@ -1,0 +1,635 @@
+CURSOR PROMPT — GAMIFICATION + FAITH JOURNEY #004/7
+FAST IMPLEMENTATION MODE
+BADGES + MILESTONES — DEFINITIONS / AWARDS / ACHIEVEMENTS
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Especially:
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production code
+- DTOs
+- controllers
+- services
+- specs/tests
+- docs/report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not treat deferred validation as failure.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture/security/privacy remain mandatory static gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(gamification): add badges and milestones"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#001/7 — Domain audit/design
+#002/7 — Persistence foundation
+#003/7 — Points engine + reward ingestion + rules + manual adjustments
+
+Current verified state:
+- neutral ApplicationEventsModule
+- source modules emit RewardEligibleEvent
+- no source module imports Gamification
+- immutable ledger + transactional receipt/idempotency
+- automatic point awards
+- reward rule matching + exam score threshold
+- manual adjustment + reversal
+- staff/learner point APIs
+- Parent full point ledger = NO
+- capability-specific reward-rule management denies Catechist
+
+Current:
+#004/7 — BADGES + MILESTONES
+
+Remaining:
+#005/7 Missions
+#006/7 Faith Journey + Parent/Catechist reads/security/contracts
+#007/7 Fast-mode finalization
+
+PRIMARY OBJECTIVE
+-----------------
+Implement:
+1. badge definition admin
+2. badge manual award/revoke
+3. automatic badge awards from reward events
+4. badge points bonus integration
+5. milestone definition admin
+6. automatic milestone achievements
+7. milestone trigger evaluation
+8. learner badge/milestone read APIs
+9. staff badge/milestone reads
+10. static security/privacy hardening
+11. specs/tests for all above
+
+Do NOT implement missions in this prompt.
+Do NOT implement Parent Faith Journey reads yet.
+Do NOT implement full Faith Journey timeline yet.
+Do NOT implement demo seed/Postman yet.
+
+BADGE DEFINITION ADMIN
+----------------------
+Implement:
+GET /api/v1/badges
+GET /api/v1/badges/:badgeId
+POST /api/v1/badges
+PATCH /api/v1/badges/:badgeId
+
+Permission: gamification.manage
+
+Scope:
+SUPER_ADMIN: GLOBAL + PARISH any
+PARISH_ADMIN: PARISH own parish only
+CATECHIST: DENY definition create/update
+PARENT/STUDENT: DENY
+
+Badge lifecycle:
+DRAFT -> ACTIVE -> ARCHIVED
+DRAFT -> ARCHIVED
+No ARCHIVED -> ACTIVE in MVP unless existing convention strongly requires it.
+
+Editable fields:
+code, name, description, category, scopeType, parishId, awardMode, ruleEventType, ruleConfig, pointsBonus, iconMediaAssetId.
+
+No client audit/ownership fields.
+
+BADGE RULE TYPES
+----------------
+Typed only, no generic expression engine:
+- FIRST_LESSON_COMPLETED
+- LESSONS_COMPLETED_COUNT
+- PRACTICE_COMPLETED_COUNT
+- FIRST_EXAM_COMPLETED
+- EXAM_SCORE_THRESHOLD
+- ATTENDANCE_PRESENT_OR_LATE_COUNT
+
+Validate bounded configs such as:
+{ "minCount": 5 }
+{ "minScorePercent": 80 }
+
+AUTOMATIC BADGE PROCESSOR
+-------------------------
+Extend reward ingest with internal BadgeAwardProcessor.
+
+For each event:
+1. find ACTIVE AUTOMATIC/BOTH badge definitions
+2. scope-match GLOBAL/PARISH
+3. type-match rule
+4. evaluate against event or Gamification-owned event history
+5. award at most once per student
+6. duplicate/replay = no-op
+7. award optional pointsBonus
+8. keep Gamification-side effects atomic where practical
+
+Do NOT query source-domain repositories for counts.
+
+BADGE POINTS BONUS
+------------------
+On award with pointsBonus > 0 append ledger:
+sourceType = BADGE_BONUS
+sourceId = badgeAward.id
+reasonCode = stable badge code/prefixed code
+pointsDelta = pointsBonus
+server-derived student/enrollment/parish context
+awardedByUserId null for automatic, actor for manual if appropriate
+
+Prevent duplicate bonus.
+
+On revoke:
+do not mutate/delete old bonus row.
+Create one compensating REVERSAL if bonus exists.
+Prevent repeated reversal.
+
+MANUAL BADGE AWARD
+------------------
+POST /api/v1/students/:studentId/badges/:badgeId/awards
+Permission: badges.award
+
+Allowed:
+SUPER_ADMIN global
+PARISH_ADMIN own parish
+CATECHIST ACTIVE assigned class student, badge MANUAL/BOTH, correct scope
+PARENT/STUDENT denied
+
+Server derives enrollment/parish/actor/source context.
+No client actor/parish/enrollment.
+
+Duplicate active award: choose stable existing-project behavior, preferably return existing or 409; document.
+
+BADGE REVOKE
+------------
+POST /api/v1/students/:studentId/badges/:badgeId/revoke
+Permission: badges.award
+
+Soft revoke via revokedAt.
+No delete.
+Repeated revoke must not double reverse bonus.
+
+BADGE READS
+-----------
+Learner:
+GET /api/v1/me/learner/badges
+Permission gamification.read
+Self only.
+
+Staff:
+GET /api/v1/students/:studentId/badges
+Scoped staff read.
+
+Parent deferred to #006.
+
+Learner response may include:
+badge id/code/name/description/category/iconMediaAssetId/awardedAt/pointsBonus.
+
+Must omit actor IDs, ruleConfig, staff internals.
+
+MILESTONE DEFINITION ADMIN
+--------------------------
+Implement:
+GET /api/v1/milestones
+GET /api/v1/milestones/:milestoneId
+POST /api/v1/milestones
+PATCH /api/v1/milestones/:milestoneId
+
+Permission: gamification.manage
+
+Scope:
+SUPER_ADMIN only for create/update/manage
+PARISH_ADMIN deny
+CATECHIST deny
+PARENT/STUDENT deny
+
+MILESTONE LIFECYCLE
+-------------------
+ACTIVE / ARCHIVED
+Archived definitions create no new achievements.
+Historical achievements retained.
+No hard delete.
+No sacramental/pastoral trigger types.
+
+MILESTONE TRIGGERS
+------------------
+Support typed system/learning triggers:
+- FIRST_LESSON_COMPLETED
+- LESSONS_COMPLETED_COUNT
+- ATTENDANCE_COUNT
+- FIRST_EXAM_COMPLETED
+- FIRST_MISSION_COMPLETED
+
+FIRST_MISSION_COMPLETED may be wired fully in #005 when missions emit completion.
+
+Validate typed config only.
+
+MILESTONE PROCESSOR
+-------------------
+Create MilestoneAchievementProcessor.
+
+On reward event:
+- load ACTIVE definitions matching event/trigger
+- evaluate typed conditions
+- create once per student
+- duplicates no-op
+- no source repo queries
+- no points bonus unless already part of explicit model (default no)
+
+EVENT COUNTING / RECEIPT ENRICHMENT
+-----------------------------------
+Count-based badge/milestone rules must use Gamification-owned history.
+
+Extend RewardEventReceiptService or add RewardEventHistoryService with bounded methods such as:
+countProcessedEventsForStudentByType(...)
+
+Audit `processed_reward_events`.
+If needed, create NEW migration adding non-PII fields such as:
+- parish_id
+- enrollment_id nullable
+- occurred_at
+
+Do NOT edit landed #002 migration.
+Do NOT store raw metadata/PII.
+
+TRANSACTION / IDEMPOTENCY
+-------------------------
+Preserve atomic Gamification-side processing as far as practical:
+- receipt
+- point awards
+- badge awards
+- badge bonus ledger
+- milestone achievements
+
+Replay must not duplicate any of these.
+
+Extend internal RewardIngestResult with:
+badgesAwarded
+milestonesAchieved
+
+No HTTP exposure.
+
+ACCESS HARDENING
+----------------
+Add capability helpers:
+
+Badge definition manage:
+- SuperAdmin global
+- ParishAdmin own parish
+- Catechist denied
+
+Badge award/revoke:
+- SuperAdmin global
+- ParishAdmin own parish
+- Catechist assigned student/class
+- Parent/Student denied
+
+Milestone definition manage:
+- SuperAdmin only
+
+Badge/milestone staff read:
+- SuperAdmin global
+- ParishAdmin parish
+- Catechist assigned class
+
+Learner:
+- self only
+
+No /me impersonation.
+
+DTOs
+----
+Create module-owned DTOs for badge definitions, badge awards, learner badge reads, milestone definitions, milestone achievements, learner milestone reads.
+No entity leakage.
+
+OPENAPI
+-------
+All new routes must document:
+- bearer auth
+- permission
+- scope semantics
+- UUID params
+- response DTO
+- 400/401/403/404/409 as applicable
+
+Static inspection only.
+
+ERRORS
+------
+Add minimal badge/milestone errors:
+BadgeNotFoundError
+BadgeDefinitionNotActiveError
+BadgeAwardNotAllowedError
+BadgeAlreadyAwardedError
+BadgeAwardNotFoundError
+BadgeAlreadyRevokedError
+MilestoneNotFoundError
+MilestoneDefinitionNotActiveError
+MilestoneAlreadyAchievedError
+MilestoneDefinitionAccessDeniedError
+
+Automatic duplicate processing should be idempotent no-op, not fatal.
+
+LEARNER MILESTONES
+------------------
+GET /api/v1/me/learner/milestones
+Self only.
+
+Staff:
+GET /api/v1/students/:studentId/milestones
+Scoped staff read.
+
+Parent deferred to #006.
+
+DATA MINIMIZATION
+-----------------
+Learner responses must never expose:
+- awardedByUserId
+- ruleConfig
+- internal event IDs
+- staffNote
+- audit internals
+
+No PII, attendance notes, exam answers, pastoral content.
+
+SOURCE MODULES
+--------------
+Avoid new source-domain changes unless strictly necessary.
+Existing reward events should be sufficient.
+Do not add direct dependencies.
+FIRST_MISSION_COMPLETED waits for #005.
+
+TESTS — WRITE, DO NOT RUN
+-------------------------
+Badge specs:
+- scope validation
+- lifecycle
+- awardMode
+- typed rule config
+- Catechist definition-manage denied
+- ParishAdmin own parish only
+- automatic first/count/score/attendance badges
+- replay no double award
+- bonus once
+- manual award scope matrix
+- revoke soft
+- repeated revoke
+- bonus reversal once
+- learner mapper privacy
+
+Milestone specs:
+- trigger config
+- first lesson
+- lesson count
+- attendance count
+- first exam
+- duplicate achievement no-op
+- archived ignored
+- SuperAdmin-only manage
+- no sacramental trigger types
+- learner mapper privacy
+
+Integration specs, write only:
+- badge definition persistence
+- filtered active uniqueness
+- revoke/re-award policy
+- badge bonus + reversal
+- automatic idempotency
+- event count query
+- milestone uniqueness
+- count triggers
+- atomic reward processing
+- retention across transfer
+
+DB e2e specs, write only:
+- badge admin role matrix
+- badge manual award scope matrix
+- revoke scope/repeat
+- learner self badges/milestones
+- staff scoped reads
+- milestone SuperAdmin-only admin
+- unauthenticated 401
+
+README
+------
+Update Gamification docs with badges/milestones, scopes, auto/manual/revoke, bonus/reversal, system-learning-only milestone policy, no sacramental milestones, no leaderboard, and security boundaries.
+Do not claim phase complete.
+
+MODULE BOUNDARY STATIC CHECK
+----------------------------
+Confirm:
+- exports only GamificationService
+- no forwardRef
+- no direct source repo/entity imports
+- ApplicationEvents only for event integration
+- no FamilyPortal
+- no Localization runtime
+- no Media runtime import merely for icon ID
+- source modules do not import Gamification
+
+Update boundary specs if needed.
+Do not run.
+
+STATIC INSPECTION
+-----------------
+Inspect and fix obvious issues in:
+- badge scope
+- Catechist definition denial
+- ParishAdmin milestone denial
+- duplicate award race
+- bonus uniqueness
+- revoke reversal uniqueness
+- milestone uniqueness
+- event count history
+- privacy/entity leakage
+- ledger immutability
+- cycles/forwardRef
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- missions/progress (#005)
+- Parent badge/milestone/Faith Journey reads (#006)
+- Faith Journey timeline (#006)
+- class mission dashboards (#006)
+- demo seed/Postman (#007)
+- leaderboard
+- streaks
+- sacramental milestones
+- mission assignment table
+- outbox/queue
+- runtime validation
+
+REQUIRED REPORT
+---------------
+Create:
+docs/GAMIFICATION_FAITH_JOURNEY_004_BADGES_MILESTONES_REPORT.md
+
+Required sections:
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Badge admin endpoints
+7 Badge lifecycle
+8 Badge scope policy
+9 Badge typed rule model
+10 Automatic badge processor
+11 Badge event-count logic
+12 Badge points bonus
+13 Manual badge award
+14 Badge revoke
+15 Badge learner reads
+16 Badge staff reads
+17 Milestone admin endpoints
+18 Milestone lifecycle
+19 Milestone typed triggers
+20 Milestone processor
+21 Milestone event-count logic
+22 Learner milestone reads
+23 Staff milestone reads
+24 Event receipt enrichment
+25 New migration if any
+26 Transaction/idempotency
+27 Ingest result extension
+28 Capability-specific access
+29 DTO boundaries
+30 Data minimization
+31 Error contract
+32 OpenAPI
+33 README
+34 Module boundaries
+35 Unit tests written
+36 Integration tests written
+37 DB e2e tests written
+38 Tests executed
+39 DB validation
+40 quality:full
+41 Docker
+42 npm audit
+43 Static inspection
+44 Risks/deferred
+45 BLOCKER/HIGH/MEDIUM/LOW
+46 #005 readiness
+47 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+BADGE DEFINITION ADMIN READY: YES/NO
+BADGE CAPABILITY SCOPE SAFE: YES/NO
+AUTOMATIC BADGE AWARDS READY: YES/NO
+MANUAL BADGE AWARDS READY: YES/NO
+BADGE REVOKE READY: YES/NO
+BADGE BONUS POINTS READY: YES/NO
+BADGE BONUS REVERSAL READY: YES/NO
+LEARNER BADGE READ READY: YES/NO
+STAFF BADGE READ READY: YES/NO
+MILESTONE DEFINITION ADMIN READY: YES/NO
+MILESTONE SUPERADMIN-ONLY POLICY READY: YES/NO
+AUTOMATIC MILESTONE ACHIEVEMENTS READY: YES/NO
+MILESTONE COUNT TRIGGERS READY: YES/NO
+LEARNER MILESTONE READ READY: YES/NO
+STAFF MILESTONE READ READY: YES/NO
+SACRAMENTAL MILESTONES EXCLUDED: YES/NO
+EVENT RECEIPT HISTORY SUPPORT READY: YES/NO
+TRANSACTIONAL IDEMPOTENCY PRESERVED: YES/NO
+SOURCE MODULE DECOUPLING PRESERVED: YES/NO
+DATA MINIMIZATION READY: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+#005 READINESS: YES/NO
+
+#005 GATE
+---------
+Proceed if:
+- no BLOCKER/HIGH by static inspection
+- badge admin/scope ready
+- automatic/manual badge awards ready
+- revoke/bonus/reversal ready
+- milestone admin ready
+- milestone processing ready
+- learner/staff reads ready
+- transaction/idempotency preserved
+- source decoupling preserved
+- tests/specs written
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+GAMIFICATION + FAITH JOURNEY #005/7 — MISSIONS + PROGRESS / COMPLETION + ADMIN LIFECYCLE
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #004 status
+- badges
+- badge bonus/revoke
+- milestones
+- event count support
+- access/security
+- learner/staff reads
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #005 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(gamification): add badges and milestones"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.
