@@ -892,6 +892,79 @@ The Announcements module (`src/modules/announcements/`) provides targeted operat
 | `POST` | `/api/v1/admin/announcements/:id/publish` | Publish announcement & emit event | `announcements.publish` (Staff) |
 | `POST` | `/api/v1/admin/announcements/:id/archive` | Archive announcement | `announcements.manage` (Staff) |
 
+## Events API (Lifecycle, Targeting, Registration & Check-In — #005/7)
+
+The Events module (`src/modules/events/`) provides parish and community event scheduling, audience targeting, capacity-safe registrations, and attendee check-in. It is strictly separated from `ClassOperations` (no attendance table coupling) and decoupled from `NotificationsModule`.
+
+### Bounded Context & Architecture
+
+- **Owned Tables:** `events`, `event_targets`, `event_registrations`.
+- **Public Facade:** `EventsService` exported exclusively.
+- **Strict Decoupling:** Zero writes to `ClassOperations` attendance tables; zero direct dependency on `NotificationsModule`. Emits neutral communication events (`EventPublishedEvent`, `EventUpdatedEvent`, `EventCancelledEvent`) via `ApplicationEventPublisher`.
+- **No Waitlist / Recurrence:** In MVP, registration capacity is hard-capped (no waitlist queue). Events are single occurrences (no recurrence engine).
+
+### Lifecycle & Immutability
+
+- **States:** `DRAFT` → `PUBLISHED` → `CANCELLED` / `COMPLETED` → `ARCHIVED`. `ARCHIVED` is terminal.
+- **Allowed Transitions:**
+  - `DRAFT` → `PUBLISHED` or `ARCHIVED`
+  - `PUBLISHED` → `CANCELLED` or `COMPLETED`
+  - `CANCELLED` → `ARCHIVED`
+  - `COMPLETED` → `ARCHIVED`
+- **Field Immutability:** Once `PUBLISHED`, `scopeType`, `parishId`, `classId`, `code`, and `targets` are immutable. `capacity` cannot be reduced below active registration count. `CANCELLED`, `COMPLETED`, and `ARCHIVED` events are read-only.
+- **Version Tracking:**
+  - `DRAFT`: version `0`
+  - `PUBLISHED`: version `1`
+  - Every persisted significant update on a `PUBLISHED` event increments `version` by 1.
+  - Cancellation increments `version` by 1.
+
+### Ownership Scope, Target Model & Fallback
+
+- **Root Scopes:** `GLOBAL` (SuperAdmin only), `PARISH` (ParishAdmin own parish), `CLASS` (Catechist assigned class only).
+- **Audience Targets:** `GLOBAL`, `PARISH`, `CLASS`, `ROLE` (must be parish-scoped).
+- **Target Fallback:** If an event has no target rows, audience eligibility falls back automatically to its ownership scope (`GLOBAL`, `PARISH:<id>`, or `CLASS:<id>`).
+- **Catechist Restrictions:** Catechists may only create/manage `CLASS` scope events for their actively assigned classes and can only target those assigned classes.
+
+### Registration & Capacity Safety
+
+- **Registrant Keys:** `USER:<userId>` (self registration) or `STUDENT:<studentId>` (parent registering linked child).
+- **Guardian Verification:** For child registration, actor must have `PARENT` role and an active guardian link verified via `StudentGuardianService.assertGuardianLinked`. Child must be audience eligible.
+- **Transaction Safety:** Registration capacity validation runs inside a database transaction (`SERIALIZABLE` / row-level locks) counting `REGISTERED` + `ATTENDED` records to prevent over-subscription races.
+- **Re-Registration:** An attendee with a previously `CANCELLED` registration can re-register before deadline/capacity exhaustion by re-activating the existing row. Attendees marked `NO_SHOW` are barred from re-registering.
+- **Cancellation:** `POST /api/v1/events/:id/registrations/cancel` transitions `REGISTERED` → `CANCELLED`. Idempotent `200 OK` if already cancelled. Rejects cancellation once `ATTENDED` or `NO_SHOW`.
+
+### Check-In & Attendee Lookup Contract
+
+- **Check-In:** `POST /api/v1/admin/events/:id/checkin` accepts `registrationId`, verifies scope, and marks `REGISTERED` → `ATTENDED` with `checkedInAt`. Idempotent `200 OK` if already attended.
+- **Attendee Roster Lookup (Contract Gap Resolution):** `GET /api/v1/admin/events/:id/registrations` provides staff the attendee roster required for check-in lookup. Paginated (max 50), batch resolves student display names, and strictly excludes email, phone, DOB, and guardian contact details.
+
+### Communication Events & Notification Coverage
+
+- **Post-Commit Emissions:**
+  - `EventPublishedEvent`: `operationKey = EVENT_PUBLISHED:<eventId>`, includes targets snapshot (or resolved fallback scope).
+  - `EventUpdatedEvent`: emitted only for significant changes (`DATE_TIME`, `VENUE`, `CAPACITY`), `operationKey = EVENT_UPDATED:<eventId>:v<version>`.
+  - `EventCancelledEvent`: `operationKey = EVENT_CANCELLED:<eventId>`, includes safe/bounded reason.
+- **Target Coverage:** Because targets are immutable after publish and registration requires audience eligibility, all registered attendees are guaranteed to be covered by the event's target snapshot during fan-out (#006).
+
+### Route Inventory (14 Routes)
+
+| Method | Path | Description | Access / Permission |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/events` | List visible published events for caller | `events.read` (Authenticated) |
+| `GET` | `/api/v1/events/:id` | Event detail & caller registration status | `events.read` (Targeted actor) |
+| `POST` | `/api/v1/events/:id/registrations` | Register self or linked child | `events.register` (Eligible actor) |
+| `POST` | `/api/v1/events/:id/registrations/cancel` | Cancel self or child registration | `events.register` (Registrant / Guardian) |
+| `GET` | `/api/v1/me/event-registrations` | List caller & linked child registrations | `events.read` (Authenticated) |
+| `GET` | `/api/v1/admin/events` | Admin event list scoped by authority | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events` | Create event draft with targets | `events.manage` (Staff) |
+| `PATCH` | `/api/v1/admin/events/:id` | Update event (versioned if published) | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events/:id/publish` | Publish event & emit EventPublishedEvent | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events/:id/cancel` | Cancel event & emit EventCancelledEvent | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events/:id/complete` | Complete event | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events/:id/archive` | Archive event | `events.manage` (Staff) |
+| `POST` | `/api/v1/admin/events/:id/checkin` | Check in attendee by registrationId | `events.checkin` (Staff) |
+| `GET` | `/api/v1/admin/events/:id/registrations` | Attendee roster for check-in lookup | `events.checkin` (Staff) |
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

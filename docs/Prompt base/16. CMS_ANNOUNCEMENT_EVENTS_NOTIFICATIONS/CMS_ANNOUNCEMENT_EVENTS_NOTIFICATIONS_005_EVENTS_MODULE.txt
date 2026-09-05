@@ -1,0 +1,833 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #005/7
+FAST IMPLEMENTATION MODE
+EVENTS — LIFECYCLE + VISIBILITY + REGISTRATION / CAPACITY + CHECK-IN + NOTIFICATION EVENTS
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- especially `.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production Events code
+- controllers
+- DTOs
+- services
+- lifecycle helpers
+- visibility/audience helpers
+- registration/capacity logic
+- check-in logic
+- communication event emission
+- unit/integration/DB e2e specs
+- README/OpenAPI updates
+- report
+
+DO NOT RUN by default:
+- tests/Jest
+- lint/typecheck/build/format
+- quality/quality:full
+- npm audit
+- DB prepare/reset/migrations
+- seed execution
+- Docker
+- Postman/Newman
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "feat(events): add lifecycle registration and notifications"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#001/7 Domain audit/design
+#001A Corrective event lifecycle + notification idempotency audit
+#002/7 Persistence foundation
+#003/7 CMS
+#003A Route contract lock
+#004/7 Announcements
+
+AUTHORITATIVE ROUTE COUNTS:
+CMS = 8
+Announcements = 8
+Events = 13
+Notifications = 6
+FINAL COMMUNITY ROUTE COUNT TARGET = 35
+
+Do NOT change route counts silently.
+
+Frozen Events persistence:
+- tables: events, event_targets, event_registrations
+- event scope: GLOBAL | PARISH | CLASS
+- status: DRAFT | PUBLISHED | CANCELLED | COMPLETED | ARCHIVED
+- targets: GLOBAL | PARISH | CLASS | ROLE
+- registrantKey: USER:<userId> or STUDENT:<studentId>
+- registration statuses: REGISTERED | CANCELLED | ATTENDED | NO_SHOW
+- version integer
+- operation keys:
+  EVENT_PUBLISHED:<eventId>
+  EVENT_UPDATED:<eventId>:v<version>
+  EVENT_CANCELLED:<eventId>
+
+Permissions:
+events.read
+events.manage
+events.register
+events.checkin
+
+Current:
+#005/7 — EVENTS
+
+Remaining:
+#006 Notifications
+#007 Finalization
+
+PRIMARY OBJECTIVE
+-----------------
+Implement complete Event MVP:
+1. exact 13 routes
+2. lifecycle
+3. admin list/create/update
+4. publish/cancel/complete/archive
+5. actor-visible event list/detail
+6. audience targeting/fallback
+7. self/linked-child registration
+8. capacity-safe registration
+9. cancel registration
+10. my registrations
+11. check-in
+12. no waitlist / no recurrence
+13. EVENT_PUBLISHED / EVENT_UPDATED / EVENT_CANCELLED
+14. deterministic operation keys
+15. no direct Notifications dependency
+16. OpenAPI/README
+17. tests/specs
+
+PART A — EXACT 13 ROUTES
+------------------------
+Implement exactly:
+1 GET /api/v1/events
+2 GET /api/v1/events/:id
+3 POST /api/v1/events/:id/registrations
+4 POST /api/v1/events/:id/registrations/cancel
+5 GET /api/v1/me/event-registrations
+6 GET /api/v1/admin/events
+7 POST /api/v1/admin/events
+8 PATCH /api/v1/admin/events/:id
+9 POST /api/v1/admin/events/:id/publish
+10 POST /api/v1/admin/events/:id/cancel
+11 POST /api/v1/admin/events/:id/complete
+12 POST /api/v1/admin/events/:id/archive
+13 POST /api/v1/admin/events/:id/checkin
+
+Do NOT add/remove routes silently.
+
+PART B — LIFECYCLE
+------------------
+Allowed:
+DRAFT -> PUBLISHED
+DRAFT -> ARCHIVED
+PUBLISHED -> CANCELLED
+PUBLISHED -> COMPLETED
+CANCELLED -> ARCHIVED
+COMPLETED -> ARCHIVED
+
+ARCHIVED terminal.
+Repeated transitions -> 409.
+
+PART C — CREATE
+---------------
+POST /api/v1/admin/events
+Permission: events.manage
+
+Input:
+code, title, description, summary?, locale?, scopeType, parishId?, classId?,
+timezone, startsAt, endsAt, venueName?, address?, coverMediaAssetId?,
+capacity?, isRegistrationRequired, registrationDeadline?, targets[]
+
+Server derives:
+scopeKey, DRAFT, version=0, actor IDs.
+
+Validate:
+startsAt < endsAt
+capacity null or >0
+registrationDeadline < startsAt
+scope/target consistency
+
+PART D — OWNERSHIP SCOPE
+------------------------
+GLOBAL: SuperAdmin only
+PARISH: SuperAdmin any, ParishAdmin own
+CLASS: SuperAdmin any, ParishAdmin own parish class, Catechist ACTIVE assigned class only
+
+Catechist cannot manage GLOBAL/PARISH/unassigned CLASS.
+
+PART E — TARGET MODEL
+---------------------
+Targets:
+GLOBAL, PARISH, CLASS, ROLE
+
+If no targets:
+audience falls back to ownership scope.
+
+If targets exist:
+they are canonical audience eligibility.
+
+ROLE must be parish-scoped.
+No STUDENT/ENROLLMENT direct target.
+
+PART F — UPDATE + VERSION
+-------------------------
+PATCH /api/v1/admin/events/:id
+Permission: events.manage
+
+DRAFT: full editable fields.
+PUBLISHED:
+- allow safe event info edits
+- ownership scope immutable
+- targets immutable
+- capacity cannot go below active registration count
+
+CANCELLED/COMPLETED/ARCHIVED:
+read-only except lifecycle actions.
+
+Version:
+DRAFT=0
+publish => 1
+every persisted PUBLISHED update => version +1
+
+Create explicit significant change detector:
+DATE_TIME
+VENUE
+CAPACITY
+
+EVENT_UPDATED only for significant changes.
+
+PART G — PUBLISH
+----------------
+POST /api/v1/admin/events/:id/publish
+DRAFT only.
+Revalidate actor scope and targets.
+Set PUBLISHED, publishedAt, version=1.
+Emit EventPublishedEvent post-commit.
+No NotificationsModule import.
+
+If target rows empty:
+event payload must carry resolved fallback target descriptor.
+
+PART H — EVENT_UPDATED
+----------------------
+For significant PUBLISHED edits:
+emit post-commit EventUpdatedEvent:
+applicationEventId
+operationKey = EVENT_UPDATED:<eventId>:v<version>
+eventType
+occurredAt
+eventId
+version
+title
+changeTypes
+startsAt
+venueName
+targets snapshot
+
+No arbitrary raw diff.
+No PII.
+
+PART I — CANCEL
+---------------
+POST /api/v1/admin/events/:id/cancel
+PUBLISHED only.
+Persist bounded reason, cancelledAt, status CANCELLED, version+1.
+Emit EventCancelledEvent post-commit.
+
+IMPORTANT:
+Do NOT put unsafe free-form cancellation reason into notification payload.
+Use a safe generic/bounded cancellation summary.
+
+Retain registrations.
+
+PART J — COMPLETE / ARCHIVE
+---------------------------
+Complete:
+PUBLISHED -> COMPLETED
+No notification.
+Do NOT auto-convert remaining REGISTERED to NO_SHOW.
+
+Archive:
+DRAFT/CANCELLED/COMPLETED -> ARCHIVED
+No notification.
+Retain registrations/targets/history.
+No hard delete.
+
+PART K — ADMIN LIST
+-------------------
+GET /api/v1/admin/events
+Permission: events.manage
+
+SuperAdmin: all
+ParishAdmin: own parish
+Catechist: assigned CLASS only
+
+Filters:
+page, limit max50, status, scopeType, parishId, classId, startsFrom, startsTo, locale, search
+
+Set-based. No N+1.
+
+PART L — USER LIST + AUDIENCE
+-----------------------------
+GET /api/v1/events
+Permission: events.read
+
+AUTHENTICATED ONLY in MVP unless actual code/design explicitly requires anonymous.
+Do not silently expose anonymous events.
+
+Visible:
+PUBLISHED
+upcoming/current
+matches explicit target or fallback ownership scope
+
+Create EventAudienceResolver:
+GLOBAL
+PARISH:<id>
+CLASS:<id>
+ROLE:<parishId>:<roleCode>
+
+Parent class eligibility from active linked child enrollment.
+Student from active enrollment.
+Catechist from active assignment.
+
+PART M — DETAIL
+---------------
+GET /api/v1/events/:id
+Permission: events.read
+
+Must be visible to actor.
+Unauthorized visibility => 404 preferred.
+
+Return event metadata + minimal current actor registration status.
+No attendee roster.
+No audit actor IDs.
+
+PART N — REGISTER SELF / CHILD
+------------------------------
+POST /api/v1/events/:id/registrations
+Permission: events.register
+
+DTO:
+studentId?: UUID
+
+No studentId => self.
+studentId => Parent registering linked child.
+
+Never accept client userId/enrollmentId/parishId/classId.
+
+Self registration:
+registrantKey USER:<authUserId>
+
+Child:
+- actor must PARENT
+- ACTIVE guardian link
+- child eligible for event
+- derive contextual enrollmentId server-side
+- registrantKey STUDENT:<studentId>
+
+PART O — REGISTRATION WINDOW
+----------------------------
+Registration only if:
+- event PUBLISHED
+- registration enabled
+- before startsAt
+- before/equal registrationDeadline if set
+- actor/child audience eligible
+
+Freeze MVP semantic:
+isRegistrationRequired=false means registration endpoint disabled.
+Document explicitly.
+
+PART P — CAPACITY SAFETY
+------------------------
+If capacity null => unlimited.
+
+If capacity set:
+inside one DB transaction:
+- lock event or use equivalent safe MSSQL transaction strategy
+- count active REGISTERED + ATTENDED
+- compare capacity
+- insert/update registration
+
+No naive count outside transaction.
+Capacity reached => 409.
+No waitlist.
+
+PART Q — DUPLICATE / RE-REGISTER
+--------------------------------
+REGISTERED/ATTENDED duplicate => 409.
+
+Existing CANCELLED:
+allow re-register before deadline/capacity by reusing same row:
+status REGISTERED
+registeredAt now
+cancelledAt null
+checkedInAt null
+
+NO_SHOW re-register for same event => reject.
+
+PART R — CANCEL REGISTRATION
+----------------------------
+POST /api/v1/events/:id/registrations/cancel
+
+Resolve registrantKey server-side.
+
+Self can cancel own.
+Parent with active guardian link can cancel child's registration even if another guardian originally created it.
+
+REGISTERED -> CANCELLED
+ATTENDED/NO_SHOW cannot cancel
+already CANCELLED => idempotent 200
+
+PART S — MY REGISTRATIONS
+-------------------------
+GET /api/v1/me/event-registrations
+Permission: events.read
+
+Return:
+- own USER registrations
+- Parent: linked child STUDENT registrations
+
+Filters:
+page/limit max50/status/from/to
+
+Join own event data set-based.
+No per-row Event lookups.
+No unrelated student data.
+
+PART T — CHECK-IN
+-----------------
+POST /api/v1/admin/events/:id/checkin
+Permission: events.checkin
+
+Preferred DTO:
+registrationId
+
+Verify:
+- registration belongs to event
+- actor can check-in event scope
+- event PUBLISHED
+- registration REGISTERED
+
+REGISTERED -> ATTENDED
+checkedInAt now
+
+Already ATTENDED => idempotent 200
+
+Never touch ClassOperations attendance tables.
+
+PART U — NO_SHOW
+----------------
+No dedicated NO_SHOW route in MVP.
+Do not invent one.
+No mass auto-conversion.
+
+PART V — ATTENDEE-LIST CONTRACT GAP
+-----------------------------------
+Audit operational usability carefully.
+
+Current frozen contract has check-in by registrationId but no attendee list route.
+
+Question:
+How does staff obtain registrationId for check-in?
+
+If there is NO existing adequate route, classify as HIGH usability gap and add:
+
+GET /api/v1/admin/events/:id/registrations
+
+If added:
+- permission events.checkin or events.manage
+- scoped to SuperAdmin / ParishAdmin own / Catechist assigned
+- paginated max50
+- minimal data only
+- batch display names if necessary
+- no email/phone/DOB/guardian contact
+
+This changes:
+Events 13 -> 14
+Total 35 -> 36
+
+Do NOT silently change count.
+Report the contract delta explicitly.
+
+Required verdict:
+EVENT ATTENDEE LIST NEEDED: YES/NO
+EVENT ATTENDEE LIST IMPLEMENTED: YES/NO
+
+PART W — REGISTERED ATTENDEE NOTIFICATION COVERAGE
+--------------------------------------------------
+Audit cancellation/update notification semantics.
+
+Targets are immutable after publish.
+Registration is only allowed for eligible audience members.
+
+Therefore registered attendees SHOULD already be covered by the event target snapshot/fallback scope.
+
+Verify this rigorously.
+
+If true:
+REGISTERED ATTENDEES COVERED BY TARGET SNAPSHOT: YES
+
+If not true:
+classify HIGH and correct the communication contract before #006.
+Do NOT let Notifications query Event repositories directly.
+
+PART X — DTO PRIVACY
+--------------------
+User DTOs:
+no attendee roster
+no audit actor IDs
+no guardian contact
+no emails/phones/DOB
+
+Admin attendee data if implemented:
+registrationId, registrantType, userId/studentId, optional displayName, status, timestamps only.
+
+PART Y — ERRORS
+---------------
+Use/add:
+EventNotFoundError
+EventAccessDeniedError
+InvalidEventTransitionError
+EventNotEditableError
+EventNotRegistrableError
+EventCapacityReachedError
+EventAlreadyRegisteredError
+EventRegistrationNotFoundError
+EventRegistrationCannotCancelError
+EventCheckInNotAllowedError
+
+Map:
+400 validation
+401 auth
+403 scope
+404 hidden/not found
+409 lifecycle/duplicate/capacity
+
+PART Z — OPENAPI / README
+-------------------------
+Document all final Event routes.
+If attendee-list route is added, update counts explicitly.
+
+README:
+- event vs ClassOperations boundary
+- lifecycle
+- scope/targets/fallback
+- registration
+- linked-child
+- capacity transaction
+- re-registration
+- cancel/check-in
+- no waitlist/recurrence
+- communication events
+- no direct Notifications dependency
+- validation deferred
+
+UNIT TESTS — WRITE, DO NOT RUN
+------------------------------
+Cover:
+- lifecycle
+- ownership scope
+- target fallback
+- significant update detection
+- version/operation keys
+- publish/update/cancel event payloads
+- cancellation privacy
+- self registration
+- child guardian verification
+- capacity
+- duplicate/re-register
+- cancellation
+- my registrations
+- check-in
+- no ClassOperations coupling
+- attendee-list decision
+- registered-attendee notification coverage
+
+INTEGRATION SPECS — WRITE, DO NOT RUN
+-------------------------------------
+Cover:
+- event code uniqueness
+- target uniqueness
+- lifecycle
+- version
+- operation keys
+- registrantKey
+- two self users same event
+- same child duplicate prevention
+- capacity transaction
+- re-register
+- cancel/check-in
+- target fallback
+- registrations retained
+- no ClassOperations writes
+- attendee-list if added
+
+DB E2E SPECS — WRITE, DO NOT RUN
+--------------------------------
+Cover:
+SuperAdmin global/all
+ParishAdmin own/foreign
+Catechist assigned/unassigned
+Student self register/cancel
+Parent self + child + foreign child
+capacity last slot / overflow
+lifecycle
+privacy
+401 unauthenticated
+
+MODULE BOUNDARY
+---------------
+Confirm:
+EventsModule exports EventsService only.
+No NotificationsModule.
+No Notification repo/entity.
+No ClassOperations dependency.
+No FamilyPortal.
+No forwardRef.
+ApplicationEvents neutral only.
+
+PERFORMANCE / STATIC INSPECTION
+-------------------------------
+Verify:
+- actor audience resolved once
+- set-based targets
+- registration list joins own event data
+- admin list set-based
+- capacity indexed/transaction-safe
+- attendee list batch snapshots if added
+- no N+1
+- pagination max50
+- no entity leakage
+
+STRICT OUT OF SCOPE
+-------------------
+Do NOT implement:
+- Notification fan-out/inbox (#006)
+- push delivery
+- preferences
+- email/SMS
+- waitlist
+- recurrence
+- ICS/calendar sync
+- ticket/payment
+- ClassOperations attendance writes
+- NO_SHOW route
+- demo seed/Postman
+- runtime validation
+
+REQUIRED REPORT
+---------------
+Create:
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+
+Required sections:
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Final route inventory
+7 Final route count
+8 Lifecycle
+9 Create contract
+10 Ownership scope
+11 Target model
+12 Target fallback
+13 Update contract
+14 Significant update detection
+15 Event version
+16 Publish behavior
+17 EventPublishedEvent
+18 EventUpdatedEvent
+19 Cancel behavior
+20 EventCancelledEvent
+21 Cancellation payload privacy
+22 Complete behavior
+23 Archive behavior
+24 Admin list
+25 Actor event list
+26 Audience resolver
+27 Event detail
+28 Registration eligibility
+29 Self registration
+30 Parent child registration
+31 Registration window
+32 Capacity transaction safety
+33 Duplicate/re-registration
+34 Cancel registration
+35 My registrations
+36 Check-in
+37 NO_SHOW decision
+38 Attendee-list usability gap
+39 Attendee-list contract decision
+40 Registered-attendee cancellation notification coverage
+41 Event target snapshot for notifications
+42 DTOs
+43 Data minimization
+44 Error contract
+45 OpenAPI
+46 README
+47 Service architecture
+48 Module boundary
+49 Performance/N+1
+50 Unit tests written
+51 Integration tests written
+52 DB e2e tests written
+53 Tests executed
+54 DB validation
+55 quality:full
+56 Docker
+57 npm audit
+58 Static inspection
+59 Risks/deferred
+60 BLOCKER/HIGH/MEDIUM/LOW
+61 #006 readiness
+62 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+EVENT CREATE READY: YES/NO
+EVENT UPDATE READY: YES/NO
+EVENT LIFECYCLE READY: YES/NO
+EVENT PUBLISH READY: YES/NO
+EVENT CANCEL READY: YES/NO
+EVENT COMPLETE READY: YES/NO
+EVENT ARCHIVE READY: YES/NO
+
+EVENT OWNERSHIP SCOPE SAFE: YES/NO
+EVENT TARGET MODEL READY: YES/NO
+EVENT TARGET FALLBACK READY: YES/NO
+CATECHIST CLASS-ONLY MANAGEMENT SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+
+EVENT VERSION READY: YES/NO
+EVENT SIGNIFICANT UPDATE DETECTION READY: YES/NO
+EVENT_PUBLISHED READY: YES/NO
+EVENT_UPDATED READY: YES/NO
+EVENT_CANCELLED READY: YES/NO
+EVENT OPERATION KEYS READY: YES/NO
+EVENT PAYLOAD PRIVACY SAFE: YES/NO
+
+ACTOR EVENT LIST READY: YES/NO
+EVENT DETAIL READY: YES/NO
+
+SELF REGISTRATION READY: YES/NO
+PARENT CHILD REGISTRATION READY: YES/NO
+EVENT REGISTRANT_KEY SAFE: YES/NO
+REGISTRATION WINDOW READY: YES/NO
+CAPACITY TRANSACTION SAFETY READY: YES/NO
+RE-REGISTRATION SEMANTICS READY: YES/NO
+REGISTRATION CANCELLATION READY: YES/NO
+MY REGISTRATIONS READY: YES/NO
+CHECK-IN READY: YES/NO
+NO CLASSOPERATIONS ATTENDANCE COUPLING: YES/NO
+
+EVENT ATTENDEE LIST NEEDED: YES/NO
+EVENT ATTENDEE LIST IMPLEMENTED: YES/NO
+REGISTERED ATTENDEES COVERED BY TARGET SNAPSHOT: YES/NO
+
+NO WAITLIST IN MVP: YES/NO
+NO RECURRENCE IN MVP: YES/NO
+NO NO_SHOW ROUTE IN MVP: YES/NO
+
+NO DIRECT NOTIFICATIONS DEPENDENCY: YES/NO
+DATA MINIMIZATION READY: YES/NO
+N+1/PERFORMANCE READY BY INSPECTION: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+FINAL EVENT ROUTE COUNT: <integer>
+FINAL COMMUNITY ROUTE COUNT TARGET: <integer>
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#006 READINESS: YES/NO
+
+#006 GATE
+---------
+Proceed if:
+- lifecycle complete
+- ownership/target scope safe
+- event version/operation keys ready
+- communication payloads safe
+- self/child registration safe
+- capacity transaction safe
+- check-in ready
+- no ClassOperations coupling
+- attendee-list usability gap explicitly resolved
+- registered-attendee notification semantics resolved
+- no direct Notifications dependency
+- no N+1
+- tests/specs written
+- BLOCKER=0
+- HIGH=0
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006/7 —
+NOTIFICATIONS — RECIPIENT FAN-OUT + INBOX / READ STATE + DEVICE REGISTRATION + INTEGRATION HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #005 status
+- route count
+- lifecycle
+- targeting
+- registration/capacity
+- check-in
+- event emissions
+- attendee-list decision
+- registered-attendee notification coverage
+- privacy/N+1
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Then exactly:
+git commit -m "feat(events): add lifecycle registration and notifications"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.
