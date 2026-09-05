@@ -1,0 +1,1349 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #007/7
+FAST IMPLEMENTATION MODE
+FINALIZATION — DEMO SEED + POSTMAN + README/OPENAPI + STATIC FINAL AUDIT
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- demo seed code/data
+- seed specs
+- Postman collection/environment if project convention supports
+- README/OpenAPI final documentation updates
+- module-boundary/final audit specs
+- static final audit report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+- push providers
+
+Do not mark deferred validation as failure.
+
+Use:
+IMPLEMENTED: YES
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+POSTMAN EXECUTED: NO — deferred
+DEMO SEED EXECUTED: NO — deferred
+PUSH DELIVERY: NOT IMPLEMENTED — deferred by MVP contract
+
+Architecture/security/privacy/minor-safety/modular ownership remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(community): finalize cms announcements events notifications"
+
+Do not execute it.
+
+==================================================
+STATE INHERITED — READ ALL REPORTS
+==================================================
+
+Read completely:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001A_CORRECTIVE_CONTRACT_AUDIT_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_002_PERSISTENCE_FOUNDATION_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003_CMS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003A_ROUTE_CONTRACT_LOCK_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_004_ANNOUNCEMENTS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005A_CORRECTIVE_EVENTS_HARDENING_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005B_ATOMIC_REGISTERED_RECIPIENT_SNAPSHOT_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005C_EVENTS_ROUTE_CONTRACT_LOCK_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_006_NOTIFICATIONS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_006A_RECIPIENT_FANOUT_CONCURRENCY_HARDENING_REPORT.md
+
+Do not re-audit unrelated modules deeply.
+
+==================================================
+AUTHORITATIVE FINAL CONTRACT
+==================================================
+
+MODULES:
+
+1. cms
+2. announcements
+3. events
+4. notifications
+
+OWNED TABLES — EXACTLY 10:
+
+CMS:
+1. cms_entries
+
+Announcements:
+2. announcements
+3. announcement_targets
+4. announcement_user_states
+
+Events:
+5. events
+6. event_targets
+7. event_registrations
+
+Notifications:
+8. notifications
+9. notification_recipients
+10. notification_devices
+
+Do NOT add table 11.
+
+FINAL ROUTES:
+
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+
+FINAL COMMUNITY ROUTE TOTAL = 36
+
+Do NOT change route counts silently.
+
+==================================================
+FINAL CMS ROUTES — 8
+==================================================
+
+1 GET /api/v1/cms/entries
+2 GET /api/v1/cms/entries/:slug
+3 POST /api/v1/cms/entries
+4 PATCH /api/v1/cms/entries/:id
+5 POST /api/v1/cms/entries/:id/publish
+6 POST /api/v1/cms/entries/:id/archive
+7 GET /api/v1/admin/cms/entries
+8 GET /api/v1/admin/cms/entries/:id
+
+==================================================
+FINAL ANNOUNCEMENT ROUTES — 8
+==================================================
+
+1 GET /api/v1/announcements
+2 GET /api/v1/announcements/:id
+3 POST /api/v1/announcements/:id/dismiss
+4 GET /api/v1/admin/announcements
+5 POST /api/v1/admin/announcements
+6 PATCH /api/v1/admin/announcements/:id
+7 POST /api/v1/admin/announcements/:id/publish
+8 POST /api/v1/admin/announcements/:id/archive
+
+==================================================
+FINAL EVENT ROUTES — 14
+==================================================
+
+1 GET /api/v1/events
+2 GET /api/v1/events/:id
+3 POST /api/v1/events/:id/registrations
+4 POST /api/v1/events/:id/registrations/cancel
+5 GET /api/v1/me/event-registrations
+6 GET /api/v1/admin/events
+7 POST /api/v1/admin/events
+8 PATCH /api/v1/admin/events/:id
+9 POST /api/v1/admin/events/:id/publish
+10 POST /api/v1/admin/events/:id/cancel
+11 POST /api/v1/admin/events/:id/complete
+12 POST /api/v1/admin/events/:id/archive
+13 POST /api/v1/admin/events/:id/checkin
+14 GET /api/v1/admin/events/:id/registrations
+
+==================================================
+FINAL NOTIFICATION ROUTES — 6
+==================================================
+
+1 GET /api/v1/me/notifications
+2 GET /api/v1/me/notifications/unread-count
+3 POST /api/v1/me/notifications/:id/read
+4 POST /api/v1/me/notifications/read-all
+5 POST /api/v1/me/notification-devices
+6 DELETE /api/v1/me/notification-devices/:id
+
+==================================================
+FROZEN BUSINESS / SECURITY DECISIONS
+==================================================
+
+CMS:
+- editorial only, not Curriculum
+- GLOBAL/PARISH
+- DRAFT/SCHEDULED/PUBLISHED/ARCHIVED
+- no delete route
+- scheduled publisher CLI exists
+- no GET-time publication mutation
+- public GLOBAL reads
+- authenticated parish-scoped reads
+- direct locale
+- no Localization runtime dependency
+
+Announcements:
+- DRAFT/PUBLISHED/ARCHIVED
+- root GLOBAL/PARISH
+- targets GLOBAL/PARISH/CLASS/ROLE
+- Catechist CLASS-only management
+- actor feed + lazy read state
+- detail marks read
+- dismiss idempotent
+- no recipient rows pre-generated
+- publish emits AnnouncementPublishedEvent
+- no direct Notifications dependency
+
+Events:
+- DRAFT/PUBLISHED/CANCELLED/COMPLETED/ARCHIVED
+- scope GLOBAL/PARISH/CLASS
+- targets GLOBAL/PARISH/CLASS/ROLE
+- no target rows => fallback to ownership scope
+- self/linked-child registration
+- registrantKey USER:/STUDENT:
+- transaction-safe capacity using event-row pessimistic lock
+- no waitlist
+- no recurrence
+- no ClassOperations attendance coupling
+- attendee-list exists for check-in
+- EventUpdated/EventCancelled carry atomic registeredRecipientUserIds
+- cancellation communication payload uses safe cancellationSummary only
+- no raw cancellationReason
+- no direct Notifications dependency
+
+Notifications:
+- in-app inbox fully implemented
+- event-driven fan-out
+- GLOBAL/PARISH/CLASS/ROLE expansion
+- Event update/cancel recipients = target expansion UNION atomic registeredRecipientUserIds
+- operationKey/applicationEventId idempotency
+- concurrent recipient fanout hardening
+- partial fanout retry safe
+- device token globally unique
+- cross-user token reassignment
+- no push provider sending
+- no preferences
+- no email/SMS
+- no manual notification create
+- no durable outbox in MVP
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Finalize the complete Community module suite under Fast Implementation Mode:
+
+1. create deterministic, safe, idempotent demo seed
+2. create complete Postman collection
+3. update README
+4. verify OpenAPI/static route inventory
+5. update module-boundary specs if needed
+6. perform final static architecture/security/privacy/performance audit
+7. document deferred runtime validation
+8. freeze extraction boundaries
+9. declare module ready/not-ready
+
+Do NOT run runtime validation.
+
+==================================================
+PART A — DEMO SEED STRATEGY
+==================================================
+
+Create a deterministic demo seed for:
+
+CMS
+Announcements
+Events
+Notifications prerequisites
+
+Use existing seed patterns.
+
+Potential file:
+src/database/seeds/community-demo.seed.ts
+
+or split by project convention, but avoid unnecessary fragmentation.
+
+Seed must be:
+- idempotent
+- safe
+- deterministic
+- environment-aware
+- not destructive
+- no production-only assumptions
+- no random unstable data
+
+Do NOT execute seed.
+
+==================================================
+PART B — DEMO ACTORS / EXISTING FOUNDATION
+==================================================
+
+Do NOT create duplicate auth/role/parish/class/student foundations if existing demo seeds already provide them.
+
+Inspect existing seed helpers and reuse known demo actors/context.
+
+Need cover at least:
+- SuperAdmin
+- ParishAdmin
+- Catechist
+- Parent
+- Student
+- one parish
+- one actively assigned class
+- one active student enrollment
+- one guardian relationship
+
+If prerequisites may not exist:
+seed may call existing seed helpers in safe order.
+
+Do not duplicate records based only on display names.
+Use stable keys/IDs/lookup logic.
+
+==================================================
+PART C — CMS DEMO DATA
+==================================================
+
+Seed representative CMS entries:
+
+At minimum:
+
+1. GLOBAL PUBLISHED ARTICLE
+2. GLOBAL DRAFT PAGE
+3. PARISH PUBLISHED NEWS
+4. PARISH SCHEDULED ARTICLE
+5. ARCHIVED entry
+6. FEATURED published entry
+
+Ensure:
+- valid unique `(scopeKey, slug)`
+- authored locale
+- schedule valid
+- published timestamps coherent
+- expiry example optional
+
+Do not seed huge bodies.
+
+==================================================
+PART D — ANNOUNCEMENT DEMO DATA
+==================================================
+
+Seed representative announcements:
+
+1. GLOBAL PUBLISHED announcement
+2. PARISH PUBLISHED announcement
+3. CLASS PUBLISHED announcement
+4. ROLE PUBLISHED announcement
+5. DRAFT announcement
+6. ARCHIVED announcement
+
+Priorities should cover:
+LOW/NORMAL/HIGH/URGENT where reasonable.
+
+Add targets with deterministic target keys.
+
+Create limited user-state examples:
+- one read
+- one unread
+- one dismissed
+
+Do NOT pre-create states for every user.
+
+==================================================
+PART E — EVENT DEMO DATA
+==================================================
+
+Seed representative events:
+
+At minimum:
+
+1. GLOBAL PUBLISHED future event
+2. PARISH PUBLISHED future event
+3. CLASS PUBLISHED registration-enabled event with capacity
+4. CLASS PUBLISHED event with at least one registration
+5. CANCELLED event
+6. COMPLETED event
+7. DRAFT event
+8. ARCHIVED event
+
+Need:
+- valid startsAt/endsAt
+- timezone
+- registrationDeadline
+- version values consistent with lifecycle
+- targets or fallback model
+- unique event codes
+
+Registrations:
+- self registration example
+- Parent linked-child registration example if valid fixture exists
+- CANCELLED registration example
+- ATTENDED registration example
+
+Do NOT seed impossible state combinations.
+
+No NO_SHOW required unless useful.
+
+==================================================
+PART F — NOTIFICATION DEMO DATA
+==================================================
+
+Prefer generating notification demo rows directly through owned seed persistence, not firing event bus at seed time.
+
+Seed representative notification headers/recipients:
+
+1. ANNOUNCEMENT_PUBLISHED
+2. EVENT_PUBLISHED
+3. EVENT_UPDATED
+4. EVENT_CANCELLED
+
+Need:
+- deterministic applicationEventId
+- deterministic operationKey
+- safe title/snippet/actionUrl
+- unique operation keys
+- recipient rows for demo users
+- mix read/unread
+- no duplicate recipient rows
+
+No raw cancellationReason.
+
+Device registry:
+seed at most a small safe demo device fixture only if existing seed convention allows fake tokens.
+
+Fake token must be clearly non-routable/demo-only.
+
+Do NOT create real provider token.
+
+==================================================
+PART G — SEED IDEMPOTENCY
+==================================================
+
+Mandatory:
+
+- use stable IDs or natural unique keys
+- update-or-insert / existence checks following project convention
+- no duplicate targets
+- no duplicate recipient rows
+- no duplicate tokens
+- rerunning seed should converge
+
+Write seed specs.
+
+Do NOT run.
+
+==================================================
+PART H — POSTMAN COLLECTION
+==================================================
+
+Create complete Postman collection covering all 36 routes.
+
+Suggested:
+postman/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS.postman_collection.json
+
+and environment if project uses:
+postman/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS.local.postman_environment.json
+
+Do not overwrite unrelated collections.
+
+Collection folders:
+
+1. CMS — Public
+2. CMS — Admin
+3. Announcements — User
+4. Announcements — Admin
+5. Events — User / Registration
+6. Events — Admin
+7. Notifications — Inbox
+8. Notifications — Devices
+
+==================================================
+PART I — POSTMAN VARIABLES
+==================================================
+
+Use variables, not hard-coded IDs/tokens.
+
+Examples:
+
+baseUrl
+
+superAdminToken
+parishAdminToken
+catechistToken
+parentToken
+studentToken
+
+parishId
+classId
+studentId
+
+cmsEntryId
+cmsSlug
+
+announcementId
+
+eventId
+eventRegistrationId
+
+notificationId
+notificationDeviceId
+
+Do not put real secrets.
+
+Tokens:
+placeholder only.
+
+==================================================
+PART J — POSTMAN CMS COVERAGE
+==================================================
+
+Cover all 8 routes.
+
+Include positive cases:
+- anonymous global list
+- anonymous global detail
+- admin create/update/publish/archive
+- admin list/detail
+
+Negative examples:
+- ParishAdmin GLOBAL create denied
+- bad slug
+- duplicate slug
+- archived mutation
+
+No execution.
+
+==================================================
+PART K — POSTMAN ANNOUNCEMENTS COVERAGE
+==================================================
+
+Cover all 8 routes.
+
+Positive:
+- user feed
+- detail
+- dismiss
+- admin list
+- create
+- update
+- publish
+- archive
+
+Negative:
+- Catechist PARISH/ROLE target denied
+- unrelated actor detail hidden
+- archived update denied
+
+==================================================
+PART L — POSTMAN EVENTS COVERAGE
+==================================================
+
+Cover all 14 routes.
+
+Positive:
+- event feed
+- detail
+- self register
+- linked child register
+- cancel registration
+- my registrations
+- admin list/create/update
+- publish
+- cancel
+- complete
+- archive
+- attendee list
+- checkin
+
+Negative:
+- unassigned Catechist admin
+- foreign child registration
+- capacity reached
+- duplicate registration
+- foreign attendee check-in
+- registration after cancellation/start
+
+==================================================
+PART M — POSTMAN NOTIFICATION COVERAGE
+==================================================
+
+Cover all 6 routes.
+
+Positive:
+- inbox
+- unread count
+- mark one read
+- mark all read
+- device register
+- device deactivate
+
+Negative:
+- foreign notification read
+- invalid platform/provider
+- foreign device delete
+
+Do not add debug/internal event ingestion endpoints.
+
+==================================================
+PART N — POSTMAN TEST SCRIPTS
+==================================================
+
+Add lightweight response assertions where project convention allows:
+
+- expected 2xx
+- expected 4xx negative cases
+- save IDs from create responses
+- no sensitive fields in representative public responses
+- notification device response has no token
+- pagination structure
+
+Do not create brittle runtime-dependent scripts.
+
+No Newman execution.
+
+==================================================
+PART O — README FINAL COMMUNITY SECTION
+==================================================
+
+Review entire Community documentation.
+
+Ensure README accurately states:
+
+- four modules
+- exact 10 tables
+- exact 36 routes
+- each module route count
+- lifecycle summaries
+- RBAC scopes
+- audience targeting
+- event registration/capacity
+- notification fanout/idempotency
+- push delivery deferred
+- durable outbox deferred
+- runtime validation deferred
+
+Remove stale route counts:
+33
+35
+unless clearly historical context.
+
+Current authoritative total:
+36
+
+==================================================
+PART P — OPENAPI STATIC AUDIT
+==================================================
+
+Inspect controller decorators and DTO annotations.
+
+By static inspection confirm:
+
+CMS:
+8 routes
+
+Announcements:
+8 routes
+
+Events:
+14 routes
+
+Notifications:
+6 routes
+
+Total:
+36
+
+Check:
+- route method/path
+- bearer/public auth
+- DTO schema
+- primary success code
+- key 400/401/403/404/409 docs
+
+Do NOT run Swagger.
+
+==================================================
+PART Q — PUBLIC / ADMIN ROUTE BOUNDARY
+==================================================
+
+Static audit:
+
+CMS:
+public read vs admin management separation
+
+Announcements:
+user feed vs `/admin/announcements`
+
+Events:
+participant paths vs `/admin/events`
+
+Notifications:
+`/me/...` only
+
+No accidental admin action exposed in public controller.
+
+No public admin DTO leakage.
+
+==================================================
+PART R — FINAL RBAC AUDIT
+==================================================
+
+Freeze 11 permissions:
+
+cms.read
+cms.manage
+
+announcements.read
+announcements.manage
+announcements.publish
+
+events.read
+events.manage
+events.register
+events.checkin
+
+notifications.read
+notifications.devices
+
+Confirm no accidental additional Community permission.
+
+Audit role assignments statically.
+
+Need verify:
+SuperAdmin
+ParishAdmin
+Catechist
+Parent
+Student
+
+Permission != scope.
+
+==================================================
+PART S — FINAL MODULE BOUNDARY AUDIT
+==================================================
+
+For each module document:
+
+CMS:
+owned data:
+cms_entries
+exports:
+CmsService
+depends on:
+public infra/services only
+extraction boundary:
+editorial content service
+
+Announcements:
+owned data:
+announcements
+announcement_targets
+announcement_user_states
+exports:
+AnnouncementsService
+depends on:
+public scope services + ApplicationEvents
+extraction boundary:
+community broadcast/read-state service
+
+Events:
+owned data:
+events
+event_targets
+event_registrations
+exports:
+EventsService
+depends on:
+public scope services + ApplicationEvents
+extraction boundary:
+community event/registration service
+
+Notifications:
+owned data:
+notifications
+notification_recipients
+notification_devices
+exports:
+NotificationsService
+depends on:
+public audience services + ApplicationEvents
+extraction boundary:
+notification inbox/audience/device service
+
+Required:
+- no cycles
+- no forwardRef
+- no foreign repo/entity imports
+- no cross-owned-table writes
+- no source -> Notifications direct dependency
+
+==================================================
+PART T — APPLICATION EVENTS FINAL AUDIT
+==================================================
+
+Confirm neutral communication events:
+
+AnnouncementPublishedEvent
+
+EventPublishedEvent
+
+EventUpdatedEvent
+
+EventCancelledEvent
+
+Check:
+
+- applicationEventId
+- operationKey
+- eventType
+- safe payload
+- no PII
+- target descriptors
+- EventUpdated/EventCancelled atomic registeredRecipientUserIds
+- raw cancellationReason absent
+
+No reward-event regression.
+
+==================================================
+PART U — IDEMPOTENCY FINAL AUDIT
+==================================================
+
+Verify statically:
+
+CMS:
+scopeKey+slug uniqueness
+
+Announcements:
+targetKey uniqueness
+user state uniqueness
+
+Events:
+event code uniqueness
+targetKey uniqueness
+registrantKey uniqueness
+capacity lock
+atomic recipient snapshot
+
+Notifications:
+operationKey uniqueness
+applicationEventId uniqueness
+recipient uniqueness
+recipient concurrent race recovery
+partial retry
+token global uniqueness/race handling
+
+No nullable unique traps.
+
+==================================================
+PART V — PRIVACY / MINOR SAFETY FINAL AUDIT
+==================================================
+
+Mandatory.
+
+Check user/public DTOs do NOT expose:
+- child DOB
+- email
+- phone
+- guardian contact
+- sensitive notes
+- creator/update IDs unnecessarily
+- internal operationKey/applicationEventId
+- push device tokens
+- raw cancellation reason
+
+Check:
+- Event attendee list minimal
+- Notification event payloads safe
+- public resource endpoints re-authorize underlying resource
+- no broad child-specific targeting via global PARENT
+- CLASS targeting uses linked guardians appropriately
+
+==================================================
+PART W — PERFORMANCE / N+1 FINAL AUDIT
+==================================================
+
+Static inspect:
+
+CMS:
+bounded lists
+
+Announcements:
+audience keys once, left join state, batch targets
+
+Events:
+audience keys once, set-based registrations, batch attendees, capacity lock
+
+Notifications:
+GLOBAL bounded 500
+fanout chunks 250
+bulk class guardians
+single COUNT
+set-based read-all
+
+No obvious per-row foreign API loop.
+
+==================================================
+PART X — INDEX / QUERY ALIGNMENT
+==================================================
+
+By static inspection map hot paths to indexes:
+
+CMS:
+(scope_key, slug)
+status/published_at
+
+Announcements:
+announcement target key
+status/window
+user state unique
+
+Events:
+scope/status/start
+registrant unique
+event/status registration count
+
+Notifications:
+operation key
+application event id
+recipient user/read/created
+token unique
+
+If a HIGH missing index is obvious:
+add a corrective migration only if necessary.
+
+Because runtime validation deferred:
+do not over-optimize speculative indexes.
+
+==================================================
+PART Y — DEMO SEED SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Test:
+- rerun idempotent
+- exactly expected seeded logical records
+- no duplicate target keys
+- no duplicate registrant keys
+- no duplicate notification operation keys
+- no duplicate notification recipients
+- no duplicate tokens
+- valid lifecycle combinations
+- no raw cancellation reason in notification fixtures
+
+==================================================
+PART Z — POSTMAN STATIC VALIDATION
+==================================================
+
+Do not execute.
+
+By inspection verify:
+- valid JSON
+- 36 unique route requests
+- no missing route
+- no duplicate route accidentally counted as separate unless role-specific examples are intentionally extra
+- variables valid
+- no real tokens/secrets
+- no real device token
+- admin/user folders clear
+
+It is fine to include >36 Postman requests due to negative examples.
+But authoritative unique backend route count stays 36.
+
+==================================================
+PART AA — FINAL TEST INVENTORY
+==================================================
+
+Do not run.
+
+Produce static summary of:
+- CMS unit/integration/DB e2e
+- Announcement unit/integration/DB e2e
+- Event unit/integration/DB e2e/concurrency
+- Notification unit/integration/DB e2e/concurrency
+- seed specs
+- module boundary specs
+
+Confirm tests exist for known hardening defects:
+- MSSQL capacity race
+- atomic Event recipient snapshot
+- Event route contract
+- notification recipient race
+- applicationEventId identity conflict
+- device token race
+
+==================================================
+PART AB — DEFERRED VALIDATION PLAN
+==================================================
+
+Document exact future stabilization checklist:
+
+1. npm install / dependency state
+2. typecheck
+3. lint
+4. unit tests
+5. integration tests
+6. MSSQL migration apply
+7. demo seed execution
+8. DB E2E
+9. Docker compose/build
+10. Swagger/OpenAPI runtime inspection
+11. Postman/Newman
+12. FE integration
+13. concurrency validation
+14. load/performance validation
+15. security/privacy regression
+16. npm audit / dependency security
+17. provider delivery implementation later
+
+Do NOT run now.
+
+==================================================
+PART AC — KNOWN DEFERRED ARCHITECTURE
+==================================================
+
+Clearly document:
+
+1. Durable outbox
+- NOT in MVP
+- current in-memory ApplicationEventBus may lose delivery on crash between source commit and handler completion
+- future stabilization/extraction candidate
+
+2. Push delivery
+- devices persisted
+- provider sending deferred
+
+3. Preferences
+- deferred
+
+4. Email/SMS
+- deferred
+
+5. Notification delivery receipt/provider tracking
+- deferred
+
+6. Event waitlist
+- deferred
+
+7. Event recurrence
+- deferred
+
+8. CMS revision history
+- deferred
+
+These are planned scope deferrals, not current implementation failures.
+
+==================================================
+PART AD — FINAL ROUTE COUNT ASSERTION SPEC
+==================================================
+
+If practical without runtime execution, add/update a static contract spec that asserts documented route inventory constants or controller metadata expectations.
+
+Do not over-engineer reflection tooling.
+
+At minimum:
+module-boundary/contract spec should encode expected counts:
+
+CMS 8
+Announcements 8
+Events 14
+Notifications 6
+Total 36
+
+==================================================
+PART AE — FINAL STATIC AUDIT SEVERITY
+==================================================
+
+Review for:
+
+BLOCKER:
+- data corruption
+- severe privacy leak
+- impossible build architecture
+- fatal contract break
+
+HIGH:
+- auth/scope bypass
+- concurrency correctness flaw
+- idempotency break
+- cross-module ownership violation
+- missing operational route required for implemented workflow
+- PII leak
+
+MEDIUM:
+- non-critical API mismatch
+- weak validation
+- missing useful index
+- incomplete test/spec coverage
+
+LOW:
+- docs wording
+- optional Postman scenario
+- non-blocking polish
+
+If BLOCKER/HIGH found:
+DO NOT declare module complete.
+
+Create clear corrective recommendation:
+#007A
+
+Do not silently fix major scope without reporting.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- push provider delivery
+- durable outbox
+- notification preferences
+- email/SMS
+- delivery receipt table
+- provider queue/retry worker
+- waitlist
+- recurrence
+- calendar integration
+- CMS revisions
+- new Community routes
+- new Community tables
+- runtime validation
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_007_FINALIZATION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Final module overview
+7 Final 10-table ownership
+8 Final 36-route inventory
+9 CMS final audit
+10 Announcement final audit
+11 Events final audit
+12 Notifications final audit
+13 Demo seed design
+14 Demo seed fixtures
+15 Demo seed idempotency
+16 Demo seed specs
+17 Postman collection
+18 Postman folders
+19 Postman variables
+20 Postman positive coverage
+21 Postman negative coverage
+22 Postman secret/privacy audit
+23 README final state
+24 OpenAPI static audit
+25 RBAC 11-permission audit
+26 Role/scope audit
+27 Module boundary audit
+28 Extraction boundary — CMS
+29 Extraction boundary — Announcements
+30 Extraction boundary — Events
+31 Extraction boundary — Notifications
+32 ApplicationEvents audit
+33 Idempotency audit
+34 Concurrency hardening audit
+35 Privacy/minor safety audit
+36 Performance/N+1 audit
+37 Index/query alignment
+38 Test inventory
+39 Known corrective defect regression coverage
+40 Deferred validation plan
+41 Durable outbox deferral
+42 Push delivery deferral
+43 Preferences/email/SMS deferral
+44 Event waitlist/recurrence deferral
+45 CMS revision deferral
+46 Tests executed
+47 DB validation
+48 quality:full
+49 Docker
+50 npm audit
+51 Demo seed execution
+52 Postman execution
+53 Push delivery
+54 Static final inspection
+55 Risks/deferred
+56 BLOCKER/HIGH/MEDIUM/LOW
+57 FINAL MODULE VERDICT
+58 Recommended next major module
+59 Commit recommendation
+
+==================================================
+REQUIRED VERDICTS
+==================================================
+
+FINAL CMS ROUTE COUNT: 8
+FINAL ANNOUNCEMENT ROUTE COUNT: 8
+FINAL EVENT ROUTE COUNT: 14
+FINAL NOTIFICATION ROUTE COUNT: 6
+FINAL COMMUNITY ROUTE COUNT: 36
+
+FINAL COMMUNITY TABLE COUNT: 10
+
+CMS FINAL READY BY INSPECTION: YES/NO
+ANNOUNCEMENTS FINAL READY BY INSPECTION: YES/NO
+EVENTS FINAL READY BY INSPECTION: YES/NO
+NOTIFICATIONS FINAL READY BY INSPECTION: YES/NO
+
+RBAC 11 PERMISSIONS FINAL: YES/NO
+ROLE/SCOPE MATRIX FINAL: YES/NO
+
+APPLICATION EVENTS FINAL: YES/NO
+EVENT REGISTERED RECIPIENT SNAPSHOT FINAL: YES/NO
+NOTIFICATION IDEMPOTENCY FINAL: YES/NO
+NOTIFICATION CONCURRENT FANOUT FINAL: YES/NO
+DEVICE TOKEN RACE HANDLING FINAL: YES/NO
+
+PRIVACY/MINOR SAFETY FINAL: YES/NO
+NO RAW CANCELLATION REASON: YES/NO
+NO DEVICE TOKEN RESPONSE LEAK: YES/NO
+
+NO CROSS-MODULE REPOSITORY/ENTITY COUPLING: YES/NO
+NO FORWARDREF: YES/NO
+EXTRACTION BOUNDARIES DOCUMENTED: YES/NO
+
+N+1/PERFORMANCE READY BY INSPECTION: YES/NO
+INDEX/QUERY ALIGNMENT READY BY INSPECTION: YES/NO
+
+DEMO SEED WRITTEN: YES/NO
+DEMO SEED IDEMPOTENT BY INSPECTION: YES/NO
+DEMO SEED SPECS WRITTEN: YES/NO
+
+POSTMAN COLLECTION WRITTEN: YES/NO
+ALL 36 ROUTES REPRESENTED IN POSTMAN: YES/NO
+POSTMAN NEGATIVE COVERAGE READY: YES/NO
+POSTMAN CONTAINS NO REAL SECRETS: YES/NO
+
+README FINAL: YES/NO
+OPENAPI FINAL BY INSPECTION: YES/NO
+
+UNIT TEST INVENTORY COMPLETE: YES/NO
+INTEGRATION TEST INVENTORY COMPLETE: YES/NO
+DB E2E TEST INVENTORY COMPLETE: YES/NO
+CONCURRENCY REGRESSION SPECS COMPLETE: YES/NO
+
+DURABLE OUTBOX IN MVP: NO
+PUSH DELIVERY IMPLEMENTED: NO
+NOTIFICATION PREFERENCES IMPLEMENTED: NO
+EMAIL/SMS IMPLEMENTED: NO
+EVENT WAITLIST IMPLEMENTED: NO
+EVENT RECURRENCE IMPLEMENTED: NO
+CMS REVISION HISTORY IMPLEMENTED: NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+DEMO SEED EXECUTED: NO — deferred
+POSTMAN EXECUTED: NO — deferred
+PUSH DELIVERY EXECUTED: NO — not implemented
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+Unresolved LOW count
+
+FINAL MODULE VERDICT:
+READY / NOT READY
+
+==================================================
+FINAL GATE
+==================================================
+
+Module may be declared READY if:
+
+- exact 10 tables
+- exact 36 routes
+- all four modules ready
+- RBAC/scope clean
+- application event contracts clean
+- concurrency hardening retained
+- privacy clean
+- module boundaries clean
+- demo seed written
+- Postman written
+- README/OpenAPI aligned
+- tests/spec inventory complete
+- BLOCKER=0
+- HIGH=0
+
+MEDIUM may remain only if clearly non-blocking and explicitly justified.
+
+Runtime validation is NOT required under Fast Implementation Mode.
+
+==================================================
+RECOMMENDED NEXT MAJOR MODULE
+==================================================
+
+Do not implement another module automatically.
+
+Based on current project roadmap and existing completed modules, recommend the next major backend domain only after final audit.
+
+Prefer one concise recommendation.
+
+Potential candidates should be chosen from actual remaining product scope, not invented.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Respond concisely:
+
+- #007 implementation status
+- final table count
+- final route counts
+- seed status
+- Postman status
+- README/OpenAPI status
+- architecture/security/privacy/concurrency verdict
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM/LOW
+- FINAL MODULE VERDICT
+- recommended next major module
+- report path
+
+Then exactly:
+
+git commit -m "feat(community): finalize cms announcements events notifications"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT automatically start another module.

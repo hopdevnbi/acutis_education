@@ -816,7 +816,7 @@ The CMS module (`src/modules/cms/`) provides editorial content management for pa
 
 ### Route Inventory (8 Routes)
 
-Corrected CMS route inventory (resolving the administrative draft management contract gap from 6 to 8 routes; updating total community target from 33 to 35 routes):
+Authoritative CMS route inventory (8 routes):
 
 | Method | Path | Description | Access / Permission |
 | --- | --- | --- | --- |
@@ -986,13 +986,13 @@ The Notifications module (`src/modules/notifications/`) provides in-app inbox de
   - `EVENT_CANCELLED`: fans out to `expand(targets) UNION registeredRecipientUserIds` with safe `cancellationSummary` ("Event cancelled").
 - **Historical Registered-Recipient Union:** Downstream fan-out merges current target-descriptor expansion with the atomic registration snapshot (`registeredRecipientUserIds`), guaranteeing delivery to all active and attended registrants even if their class or parish membership has drifted.
 - **Idempotency & Replay:** Deduplication is enforced via `notifications.operation_key UNIQUE`. Replaying the same `operationKey` reuses the immutable header and reconciles missing recipient rows without creating duplicate headers or recipient records.
-- **Batched Fan-Out:** Recipient rows are materialized in chunks of 250 (`NOTIFICATION_RECIPIENT_BATCH_SIZE`) to prevent unbounded transaction sizes or excessive MSSQL parameters.
+- **Batched Fan-Out & Concurrency Hardening (#006A):** Recipient rows are materialized in chunks of 250 (`NOTIFICATION_RECIPIENT_BATCH_SIZE`) to prevent unbounded transaction sizes or excessive MSSQL parameters. Under concurrent duplicate event processing, MSSQL unique violations (`2601` duplicate key index, `2627` unique constraint) are caught, the chunk is re-queried, and only genuinely remaining missing rows are inserted. If all rows exist, the race is treated as a successful reconciliation. Non-unique database errors (deadlocks, timeouts, foreign key errors) are immediately rethrown.
 - **Zero-Recipient Events:** If an event maps to zero recipients, the notification header is still persisted for audit and idempotency (`ZERO-RECIPIENT HEADER PERSISTED: YES`), materializing zero recipient rows.
 
 ### Device Registry & Security
 
 - **Platform / Provider Validation:** Enforces strict compatibility (iOS: EXPO, APNS; Android: EXPO, FCM; Web: WEB_PUSH). Incompatible combinations are rejected with `400 Bad Request`.
-- **Global Token Uniqueness & Ownership Transfer:** Mobile device push tokens are globally unique (`UNIQUE(token)`). When a token is re-registered by a new user on a recycled or shared device, ownership is safely reassigned to the current caller to prevent push leakage to previous accounts.
+- **Global Token Uniqueness & Ownership Transfer:** Mobile device push tokens are globally unique (`UNIQUE(token)`). When a token is re-registered by a new user on a recycled or shared device, ownership is safely reassigned to the current caller to prevent push leakage to previous accounts. Concurrent token registration collisions are caught via `2601/2627` recovery and safely reassigned.
 - **Token Privacy:** Device push tokens are strictly omitted from registration and management API responses (`NotificationDeviceResponseDto`).
 - **Soft Deactivation:** `DELETE /api/v1/me/notification-devices/:id` marks `is_active = false`. Accessing a foreign device returns `404 Not Found` to prevent existence leakage.
 
@@ -1007,15 +1007,43 @@ The Notifications module (`src/modules/notifications/`) provides in-app inbox de
 | `POST` | `/api/v1/me/notification-devices` | Register or update notification device | `notifications.devices` (Authenticated) |
 | `DELETE` | `/api/v1/me/notification-devices/:id` | Deactivate notification device (soft delete) | `notifications.devices` (Authenticated) |
 
-### Community Modules Route Count Summary
+### Community Suite Architecture & Route Summary (#007 Finalization)
+
+#### Owned Tables (Exactly 10)
+1. `cms_entries` (CMS)
+2. `announcements` (Announcements)
+3. `announcement_targets` (Announcements)
+4. `announcement_user_states` (Announcements)
+5. `events` (Events)
+6. `event_targets` (Events)
+7. `event_registrations` (Events)
+8. `notifications` (Notifications)
+9. `notification_recipients` (Notifications)
+10. `notification_devices` (Notifications)
+
+#### Authoritative RBAC Permissions (Exactly 11)
+- **CMS:** `cms.read`, `cms.manage`
+- **Announcements:** `announcements.read`, `announcements.manage`, `announcements.publish`
+- **Events:** `events.read`, `events.manage`, `events.register`, `events.checkin`
+- **Notifications:** `notifications.read`, `notifications.devices`
+
+#### Community Modules Route Count Summary
 
 | Module | Route Count | Status |
 | --- | --- | --- |
 | **CMS** | 8 | Production ready (#003, #003A) |
 | **Announcements** | 8 | Production ready (#004) |
 | **Events** | 14 | Production ready (#005, #005A, #005B, #005C) |
-| **Notifications** | 6 | Production ready (#006) |
+| **Notifications** | 6 | Production ready (#006, #006A) |
 | **Total Community Routes** | **36** | **Target Met** |
+
+#### Deferred Architectural Items & Validation
+- **Durable Outbox:** In MVP, application events are emitted via in-memory `ApplicationEventBus`. A durable outbox table with background dispatch is deferred to a future integration phase.
+- **Push Provider Dispatch:** Device tokens are persisted and validated; network calls to Expo/FCM/APNs/WebPush gateways are deferred.
+- **Notification Preferences, Email/SMS:** Deferred by MVP contract.
+- **Event Waitlist & Recurrence:** Hard capacity limit enforced; waitlist and recurring event rules are deferred.
+- **CMS Revision History:** Live editorial state managed; multi-version revision logs are deferred.
+- **Runtime Validation:** All test execution (Jest, DB migrations, Docker, seed scripts, Newman) is deferred to the FE Integration / Stabilization Phase per Fast Implementation Mode.
 
 ## Project rules
 

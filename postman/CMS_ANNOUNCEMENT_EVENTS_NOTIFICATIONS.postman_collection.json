@@ -1,0 +1,1302 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-community-suite-collection",
+    "name": "Acutis Education — Community (CMS, Announcements, Events, Notifications)",
+    "description": "Comprehensive Postman verification covering all 36 Community routes across 4 business modules:\n- CMS (8 routes)\n- Announcements (8 routes)\n- Events (14 routes)\n- Notifications (6 routes)\n\nTotal routes: 36\n\nPrerequisites:\n1. npm run migration:run\n2. npm run seed:community-demo\n3. npm run start:dev\n\nDemo actors:\n- SuperAdmin: superadmin@local.catechism.test\n- ParishAdmin: admin@local.catechism.test\n- Catechist: catechist@local.catechism.test\n- Parent: parent@local.catechism.test\n- Student: student-alpha@local.catechism.test\nPassword: LocalDev!Sample2026\n\nValidation deferred to FE Integration / Stabilization Phase.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "demoPassword", "value": "LocalDev!Sample2026" },
+    { "key": "superAdminEmail", "value": "superadmin@local.catechism.test" },
+    { "key": "parishAdminEmail", "value": "admin@local.catechism.test" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "studentEmail", "value": "student-alpha@local.catechism.test" },
+    { "key": "superAdminToken", "value": "" },
+    { "key": "parishAdminToken", "value": "" },
+    { "key": "catechistToken", "value": "" },
+    { "key": "parentToken", "value": "" },
+    { "key": "studentToken", "value": "" },
+    { "key": "parishId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "cmsEntryId", "value": "" },
+    { "key": "cmsSlug", "value": "huong-dan-nam-hoc-giao-ly-2026" },
+    { "key": "announcementId", "value": "" },
+    { "key": "eventId", "value": "" },
+    { "key": "eventRegistrationId", "value": "" },
+    { "key": "notificationId", "value": "" },
+    { "key": "notificationDeviceId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Auth & Token Setup",
+      "item": [
+        {
+          "name": "SuperAdmin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('superAdminToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "ParishAdmin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parishAdminToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parishAdminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Catechist Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('catechistToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parent Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Student Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('studentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 CMS — Public",
+      "item": [
+        {
+          "name": "1. GET /cms/entries (Public List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "pm.test('total present', () => pm.expect(body.total).to.be.a('number'));",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('cmsSlug', body.items[0].slug);",
+                  "  pm.collectionVariables.set('cmsEntryId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cms/entries?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["cms", "entries"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. GET /cms/entries/:slug (Public Detail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('slug matches', () => pm.expect(body.slug).to.equal(pm.collectionVariables.get('cmsSlug')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/cms/entries/{{cmsSlug}}"
+          }
+        },
+        {
+          "name": "2.1 Negative: GET /cms/entries/:slug (Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 not found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/cms/entries/non-existent-slug-404"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 CMS — Admin",
+      "item": [
+        {
+          "name": "3. POST /cms/entries (Admin Create)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('cmsEntryId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ARTICLE\",\n  \"scopeType\": \"GLOBAL\",\n  \"slug\": \"postman-demo-cms-entry\",\n  \"title\": \"Postman Demo CMS Entry\",\n  \"summary\": \"Postman verification entry.\",\n  \"body\": \"Full content body for Postman verification.\",\n  \"locale\": \"vi-VN\",\n  \"isFeatured\": false\n}"
+            },
+            "url": "{{baseUrl}}/cms/entries"
+          }
+        },
+        {
+          "name": "3.1 Negative: POST /cms/entries (ParishAdmin Global Create Denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parishAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ARTICLE\",\n  \"scopeType\": \"GLOBAL\",\n  \"slug\": \"unauthorized-global-entry\",\n  \"title\": \"Unauthorized Entry\",\n  \"body\": \"Should fail with 403.\"\n}"
+            },
+            "url": "{{baseUrl}}/cms/entries"
+          }
+        },
+        {
+          "name": "4. PATCH /cms/entries/:id (Admin Update)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Demo CMS Entry (Updated)\",\n  \"summary\": \"Updated summary via Postman.\"\n}"
+            },
+            "url": "{{baseUrl}}/cms/entries/{{cmsEntryId}}"
+          }
+        },
+        {
+          "name": "5. POST /cms/entries/:id/publish (Admin Publish)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is PUBLISHED', () => pm.expect(body.status).to.equal('PUBLISHED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/cms/entries/{{cmsEntryId}}/publish"
+          }
+        },
+        {
+          "name": "6. POST /cms/entries/:id/archive (Admin Archive)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is ARCHIVED', () => pm.expect(body.status).to.equal('ARCHIVED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/cms/entries/{{cmsEntryId}}/archive"
+          }
+        },
+        {
+          "name": "6.1 Negative: PATCH /cms/entries/:id (Archived Mutation Denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 bad request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Cannot update archived entry\"\n}"
+            },
+            "url": "{{baseUrl}}/cms/entries/{{cmsEntryId}}"
+          }
+        },
+        {
+          "name": "7. GET /admin/cms/entries (Admin List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/cms/entries?page=1&limit=10"
+          }
+        },
+        {
+          "name": "8. GET /admin/cms/entries/:id (Admin Detail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('id matches', () => pm.expect(body.id).to.equal(pm.collectionVariables.get('cmsEntryId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/cms/entries/{{cmsEntryId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Announcements — User",
+      "item": [
+        {
+          "name": "1. GET /announcements (User Feed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('announcementId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/announcements?page=1&limit=10"
+          }
+        },
+        {
+          "name": "2. GET /announcements/:id (User Detail & Auto-Read)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('isRead is true after detail read', () => pm.expect(body.isRead).to.equal(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/announcements/{{announcementId}}"
+          }
+        },
+        {
+          "name": "3. POST /announcements/:id/dismiss (Dismiss Announcement)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('isDismissed is true', () => pm.expect(body.isDismissed).to.equal(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/announcements/{{announcementId}}/dismiss"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Announcements — Admin",
+      "item": [
+        {
+          "name": "4. GET /admin/announcements (Admin List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/announcements?page=1&limit=10"
+          }
+        },
+        {
+          "name": "5. POST /admin/announcements (Admin Create)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('announcementId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Demo Announcement\",\n  \"summary\": \"Summary for demo announcement.\",\n  \"body\": \"Full message body for demo announcement.\",\n  \"scopeType\": \"GLOBAL\",\n  \"priority\": \"NORMAL\",\n  \"locale\": \"vi-VN\",\n  \"targets\": [\n    {\n      \"targetType\": \"GLOBAL\"\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/admin/announcements"
+          }
+        },
+        {
+          "name": "5.1 Negative: POST /admin/announcements (Catechist Global Target Denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Catechist Illegal Global Announcement\",\n  \"body\": \"Should fail with 403.\",\n  \"scopeType\": \"GLOBAL\",\n  \"targets\": [{ \"targetType\": \"GLOBAL\" }]\n}"
+            },
+            "url": "{{baseUrl}}/admin/announcements"
+          }
+        },
+        {
+          "name": "6. PATCH /admin/announcements/:id (Admin Update)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Demo Announcement (Updated)\",\n  \"priority\": \"HIGH\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/announcements/{{announcementId}}"
+          }
+        },
+        {
+          "name": "7. POST /admin/announcements/:id/publish (Admin Publish)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is PUBLISHED', () => pm.expect(body.status).to.equal('PUBLISHED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/announcements/{{announcementId}}/publish"
+          }
+        },
+        {
+          "name": "8. POST /admin/announcements/:id/archive (Admin Archive)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is ARCHIVED', () => pm.expect(body.status).to.equal('ARCHIVED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/announcements/{{announcementId}}/archive"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Events — User & Registration",
+      "item": [
+        {
+          "name": "1. GET /events (User Events List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('eventId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/events?page=1&limit=10"
+          }
+        },
+        {
+          "name": "2. GET /events/:id (User Event Detail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('id matches', () => pm.expect(body.id).to.equal(pm.collectionVariables.get('eventId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/events/{{eventId}}"
+          }
+        },
+        {
+          "name": "3. POST /events/:id/registrations (Self Register)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 or 409', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('eventRegistrationId', body.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/events/{{eventId}}/registrations"
+          }
+        },
+        {
+          "name": "4. POST /events/:id/registrations/cancel (Cancel Registration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok or 404', () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/events/{{eventId}}/registrations/cancel"
+          }
+        },
+        {
+          "name": "5. GET /me/event-registrations (My Registrations)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/event-registrations?page=1&limit=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Events — Admin",
+      "item": [
+        {
+          "name": "6. GET /admin/events (Admin List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/events?page=1&limit=10"
+          }
+        },
+        {
+          "name": "7. POST /admin/events (Admin Create)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('eventId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"EVT-POSTMAN-DEMO-001\",\n  \"title\": \"Postman Demo Event\",\n  \"description\": \"Comprehensive verification event.\",\n  \"summary\": \"Postman demo summary.\",\n  \"scopeType\": \"GLOBAL\",\n  \"locale\": \"vi-VN\",\n  \"timezone\": \"Asia/Ho_Chi_Minh\",\n  \"startsAt\": \"2026-12-01T08:00:00.000Z\",\n  \"endsAt\": \"2026-12-01T17:00:00.000Z\",\n  \"capacity\": 50,\n  \"isRegistrationRequired\": true,\n  \"registrationDeadline\": \"2026-11-30T23:59:59.000Z\",\n  \"targets\": [{ \"targetType\": \"GLOBAL\" }]\n}"
+            },
+            "url": "{{baseUrl}}/admin/events"
+          }
+        },
+        {
+          "name": "8. PATCH /admin/events/:id (Admin Update)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Demo Event (Updated)\",\n  \"capacity\": 60\n}"
+            },
+            "url": "{{baseUrl}}/admin/events/{{eventId}}"
+          }
+        },
+        {
+          "name": "9. POST /admin/events/:id/publish (Admin Publish)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is PUBLISHED', () => pm.expect(body.status).to.equal('PUBLISHED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/publish"
+          }
+        },
+        {
+          "name": "10. POST /admin/events/:id/cancel (Admin Cancel)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is CANCELLED', () => pm.expect(body.status).to.equal('CANCELLED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman verification cancellation.\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/cancel"
+          }
+        },
+        {
+          "name": "11. POST /admin/events/:id/complete (Admin Complete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok or 400', () => pm.expect([200, 400]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/complete"
+          }
+        },
+        {
+          "name": "12. POST /admin/events/:id/archive (Admin Archive)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is ARCHIVED', () => pm.expect(body.status).to.equal('ARCHIVED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/archive"
+          }
+        },
+        {
+          "name": "13. POST /admin/events/:id/checkin (Admin Check-in)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok or 404', () => pm.expect([200, 404, 400]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationId\": \"{{eventRegistrationId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/checkin"
+          }
+        },
+        {
+          "name": "14. GET /admin/events/:id/registrations (Admin Attendee List)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/events/{{eventId}}/registrations?page=1&limit=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Notifications — Inbox",
+      "item": [
+        {
+          "name": "1. GET /me/notifications (User Inbox)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items array present', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) {",
+                  "  pm.collectionVariables.set('notificationId', body.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/notifications?page=1&limit=20"
+          }
+        },
+        {
+          "name": "2. GET /me/notifications/unread-count (Unread Count)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('unreadCount is a number', () => pm.expect(body.unreadCount).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/me/notifications/unread-count"
+          }
+        },
+        {
+          "name": "3. POST /me/notifications/:id/read (Mark One Read)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('isRead is true', () => pm.expect(body.isRead).to.equal(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/me/notifications/{{notificationId}}/read"
+          }
+        },
+        {
+          "name": "3.1 Negative: POST /me/notifications/:id/read (Foreign Notification Not Found)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 not found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/me/notifications/00000000-0000-0000-0000-000000000000/read"
+          }
+        },
+        {
+          "name": "4. POST /me/notifications/read-all (Mark All Read)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('updatedCount is a number', () => pm.expect(body.updatedCount).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/me/notifications/read-all"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Notifications — Devices",
+      "item": [
+        {
+          "name": "5. POST /me/notification-devices (Register Device)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('token is omitted from response for privacy', () => pm.expect(body.token).to.be.undefined);",
+                  "pm.collectionVariables.set('notificationDeviceId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": \"IOS\",\n  \"provider\": \"EXPO\",\n  \"token\": \"ExponentPushToken[DEMO_SAMPLE_TOKEN_POSTMAN_ONLY]\",\n  \"appVersion\": \"1.0.0\",\n  \"locale\": \"vi-VN\"\n}"
+            },
+            "url": "{{baseUrl}}/me/notification-devices"
+          }
+        },
+        {
+          "name": "5.1 Negative: POST /me/notification-devices (Invalid Platform/Provider Pair)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 bad request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": \"WEB\",\n  \"provider\": \"APNS\",\n  \"token\": \"invalid-web-apns-token\"\n}"
+            },
+            "url": "{{baseUrl}}/me/notification-devices"
+          }
+        },
+        {
+          "name": "6. DELETE /me/notification-devices/:id (Deactivate Device)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('isActive is false', () => pm.expect(body.isActive).to.equal(false));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{catechistToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/me/notification-devices/{{notificationDeviceId}}"
+          }
+        },
+        {
+          "name": "6.1 Negative: DELETE /me/notification-devices/:id (Foreign Device 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 not found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{parentToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/me/notification-devices/{{notificationDeviceId}}"
+          }
+        }
+      ]
+    }
+  ]
+}

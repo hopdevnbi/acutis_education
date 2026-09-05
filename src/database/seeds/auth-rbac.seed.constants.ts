@@ -430,6 +430,7 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'announcements.publish',
     'events.read',
     'events.manage',
+    'events.register',
     'events.checkin',
     'notifications.read',
     'notifications.devices',
