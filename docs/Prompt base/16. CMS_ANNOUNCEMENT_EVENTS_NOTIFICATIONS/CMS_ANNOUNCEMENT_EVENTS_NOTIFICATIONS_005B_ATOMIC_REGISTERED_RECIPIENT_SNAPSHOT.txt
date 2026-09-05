@@ -1,0 +1,367 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #005B
+CORRECTIVE IMPLEMENTATION
+ATOMIC REGISTERED-RECIPIENT SNAPSHOT FOR EVENT UPDATE / CANCEL
+FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+- especially `.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- corrective Events code
+- corrective tests/specs
+- corrective report
+
+DO NOT RUN by default:
+- tests/Jest
+- lint/typecheck/build/format
+- quality/quality:full
+- npm audit
+- DB/migrations/seeds
+- Docker
+- Postman/Newman
+
+PERMANENT GIT RULES
+-------------------
+NEVER run git add, git commit, git push.
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+git commit -m "fix(events): snapshot notification recipients atomically"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+#005 Events
+#005A Events hardening
+
+Read completely:
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005A_CORRECTIVE_EVENTS_HARDENING_REPORT.md
+
+Current route contract:
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+Total = 36
+
+Do NOT change route count.
+
+ISSUE — RECIPIENT SNAPSHOT IS CURRENTLY POST-COMMIT
+----------------------------------------------------
+#005A correctly added `registeredRecipientUserIds` to:
+- EventUpdatedEvent
+- EventCancelledEvent
+
+But current flow is:
+1. commit Event mutation
+2. query event_registrations
+3. publish communication event
+
+This is not an atomic snapshot at the domain-transition boundary.
+
+Race examples:
+- Update commits, registrant cancels, then snapshot query runs -> a registrant who was active at update time is omitted.
+- Update commits, a new registrant registers, then snapshot query runs -> a registrant who joined after the update receives that historical update.
+- Cancel commits, then another registration-state mutation races before snapshot read -> recipient set may not reflect cancellation boundary.
+
+Required correction:
+capture `registeredRecipientUserIds` inside the SAME DB transaction as the event update/cancel mutation, return that snapshot from the transaction, then emit event only after commit.
+
+PART A — MANAGER-AWARE RECIPIENT QUERY
+--------------------------------------
+Refactor recipient lookup to accept/use transaction EntityManager.
+
+Preferred shape:
+listNotificationRecipientUserIds(
+  eventId: string,
+  manager?: EntityManager,
+): Promise<string[]>
+
+When manager exists:
+use manager.getRepository(EventRegistrationEntity), not default injected repository.
+
+Query:
+DISTINCT user_id
+WHERE event_id = :eventId
+AND status IN ('REGISTERED','ATTENDED')
+
+Return normalized/deduped UUIDs.
+No foreign service calls.
+
+PART B — SHARED EVENT LOCK BOUNDARY
+-----------------------------------
+Registration/re-registration already uses pessimistic_write on EventEntity.
+
+Use the SAME event-row lock boundary for:
+- significant published Event update
+- Event cancellation
+
+Strong requirement:
+lock EventEntity with `pessimistic_write` inside the update/cancel transaction before reading the registration snapshot.
+
+This serializes:
+registration
+re-registration
+significant update
+cancellation
+
+for the same event, while unrelated events remain independent.
+
+PART C — SIGNIFICANT UPDATE FLOW
+--------------------------------
+Inside same transaction:
+1. acquire pessimistic_write lock on EventEntity
+2. load current event
+3. validate state/scope
+4. detect requested changes
+5. if significant:
+   - capture target snapshot
+   - capture `registeredRecipientUserIds` using SAME EntityManager
+6. mutate event
+7. increment version
+8. persist
+9. return immutable transaction result containing:
+   - updated event snapshot
+   - targets
+   - registeredRecipientUserIds
+   - significant change types
+   - version / operation key inputs
+
+After transaction resolves:
+emit EventUpdatedEvent using ONLY returned snapshot data.
+
+Do NOT re-query registrations after commit.
+Do NOT emit inside transaction.
+
+Minor published update:
+- no EventUpdatedEvent
+- no recipient snapshot query required.
+
+PART D — CANCEL FLOW
+--------------------
+Inside same transaction:
+1. acquire pessimistic_write lock on EventEntity
+2. validate PUBLISHED
+3. capture target snapshot
+4. capture `registeredRecipientUserIds` using SAME EntityManager
+5. set CANCELLED / cancelledAt / internal cancellationReason / version
+6. persist
+7. return event + targets + recipient snapshot
+
+After transaction resolves:
+emit EventCancelledEvent using:
+- safe `cancellationSummary`
+- transaction-snapshotted registeredRecipientUserIds
+
+Do NOT re-query registrations after commit.
+
+PART E — PRIVACY MUST REMAIN HARDENED
+-------------------------------------
+Keep #005A correction:
+- raw `cancellationReason` stays inside Events persistence/admin domain
+- EventCancelledEvent does NOT contain raw reason
+- communication event contains only controlled `cancellationSummary`
+
+PART F — TESTS
+--------------
+WRITE, DO NOT RUN.
+
+Unit:
+- manager-aware query uses manager repository
+- significant update uses event pessimistic lock
+- update recipient snapshot occurs inside transaction
+- no post-commit registration re-query
+- cancellation uses event pessimistic lock
+- cancel recipient snapshot occurs inside transaction
+- event emission occurs after transaction resolves
+- minor update skips recipient snapshot
+
+Integration future:
+- significant update racing registration serializes on event lock
+- cancellation racing registration serializes on event lock
+- recipient set matches serialized transaction order
+- no post-commit snapshot drift
+
+DB E2E/concurrency future:
+race one registration attempt with event cancellation:
+- if registration commits first -> recipient included
+- if cancellation commits first -> registration rejected
+- never ambiguous state inconsistent with lock ordering
+
+PART G — #006 HANDOFF
+---------------------
+Freeze:
+
+AnnouncementPublishedEvent:
+recipients = expand targets
+
+EventPublishedEvent:
+recipients = expand targets
+
+EventUpdatedEvent:
+recipients = expand targets UNION transaction-snapshotted registeredRecipientUserIds
+
+EventCancelledEvent:
+recipients = expand targets UNION transaction-snapshotted registeredRecipientUserIds
+
+#006 must dedupe user IDs before inserts.
+
+PART H — ROUTE CONTRACT
+-----------------------
+No route changes.
+
+Events = 14
+Community = 36
+
+No schema migration expected.
+
+PART I — MODULE BOUNDARY
+------------------------
+Confirm:
+- EventsModule exports EventsService only
+- no NotificationsModule import
+- no Notification repository/entity
+- no ClassOperations
+- no FamilyPortal
+- no forwardRef
+- ApplicationEvents neutral only
+
+PART J — STATIC INSPECTION
+--------------------------
+Verify:
+1. recipient query is inside update/cancel transaction
+2. same EntityManager is used
+3. EventEntity pessimistic lock is used
+4. registration/re-registration use same EventEntity lock
+5. event publish remains post-commit
+6. no post-commit recipient re-query
+7. raw cancellationReason still excluded
+8. route count unchanged
+9. no N+1
+10. tests/specs written
+11. no runtime validation commands executed
+
+REQUIRED REPORT
+---------------
+Create:
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005B_ATOMIC_REGISTERED_RECIPIENT_SNAPSHOT_REPORT.md
+
+Required sections:
+1 Objective
+2 Fast Implementation Mode
+3 Gap inherited from #005A
+4 Race scenarios
+5 Manager-aware recipient query
+6 Shared EventEntity lock boundary
+7 Significant update transaction flow
+8 Cancellation transaction flow
+9 Post-commit emission
+10 No post-commit recipient re-query
+11 Registration/update serialization
+12 Registration/cancel serialization
+13 Privacy hardening retained
+14 #006 recipient union handoff
+15 Route contract
+16 Module boundary
+17 Unit tests written
+18 Integration tests written
+19 DB E2E/concurrency specs written
+20 Tests executed
+21 DB validation
+22 quality:full
+23 Docker
+24 npm audit
+25 Static inspection
+26 Risks/deferred
+27 BLOCKER/HIGH/MEDIUM/LOW
+28 #006 readiness
+29 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+MANAGER-AWARE REGISTERED RECIPIENT QUERY READY: YES/NO
+
+EVENT UPDATE RECIPIENT SNAPSHOT ATOMIC: YES/NO
+EVENT CANCEL RECIPIENT SNAPSHOT ATOMIC: YES/NO
+
+EVENT UPDATE USES SAME EVENT LOCK BOUNDARY: YES/NO
+EVENT CANCEL USES SAME EVENT LOCK BOUNDARY: YES/NO
+REGISTRATION / UPDATE SERIALIZATION READY: YES/NO
+REGISTRATION / CANCEL SERIALIZATION READY: YES/NO
+
+NO POST-COMMIT RECIPIENT REQUERY: YES/NO
+EVENT EMISSION REMAINS POST-COMMIT: YES/NO
+
+RAW CANCELLATION REASON STILL EXCLUDED: YES/NO
+
+#006 RECIPIENT UNION CONTRACT READY: YES/NO
+
+FINAL EVENT ROUTE COUNT: 14
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E / CONCURRENCY SPECS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#006 READINESS: YES/NO
+
+#006 GATE
+---------
+Proceed only if:
+- update recipient snapshot is atomic
+- cancel recipient snapshot is atomic
+- update/cancel serialize against registration via same Event row lock
+- no post-commit recipient re-query
+- event emission remains post-commit
+- privacy hardening retained
+- route count unchanged
+- BLOCKER=0
+- HIGH=0
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006/7 —
+NOTIFICATIONS — RECIPIENT FAN-OUT + INBOX / READ STATE + DEVICE REGISTRATION + INTEGRATION HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- #005B status
+- atomic snapshot fix
+- lock boundary
+- post-commit emission
+- route count
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Then exactly:
+git commit -m "fix(events): snapshot notification recipients atomically"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.

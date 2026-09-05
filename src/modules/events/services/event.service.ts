@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { generateUuidV4, normalizeUuid } from '../../../database/uuid-v4.util';
 import {
   COMMUNICATION_EVENT_TYPES,
@@ -44,6 +44,7 @@ import {
   assertEventFieldsEditable,
   assertValidEventTransition,
   detectEventSignificantChanges,
+  type EventSignificantChangeType,
   validateEventTimeWindow,
 } from '../utils/event-lifecycle.util';
 import { EventRegistrationService } from './event-registration.service';
@@ -91,6 +92,7 @@ export class EventInternalService {
     private readonly eventRegistrationService: EventRegistrationService,
     @Inject(APPLICATION_EVENT_PUBLISHER)
     private readonly eventPublisher: ApplicationEventPublisher,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(input: CreateEventInput): Promise<EventWithTargetsSnapshot> {
@@ -185,117 +187,147 @@ export class EventInternalService {
   }
 
   async update(id: string, input: UpdateEventInput): Promise<EventWithTargetsSnapshot> {
-    const entity = await this.repository.findOne({
-      where: { id: normalizeUuid(id) },
-    });
-    if (!entity) {
-      throw new EventNotFoundError();
-    }
+    const txResult = await this.dataSource.transaction(async (manager) => {
+      const eventRepo = manager.getRepository(EventEntity);
+      const entity = await eventRepo.findOne({
+        where: { id: normalizeUuid(id) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!entity) {
+        throw new EventNotFoundError();
+      }
 
-    const attemptedFields: string[] = [];
-    if (input.title !== undefined) attemptedFields.push('title');
-    if (input.description !== undefined) attemptedFields.push('description');
-    if (input.summary !== undefined) attemptedFields.push('summary');
-    if (input.locale !== undefined) attemptedFields.push('locale');
-    if (input.scopeType !== undefined) attemptedFields.push('scopeType');
-    if (input.parishId !== undefined) attemptedFields.push('parishId');
-    if (input.classId !== undefined) attemptedFields.push('classId');
-    if (input.timezone !== undefined) attemptedFields.push('timezone');
-    if (input.startsAt !== undefined) attemptedFields.push('startsAt');
-    if (input.endsAt !== undefined) attemptedFields.push('endsAt');
-    if (input.venueName !== undefined) attemptedFields.push('venueName');
-    if (input.address !== undefined) attemptedFields.push('address');
-    if (input.coverMediaAssetId !== undefined) attemptedFields.push('coverMediaAssetId');
-    if (input.capacity !== undefined) attemptedFields.push('capacity');
-    if (input.isRegistrationRequired !== undefined) attemptedFields.push('isRegistrationRequired');
-    if (input.registrationDeadline !== undefined) attemptedFields.push('registrationDeadline');
-    if (input.targets !== undefined) attemptedFields.push('targets');
+      const attemptedFields: string[] = [];
+      if (input.title !== undefined) attemptedFields.push('title');
+      if (input.description !== undefined) attemptedFields.push('description');
+      if (input.summary !== undefined) attemptedFields.push('summary');
+      if (input.locale !== undefined) attemptedFields.push('locale');
+      if (input.scopeType !== undefined) attemptedFields.push('scopeType');
+      if (input.parishId !== undefined) attemptedFields.push('parishId');
+      if (input.classId !== undefined) attemptedFields.push('classId');
+      if (input.timezone !== undefined) attemptedFields.push('timezone');
+      if (input.startsAt !== undefined) attemptedFields.push('startsAt');
+      if (input.endsAt !== undefined) attemptedFields.push('endsAt');
+      if (input.venueName !== undefined) attemptedFields.push('venueName');
+      if (input.address !== undefined) attemptedFields.push('address');
+      if (input.coverMediaAssetId !== undefined) attemptedFields.push('coverMediaAssetId');
+      if (input.capacity !== undefined) attemptedFields.push('capacity');
+      if (input.isRegistrationRequired !== undefined) attemptedFields.push('isRegistrationRequired');
+      if (input.registrationDeadline !== undefined) attemptedFields.push('registrationDeadline');
+      if (input.targets !== undefined) attemptedFields.push('targets');
 
-    assertEventFieldsEditable(entity.status, attemptedFields);
+      assertEventFieldsEditable(entity.status, attemptedFields);
 
-    const newStartsAt = input.startsAt ?? entity.startsAt;
-    const newEndsAt = input.endsAt ?? entity.endsAt;
-    const newDeadline =
-      input.registrationDeadline !== undefined
-        ? input.registrationDeadline
-        : entity.registrationDeadline;
-    validateEventTimeWindow(newStartsAt, newEndsAt, newDeadline);
+      const newStartsAt = input.startsAt ?? entity.startsAt;
+      const newEndsAt = input.endsAt ?? entity.endsAt;
+      const newDeadline =
+        input.registrationDeadline !== undefined
+          ? input.registrationDeadline
+          : entity.registrationDeadline;
+      validateEventTimeWindow(newStartsAt, newEndsAt, newDeadline);
 
-    let significantChanges: string[] = [];
+      let significantChanges: EventSignificantChangeType[] = [];
+      let registeredRecipientUserIds: readonly string[] = [];
 
-    if (entity.status === EventStatus.Published) {
-      // Capacity verification: cannot reduce below active registration count
-      if (input.capacity !== undefined && input.capacity !== null) {
-        const activeCount = await this.eventRegistrationService.countActiveByEventId(entity.id);
-        if (input.capacity < activeCount) {
-          throw new EventCapacityReachedError(
-            `Capacity cannot be set below current active registrations (${activeCount}).`,
+      if (entity.status === EventStatus.Published) {
+        // Capacity verification: cannot reduce below active registration count
+        if (input.capacity !== undefined && input.capacity !== null) {
+          const activeCount = await this.eventRegistrationService.countActiveByEventId(
+            entity.id,
+            manager,
           );
+          if (input.capacity < activeCount) {
+            throw new EventCapacityReachedError(
+              `Capacity cannot be set below current active registrations (${activeCount}).`,
+            );
+          }
+        }
+
+        significantChanges = detectEventSignificantChanges({
+          current: entity,
+          updated: input,
+        });
+
+        if (significantChanges.length > 0) {
+          entity.version = entity.version + 1;
+          // Capture recipient snapshot inside transaction under the pessimistic write lock
+          registeredRecipientUserIds =
+            await this.eventRegistrationService.listNotificationRecipientUserIds(
+              entity.id,
+              manager,
+            );
         }
       }
 
-      significantChanges = detectEventSignificantChanges({
-        current: entity,
-        updated: input,
-      });
-
-      if (significantChanges.length > 0) {
-        entity.version = entity.version + 1;
+      if (entity.status === EventStatus.Draft) {
+        if (input.scopeType !== undefined) entity.scopeType = input.scopeType;
+        if (input.parishId !== undefined) {
+          entity.parishId = input.parishId ? normalizeUuid(input.parishId) : null;
+        }
+        if (input.classId !== undefined) {
+          entity.classId = input.classId ? normalizeUuid(input.classId) : null;
+        }
+        entity.scopeKey = buildEventScopeKey({
+          scopeType: entity.scopeType,
+          parishId: entity.parishId,
+          classId: entity.classId,
+        });
       }
-    }
 
-    if (entity.status === EventStatus.Draft) {
-      if (input.scopeType !== undefined) entity.scopeType = input.scopeType;
-      if (input.parishId !== undefined) {
-        entity.parishId = input.parishId ? normalizeUuid(input.parishId) : null;
+      if (input.title !== undefined) entity.title = input.title.trim();
+      if (input.description !== undefined) entity.description = input.description;
+      if (input.summary !== undefined) entity.summary = input.summary?.trim() ?? null;
+      if (input.locale !== undefined) entity.locale = input.locale;
+      if (input.timezone !== undefined) entity.timezone = input.timezone;
+      if (input.startsAt !== undefined) entity.startsAt = input.startsAt;
+      if (input.endsAt !== undefined) entity.endsAt = input.endsAt;
+      if (input.venueName !== undefined) entity.venueName = input.venueName?.trim() ?? null;
+      if (input.address !== undefined) entity.address = input.address?.trim() ?? null;
+      if (input.coverMediaAssetId !== undefined) {
+        entity.coverMediaAssetId = input.coverMediaAssetId
+          ? normalizeUuid(input.coverMediaAssetId)
+          : null;
       }
-      if (input.classId !== undefined) {
-        entity.classId = input.classId ? normalizeUuid(input.classId) : null;
+      if (input.capacity !== undefined) entity.capacity = input.capacity;
+      if (input.isRegistrationRequired !== undefined) {
+        entity.isRegistrationRequired = input.isRegistrationRequired;
       }
-      entity.scopeKey = buildEventScopeKey({
-        scopeType: entity.scopeType,
-        parishId: entity.parishId,
-        classId: entity.classId,
-      });
-    }
+      if (input.registrationDeadline !== undefined) {
+        entity.registrationDeadline = input.registrationDeadline;
+      }
 
-    if (input.title !== undefined) entity.title = input.title.trim();
-    if (input.description !== undefined) entity.description = input.description;
-    if (input.summary !== undefined) entity.summary = input.summary?.trim() ?? null;
-    if (input.locale !== undefined) entity.locale = input.locale;
-    if (input.timezone !== undefined) entity.timezone = input.timezone;
-    if (input.startsAt !== undefined) entity.startsAt = input.startsAt;
-    if (input.endsAt !== undefined) entity.endsAt = input.endsAt;
-    if (input.venueName !== undefined) entity.venueName = input.venueName?.trim() ?? null;
-    if (input.address !== undefined) entity.address = input.address?.trim() ?? null;
-    if (input.coverMediaAssetId !== undefined) {
-      entity.coverMediaAssetId = input.coverMediaAssetId
-        ? normalizeUuid(input.coverMediaAssetId)
-        : null;
-    }
-    if (input.capacity !== undefined) entity.capacity = input.capacity;
-    if (input.isRegistrationRequired !== undefined) {
-      entity.isRegistrationRequired = input.isRegistrationRequired;
-    }
-    if (input.registrationDeadline !== undefined) {
-      entity.registrationDeadline = input.registrationDeadline;
-    }
+      entity.updatedByUserId = normalizeUuid(input.updatedByUserId);
+      const saved = await eventRepo.save(entity);
 
-    entity.updatedByUserId = normalizeUuid(input.updatedByUserId);
-    const saved = await this.repository.save(entity);
+      let targets: readonly EventTargetSnapshot[] = [];
+      if (entity.status === EventStatus.Draft && input.targets !== undefined) {
+        targets = await this.eventTargetService.replaceTargets(saved.id, input.targets, manager);
+      } else {
+        targets = await this.eventTargetService.listTargetsByEventId(saved.id, manager);
+      }
 
-    let targets: readonly EventTargetSnapshot[] = [];
-    if (entity.status === EventStatus.Draft && input.targets !== undefined) {
-      targets = await this.eventTargetService.replaceTargets(saved.id, input.targets);
-    } else {
-      targets = await this.eventTargetService.listTargetsByEventId(saved.id);
-    }
+      const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
+        saved.id,
+        manager,
+      );
 
-    // Emit EventUpdatedEvent if significant change occurred on PUBLISHED event
-    if (entity.status === EventStatus.Published && significantChanges.length > 0) {
+      return {
+        event: toEventSnapshot(saved),
+        targets,
+        activeRegistrationCount,
+        significantChanges,
+        registeredRecipientUserIds,
+      };
+    });
+
+    // Post-commit: emit EventUpdatedEvent using ONLY returned snapshot data
+    if (
+      txResult.event.status === EventStatus.Published &&
+      txResult.significantChanges.length > 0
+    ) {
       const targetDescriptors: CommunicationTargetDescriptor[] =
-        targets.length > 0
-          ? targets.map((t) => ({
+        txResult.targets.length > 0
+          ? txResult.targets.map((t) => ({
               targetType: t.targetType,
               parishId: t.parishId,
               classId: t.classId,
@@ -303,70 +335,73 @@ export class EventInternalService {
             }))
           : [
               {
-                targetType: saved.scopeType as unknown as CommunicationTargetType,
-                parishId: saved.parishId,
-                classId: saved.classId,
+                targetType: txResult.event.scopeType as unknown as CommunicationTargetType,
+                parishId: txResult.event.parishId,
+                classId: txResult.event.classId,
               },
             ];
-
-      const registeredRecipientUserIds =
-        await this.eventRegistrationService.listNotificationRecipientUserIds(saved.id);
 
       const eventPayload: EventUpdatedEvent = {
         applicationEventId: generateUuidV4(),
         operationKey: buildEventOperationKey({
           eventType: 'EVENT_UPDATED',
-          eventId: saved.id,
-          version: saved.version,
+          eventId: txResult.event.id,
+          version: txResult.event.version,
         }),
         eventType: COMMUNICATION_EVENT_TYPES.EventUpdated,
         occurredAt: new Date(),
-        eventId: saved.id,
-        version: saved.version,
-        title: saved.title,
-        changeSummary: significantChanges.join(', '),
-        startsAt: saved.startsAt,
-        venueName: saved.venueName,
+        eventId: txResult.event.id,
+        version: txResult.event.version,
+        title: txResult.event.title,
+        changeSummary: txResult.significantChanges.join(', '),
+        startsAt: txResult.event.startsAt,
+        venueName: txResult.event.venueName,
         targets: targetDescriptors,
-        registeredRecipientUserIds,
-        updatedAt: saved.updatedAt,
+        registeredRecipientUserIds: txResult.registeredRecipientUserIds,
+        updatedAt: txResult.event.updatedAt,
       };
 
       await this.eventPublisher.publishCommunicationEvent(eventPayload);
     }
 
-    const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
-      saved.id,
-    );
-
     return {
-      event: toEventSnapshot(saved),
-      targets,
-      activeRegistrationCount,
+      event: txResult.event,
+      targets: txResult.targets,
+      activeRegistrationCount: txResult.activeRegistrationCount,
     };
   }
 
   async publish(id: string, updatedByUserId: string): Promise<EventWithTargetsSnapshot> {
-    const entity = await this.repository.findOne({
-      where: { id: normalizeUuid(id) },
+    const txResult = await this.dataSource.transaction(async (manager) => {
+      const eventRepo = manager.getRepository(EventEntity);
+      const entity = await eventRepo.findOne({
+        where: { id: normalizeUuid(id) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!entity) {
+        throw new EventNotFoundError();
+      }
+
+      assertValidEventTransition(entity.status, EventStatus.Published);
+
+      entity.status = EventStatus.Published;
+      entity.publishedAt = new Date();
+      entity.version = 1;
+      entity.updatedByUserId = normalizeUuid(updatedByUserId);
+
+      const saved = await eventRepo.save(entity);
+      const targets = await this.eventTargetService.listTargetsByEventId(saved.id, manager);
+
+      return {
+        event: toEventSnapshot(saved),
+        targets,
+        activeRegistrationCount: 0,
+      };
     });
-    if (!entity) {
-      throw new EventNotFoundError();
-    }
-
-    assertValidEventTransition(entity.status, EventStatus.Published);
-
-    entity.status = EventStatus.Published;
-    entity.publishedAt = new Date();
-    entity.version = 1;
-    entity.updatedByUserId = normalizeUuid(updatedByUserId);
-
-    const saved = await this.repository.save(entity);
-    const targets = await this.eventTargetService.listTargetsByEventId(saved.id);
 
     const targetDescriptors: CommunicationTargetDescriptor[] =
-      targets.length > 0
-        ? targets.map((t) => ({
+      txResult.targets.length > 0
+        ? txResult.targets.map((t) => ({
             targetType: t.targetType,
             parishId: t.parishId,
             classId: t.classId,
@@ -374,40 +409,40 @@ export class EventInternalService {
           }))
         : [
             {
-              targetType: saved.scopeType as unknown as CommunicationTargetType,
-              parishId: saved.parishId,
-              classId: saved.classId,
+              targetType: txResult.event.scopeType as unknown as CommunicationTargetType,
+              parishId: txResult.event.parishId,
+              classId: txResult.event.classId,
             },
           ];
 
     const safeSnippet =
-      saved.summary ??
-      (saved.description.length > 200
-        ? `${saved.description.slice(0, 197)}...`
-        : saved.description);
+      txResult.event.summary ??
+      (txResult.event.description.length > 200
+        ? `${txResult.event.description.slice(0, 197)}...`
+        : txResult.event.description);
 
     const eventPayload: EventPublishedEvent = {
       applicationEventId: generateUuidV4(),
       operationKey: buildEventOperationKey({
         eventType: 'EVENT_PUBLISHED',
-        eventId: saved.id,
+        eventId: txResult.event.id,
       }),
       eventType: COMMUNICATION_EVENT_TYPES.EventPublished,
       occurredAt: new Date(),
-      eventId: saved.id,
-      title: saved.title,
+      eventId: txResult.event.id,
+      title: txResult.event.title,
       snippet: safeSnippet,
-      startsAt: saved.startsAt,
-      venueName: saved.venueName,
+      startsAt: txResult.event.startsAt,
+      venueName: txResult.event.venueName,
       targets: targetDescriptors,
-      publishedAt: saved.publishedAt,
+      publishedAt: txResult.event.publishedAt!,
     };
 
     await this.eventPublisher.publishCommunicationEvent(eventPayload);
 
     return {
-      event: toEventSnapshot(saved),
-      targets,
+      event: txResult.event,
+      targets: txResult.targets,
       activeRegistrationCount: 0,
     };
   }
@@ -417,27 +452,46 @@ export class EventInternalService {
     reason: string,
     updatedByUserId: string,
   ): Promise<EventWithTargetsSnapshot> {
-    const entity = await this.repository.findOne({
-      where: { id: normalizeUuid(id) },
+    const txResult = await this.dataSource.transaction(async (manager) => {
+      const eventRepo = manager.getRepository(EventEntity);
+      const entity = await eventRepo.findOne({
+        where: { id: normalizeUuid(id) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!entity) {
+        throw new EventNotFoundError();
+      }
+
+      assertValidEventTransition(entity.status, EventStatus.Cancelled);
+
+      const targets = await this.eventTargetService.listTargetsByEventId(entity.id, manager);
+      // Capture recipient snapshot inside transaction under the pessimistic write lock
+      const registeredRecipientUserIds =
+        await this.eventRegistrationService.listNotificationRecipientUserIds(entity.id, manager);
+
+      entity.status = EventStatus.Cancelled;
+      entity.cancelledAt = new Date();
+      entity.cancellationReason = reason.trim();
+      entity.version = entity.version + 1;
+      entity.updatedByUserId = normalizeUuid(updatedByUserId);
+
+      const saved = await eventRepo.save(entity);
+      const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
+        saved.id,
+        manager,
+      );
+
+      return {
+        event: toEventSnapshot(saved),
+        targets,
+        activeRegistrationCount,
+        registeredRecipientUserIds,
+      };
     });
-    if (!entity) {
-      throw new EventNotFoundError();
-    }
-
-    assertValidEventTransition(entity.status, EventStatus.Cancelled);
-
-    entity.status = EventStatus.Cancelled;
-    entity.cancelledAt = new Date();
-    entity.cancellationReason = reason.trim();
-    entity.version = entity.version + 1;
-    entity.updatedByUserId = normalizeUuid(updatedByUserId);
-
-    const saved = await this.repository.save(entity);
-    const targets = await this.eventTargetService.listTargetsByEventId(saved.id);
 
     const targetDescriptors: CommunicationTargetDescriptor[] =
-      targets.length > 0
-        ? targets.map((t) => ({
+      txResult.targets.length > 0
+        ? txResult.targets.map((t) => ({
             targetType: t.targetType,
             parishId: t.parishId,
             classId: t.classId,
@@ -445,94 +499,97 @@ export class EventInternalService {
           }))
         : [
             {
-              targetType: saved.scopeType as unknown as CommunicationTargetType,
-              parishId: saved.parishId,
-              classId: saved.classId,
+              targetType: txResult.event.scopeType as unknown as CommunicationTargetType,
+              parishId: txResult.event.parishId,
+              classId: txResult.event.classId,
             },
           ];
-
-    const registeredRecipientUserIds =
-      await this.eventRegistrationService.listNotificationRecipientUserIds(saved.id);
 
     const eventPayload: EventCancelledEvent = {
       applicationEventId: generateUuidV4(),
       operationKey: buildEventOperationKey({
         eventType: 'EVENT_CANCELLED',
-        eventId: saved.id,
+        eventId: txResult.event.id,
       }),
       eventType: COMMUNICATION_EVENT_TYPES.EventCancelled,
       occurredAt: new Date(),
-      eventId: saved.id,
-      title: saved.title,
+      eventId: txResult.event.id,
+      title: txResult.event.title,
       cancellationSummary: 'Event cancelled',
       targets: targetDescriptors,
-      registeredRecipientUserIds,
-      cancelledAt: saved.cancelledAt,
+      registeredRecipientUserIds: txResult.registeredRecipientUserIds,
+      cancelledAt: txResult.event.cancelledAt!,
     };
 
     await this.eventPublisher.publishCommunicationEvent(eventPayload);
 
-    const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
-      saved.id,
-    );
-
     return {
-      event: toEventSnapshot(saved),
-      targets,
-      activeRegistrationCount,
+      event: txResult.event,
+      targets: txResult.targets,
+      activeRegistrationCount: txResult.activeRegistrationCount,
     };
   }
 
   async complete(id: string, updatedByUserId: string): Promise<EventWithTargetsSnapshot> {
-    const entity = await this.repository.findOne({
-      where: { id: normalizeUuid(id) },
+    return this.dataSource.transaction(async (manager) => {
+      const eventRepo = manager.getRepository(EventEntity);
+      const entity = await eventRepo.findOne({
+        where: { id: normalizeUuid(id) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!entity) {
+        throw new EventNotFoundError();
+      }
+
+      assertValidEventTransition(entity.status, EventStatus.Completed);
+
+      entity.status = EventStatus.Completed;
+      entity.updatedByUserId = normalizeUuid(updatedByUserId);
+
+      const saved = await eventRepo.save(entity);
+      const targets = await this.eventTargetService.listTargetsByEventId(saved.id, manager);
+      const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
+        saved.id,
+        manager,
+      );
+
+      return {
+        event: toEventSnapshot(saved),
+        targets,
+        activeRegistrationCount,
+      };
     });
-    if (!entity) {
-      throw new EventNotFoundError();
-    }
-
-    assertValidEventTransition(entity.status, EventStatus.Completed);
-
-    entity.status = EventStatus.Completed;
-    entity.updatedByUserId = normalizeUuid(updatedByUserId);
-
-    const saved = await this.repository.save(entity);
-    const targets = await this.eventTargetService.listTargetsByEventId(saved.id);
-    const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
-      saved.id,
-    );
-
-    return {
-      event: toEventSnapshot(saved),
-      targets,
-      activeRegistrationCount,
-    };
   }
 
   async archive(id: string, updatedByUserId: string): Promise<EventWithTargetsSnapshot> {
-    const entity = await this.repository.findOne({
-      where: { id: normalizeUuid(id) },
+    return this.dataSource.transaction(async (manager) => {
+      const eventRepo = manager.getRepository(EventEntity);
+      const entity = await eventRepo.findOne({
+        where: { id: normalizeUuid(id) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!entity) {
+        throw new EventNotFoundError();
+      }
+
+      assertValidEventTransition(entity.status, EventStatus.Archived);
+
+      entity.status = EventStatus.Archived;
+      entity.updatedByUserId = normalizeUuid(updatedByUserId);
+
+      const saved = await eventRepo.save(entity);
+      const targets = await this.eventTargetService.listTargetsByEventId(saved.id, manager);
+      const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
+        saved.id,
+        manager,
+      );
+
+      return {
+        event: toEventSnapshot(saved),
+        targets,
+        activeRegistrationCount,
+      };
     });
-    if (!entity) {
-      throw new EventNotFoundError();
-    }
-
-    assertValidEventTransition(entity.status, EventStatus.Archived);
-
-    entity.status = EventStatus.Archived;
-    entity.updatedByUserId = normalizeUuid(updatedByUserId);
-
-    const saved = await this.repository.save(entity);
-    const targets = await this.eventTargetService.listTargetsByEventId(saved.id);
-    const activeRegistrationCount = await this.eventRegistrationService.countActiveByEventId(
-      saved.id,
-    );
-
-    return {
-      event: toEventSnapshot(saved),
-      targets,
-      activeRegistrationCount,
-    };
   }
 
   async findAdminList(

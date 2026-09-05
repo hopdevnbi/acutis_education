@@ -288,8 +288,32 @@ describe('EventRegistrationService', () => {
     });
   });
 
+  describe('countActiveByEventId', () => {
+    it('uses injected repository when manager is not provided', async () => {
+      (repository.count as jest.Mock).mockResolvedValue(5);
+
+      const count = await service.countActiveByEventId(eventId);
+      expect(count).toBe(5);
+      expect(repository.count).toHaveBeenCalled();
+    });
+
+    it('uses manager.getRepository when manager is provided', async () => {
+      const managerRepo = {
+        count: jest.fn().mockResolvedValue(8),
+      };
+      const managerMock = {
+        getRepository: jest.fn().mockReturnValue(managerRepo),
+      } as any;
+
+      const count = await service.countActiveByEventId(eventId, managerMock);
+      expect(count).toBe(8);
+      expect(managerMock.getRepository).toHaveBeenCalledWith(EventRegistrationEntity);
+      expect(managerRepo.count).toHaveBeenCalled();
+    });
+  });
+
   describe('listNotificationRecipientUserIds', () => {
-    it('queries DISTINCT user_id for REGISTERED and ATTENDED statuses', async () => {
+    it('queries DISTINCT user_id for REGISTERED and ATTENDED statuses using injected repo', async () => {
       const qbMock = {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -312,6 +336,30 @@ describe('EventRegistrationService', () => {
         '22222222-2222-4222-8222-222222222222',
         '33333333-3333-4333-8333-333333333333',
       ]);
+    });
+
+    it('uses manager.getRepository when manager is provided for atomic in-transaction query', async () => {
+      const qbMock = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { userId: '22222222-2222-4222-8222-222222222222' },
+        ]),
+      };
+      const managerRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue(qbMock),
+      };
+      const managerMock = {
+        getRepository: jest.fn().mockReturnValue(managerRepo),
+      } as any;
+
+      const userIds = await service.listNotificationRecipientUserIds(eventId, managerMock);
+
+      expect(managerMock.getRepository).toHaveBeenCalledWith(EventRegistrationEntity);
+      expect(managerRepo.createQueryBuilder).toHaveBeenCalledWith('reg');
+      expect(qbMock.where).toHaveBeenCalledWith('reg.eventId = :eid', { eid: eventId });
+      expect(userIds).toEqual(['22222222-2222-4222-8222-222222222222']);
     });
 
     it('returns empty array when no active registrations exist', async () => {

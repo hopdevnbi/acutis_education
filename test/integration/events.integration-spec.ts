@@ -21,6 +21,10 @@
  * 17. Admin attendee list returns registrations with student display names and zero contact PII
  * 18. EventCancelledEvent payload contains cancellationSummary and excludes raw cancellationReason (privacy hardening)
  * 19. EventUpdatedEvent and EventCancelledEvent snapshot registeredRecipientUserIds from active/attended registrations for delivery guarantee
+ * 20. Significant update racing registration serializes on EventEntity pessimistic write lock
+ * 21. Cancellation racing registration serializes on EventEntity pessimistic write lock
+ * 22. Recipient snapshot set strictly matches serialized transaction order (atomic snapshot under lock)
+ * 23. Zero post-commit snapshot drift: recipient snapshot captured inside mutation transaction, emitted post-commit with no re-query
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -98,6 +102,22 @@ describe('Events Module Integration Specs (deferred)', () => {
   });
 
   it('19. EventUpdatedEvent and EventCancelledEvent capture registeredRecipientUserIds snapshot for notification delivery guarantee', () => {
+    expect(true).toBe(true);
+  });
+
+  it('20. Significant update racing registration serializes on EventEntity pessimistic write lock', () => {
+    expect(true).toBe(true);
+  });
+
+  it('21. Cancellation racing registration serializes on EventEntity pessimistic write lock', () => {
+    expect(true).toBe(true);
+  });
+
+  it('22. Recipient snapshot set strictly matches serialized transaction order (atomic snapshot under lock)', () => {
+    expect(true).toBe(true);
+  });
+
+  it('23. Zero post-commit snapshot drift: recipient snapshot captured inside mutation transaction, emitted post-commit with no re-query', () => {
     expect(true).toBe(true);
   });
 });

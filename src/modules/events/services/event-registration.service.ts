@@ -295,8 +295,9 @@ export class EventRegistrationService {
     return entities.map(toEventRegistrationSnapshot);
   }
 
-  async countActiveByEventId(eventId: string): Promise<number> {
-    return this.repository.count({
+  async countActiveByEventId(eventId: string, manager?: EntityManager): Promise<number> {
+    const repo = manager ? manager.getRepository(EventRegistrationEntity) : this.repository;
+    return repo.count({
       where: {
         eventId: normalizeUuid(eventId),
         status: In([EventRegistrationStatus.Registered, EventRegistrationStatus.Attended]),

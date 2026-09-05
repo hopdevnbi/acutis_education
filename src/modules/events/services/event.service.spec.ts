@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import { DataSource, type Repository } from 'typeorm';
 import { APPLICATION_EVENT_PUBLISHER } from '../../application-events/ports/application-event.ports';
 import { EventEntity } from '../entities/event.entity';
 import {
@@ -25,6 +25,9 @@ describe('EventInternalService', () => {
   let eventTargetService: jest.Mocked<Partial<EventTargetService>>;
   let eventRegistrationService: jest.Mocked<Partial<EventRegistrationService>>;
   let eventPublisher: { publishCommunicationEvent: jest.Mock };
+  let dataSource: any;
+  let mockManager: any;
+  let executionLog: string[];
 
   const eventId = '11111111-1111-4111-8111-111111111111';
   const authorUserId = '22222222-2222-4222-8222-222222222222';
@@ -61,12 +64,32 @@ describe('EventInternalService', () => {
   };
 
   beforeEach(async () => {
+    executionLog = [];
+
     repository = {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn().mockImplementation((dto) => ({ ...mockDraftEntity, ...dto })),
       save: jest.fn().mockImplementation(async (entity) => entity),
       createQueryBuilder: jest.fn(),
+    };
+
+    mockManager = {
+      getRepository: jest.fn().mockImplementation((token) => {
+        if (token === EventEntity) {
+          return repository;
+        }
+        return repository;
+      }),
+    };
+
+    dataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => {
+        executionLog.push('tx:start');
+        const res = await cb(mockManager);
+        executionLog.push('tx:commit');
+        return res;
+      }),
     };
 
     eventTargetService = {
@@ -76,11 +99,16 @@ describe('EventInternalService', () => {
 
     eventRegistrationService = {
       countActiveByEventId: jest.fn().mockResolvedValue(10),
-      listNotificationRecipientUserIds: jest.fn().mockResolvedValue(['user-1', 'user-2']),
+      listNotificationRecipientUserIds: jest.fn().mockImplementation(async () => {
+        executionLog.push('snapshot:recipients');
+        return ['user-1', 'user-2'];
+      }),
     };
 
     eventPublisher = {
-      publishCommunicationEvent: jest.fn().mockResolvedValue(undefined),
+      publishCommunicationEvent: jest.fn().mockImplementation(async () => {
+        executionLog.push('event:published');
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -90,6 +118,7 @@ describe('EventInternalService', () => {
         { provide: EventTargetService, useValue: eventTargetService },
         { provide: EventRegistrationService, useValue: eventRegistrationService },
         { provide: APPLICATION_EVENT_PUBLISHER, useValue: eventPublisher },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -134,11 +163,15 @@ describe('EventInternalService', () => {
   });
 
   describe('publish', () => {
-    it('transitions DRAFT to PUBLISHED, sets version=1, and emits EventPublishedEvent post-commit', async () => {
+    it('uses pessimistic write lock on EventEntity, sets publishedAt, version=1, and emits EventPublishedEvent post-commit', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({ ...mockDraftEntity });
 
       const result = await service.publish(eventId, authorUserId);
 
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { id: eventId },
+        lock: { mode: 'pessimistic_write' },
+      });
       expect(result.event.status).toBe(EventStatus.Published);
       expect(result.event.version).toBe(1);
       expect(result.event.publishedAt).not.toBeNull();
@@ -149,6 +182,7 @@ describe('EventInternalService', () => {
           eventId,
         }),
       );
+      expect(executionLog).toEqual(['tx:start', 'tx:commit', 'event:published']);
     });
 
     it('throws EventAlreadyPublishedError if already published', async () => {
@@ -178,7 +212,7 @@ describe('EventInternalService', () => {
       ).rejects.toThrow(EventNotEditableError);
     });
 
-    it('emits EventUpdatedEvent and increments version on significant change when PUBLISHED', async () => {
+    it('significant update uses event pessimistic lock and captures recipient snapshot inside transaction before commit', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({
         ...mockDraftEntity,
         status: EventStatus.Published,
@@ -190,6 +224,14 @@ describe('EventInternalService', () => {
         updatedByUserId: authorUserId,
       });
 
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { id: eventId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledWith(
+        eventId,
+        mockManager,
+      );
       expect(result.event.version).toBe(2);
       expect(eventPublisher.publishCommunicationEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -198,6 +240,51 @@ describe('EventInternalService', () => {
           changeSummary: 'VENUE',
           registeredRecipientUserIds: ['user-1', 'user-2'],
         }),
+      );
+
+      // Verify execution order: snapshot inside transaction BEFORE commit, event published AFTER commit
+      expect(executionLog).toEqual([
+        'tx:start',
+        'snapshot:recipients',
+        'tx:commit',
+        'event:published',
+      ]);
+    });
+
+    it('minor update skips recipient snapshot and skips event emission', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue({
+        ...mockDraftEntity,
+        status: EventStatus.Published,
+        version: 1,
+      });
+
+      const result = await service.update(eventId, {
+        summary: 'Updated summary note only',
+        updatedByUserId: authorUserId,
+      });
+
+      expect(result.event.version).toBe(1); // unchanged
+      expect(eventRegistrationService.listNotificationRecipientUserIds).not.toHaveBeenCalled();
+      expect(eventPublisher.publishCommunicationEvent).not.toHaveBeenCalled();
+      expect(executionLog).toEqual(['tx:start', 'tx:commit']);
+    });
+
+    it('no post-commit registration re-query occurs after transaction commits', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue({
+        ...mockDraftEntity,
+        status: EventStatus.Published,
+        version: 1,
+      });
+
+      await service.update(eventId, {
+        venueName: 'New Venue',
+        updatedByUserId: authorUserId,
+      });
+
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledTimes(1);
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledWith(
+        eventId,
+        mockManager,
       );
     });
 
@@ -219,7 +306,7 @@ describe('EventInternalService', () => {
   });
 
   describe('cancel', () => {
-    it('transitions to CANCELLED, increments version, and emits EventCancelledEvent with cancellationSummary and without raw reason', async () => {
+    it('cancellation uses event pessimistic lock, captures recipient snapshot inside transaction, and emits EventCancelledEvent post-commit without raw reason', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({
         ...mockDraftEntity,
         status: EventStatus.Published,
@@ -232,8 +319,25 @@ describe('EventInternalService', () => {
         authorUserId,
       );
 
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { id: eventId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledWith(
+        eventId,
+        mockManager,
+      );
       expect(result.event.status).toBe(EventStatus.Cancelled);
       expect(result.event.version).toBe(2);
+
+      // Verify execution order: snapshot inside transaction BEFORE commit, event published AFTER commit
+      expect(executionLog).toEqual([
+        'tx:start',
+        'snapshot:recipients',
+        'tx:commit',
+        'event:published',
+      ]);
+
       expect(eventPublisher.publishCommunicationEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'COMMUNICATION_EVENT.EVENT_CANCELLED',
@@ -246,8 +350,25 @@ describe('EventInternalService', () => {
       const publishedPayload = eventPublisher.publishCommunicationEvent.mock.calls[0][0];
       expect(publishedPayload.cancellationReason).toBeUndefined();
       expect(publishedPayload.cancellationSummary).toBe('Event cancelled');
-      expect(JSON.stringify(publishedPayload)).not.toContain('Confidential reason with child student medical note.');
+      expect(JSON.stringify(publishedPayload)).not.toContain(
+        'Confidential reason with child student medical note.',
+      );
     });
+
+    it('no post-commit registration re-query on cancellation', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue({
+        ...mockDraftEntity,
+        status: EventStatus.Published,
+        version: 1,
+      });
+
+      await service.cancel(eventId, 'Standard weather cancellation', authorUserId);
+
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledTimes(1);
+      expect(eventRegistrationService.listNotificationRecipientUserIds).toHaveBeenCalledWith(
+        eventId,
+        mockManager,
+      );
     });
   });
 });

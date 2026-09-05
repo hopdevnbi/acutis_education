@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { EventTargetEntity } from '../entities/event-target.entity';
 import type {
@@ -30,7 +30,10 @@ export class EventTargetService {
     private readonly repository: Repository<EventTargetEntity>,
   ) {}
 
-  async addTarget(input: CreateEventTargetInput): Promise<EventTargetSnapshot> {
+  async addTarget(
+    input: CreateEventTargetInput,
+    manager?: EntityManager,
+  ): Promise<EventTargetSnapshot> {
     const targetKey = buildEventTargetKey({
       targetType: input.targetType,
       parishId: input.parishId,
@@ -39,15 +42,16 @@ export class EventTargetService {
     });
 
     const eventId = normalizeUuid(input.eventId);
+    const repo = manager ? manager.getRepository(EventTargetEntity) : this.repository;
 
-    const existing = await this.repository.findOne({
+    const existing = await repo.findOne({
       where: { eventId, targetKey },
     });
     if (existing) {
       return toEventTargetSnapshot(existing);
     }
 
-    const entity = this.repository.create({
+    const entity = repo.create({
       eventId,
       targetType: input.targetType,
       parishId: input.parishId ? normalizeUuid(input.parishId) : null,
@@ -56,18 +60,20 @@ export class EventTargetService {
       targetKey,
     });
 
-    const saved = await this.repository.save(entity);
+    const saved = await repo.save(entity);
     return toEventTargetSnapshot(saved);
   }
 
   async replaceTargets(
     eventId: string,
     targets: readonly EventTargetInput[],
+    manager?: EntityManager,
   ): Promise<readonly EventTargetSnapshot[]> {
     const eid = normalizeUuid(eventId);
+    const repo = manager ? manager.getRepository(EventTargetEntity) : this.repository;
 
     // Remove existing targets
-    await this.repository.delete({ eventId: eid });
+    await repo.delete({ eventId: eid });
 
     // Deduplicate targets by targetKey
     const targetKeyMap = new Map<string, EventTargetInput>();
@@ -86,7 +92,7 @@ export class EventTargetService {
     const entities: EventTargetEntity[] = [];
     for (const [key, t] of targetKeyMap.entries()) {
       entities.push(
-        this.repository.create({
+        repo.create({
           eventId: eid,
           targetType: t.targetType,
           parishId: t.parishId ? normalizeUuid(t.parishId) : null,
@@ -101,12 +107,16 @@ export class EventTargetService {
       return [];
     }
 
-    const saved = await this.repository.save(entities);
+    const saved = await repo.save(entities);
     return saved.map(toEventTargetSnapshot);
   }
 
-  async listTargetsByEventId(eventId: string): Promise<readonly EventTargetSnapshot[]> {
-    const entities = await this.repository.find({
+  async listTargetsByEventId(
+    eventId: string,
+    manager?: EntityManager,
+  ): Promise<readonly EventTargetSnapshot[]> {
+    const repo = manager ? manager.getRepository(EventTargetEntity) : this.repository;
+    const entities = await repo.find({
       where: { eventId: normalizeUuid(eventId) },
     });
     return entities.map(toEventTargetSnapshot);
@@ -114,6 +124,7 @@ export class EventTargetService {
 
   async listTargetsByEventIds(
     eventIds: readonly string[],
+    manager?: EntityManager,
   ): Promise<Map<string, EventTargetSnapshot[]>> {
     const uniqueIds = Array.from(new Set(eventIds.map(normalizeUuid)));
     const targetMap = new Map<string, EventTargetSnapshot[]>();
@@ -122,7 +133,8 @@ export class EventTargetService {
       return targetMap;
     }
 
-    const entities = await this.repository.find({
+    const repo = manager ? manager.getRepository(EventTargetEntity) : this.repository;
+    const entities = await repo.find({
       where: { eventId: In(uniqueIds) },
     });
 
@@ -136,7 +148,8 @@ export class EventTargetService {
     return targetMap;
   }
 
-  async removeTargetsByEventId(eventId: string): Promise<void> {
-    await this.repository.delete({ eventId: normalizeUuid(eventId) });
+  async removeTargetsByEventId(eventId: string, manager?: EntityManager): Promise<void> {
+    const repo = manager ? manager.getRepository(EventTargetEntity) : this.repository;
+    await repo.delete({ eventId: normalizeUuid(eventId) });
   }
 }

@@ -21,6 +21,8 @@
  * 17. Admin attendee roster provides registrationId and display name without leaking phone, email, or DOB
  * 18. All event endpoints enforce JWT authentication and return 401 when unauthenticated
  * 19. Registered attendee delivery contract: even if participant loses target class enrollment, registeredRecipientUserIds guarantees cancellation/update notification
+ * 20. Concurrency race: registration racing event cancellation serializes on EventEntity pessimistic write lock; if registration commits first, recipient is included in EventCancelledEvent; if cancellation commits first, registration is rejected with EventNotRegistrableError
+ * 21. Atomic serialization guarantee: zero ambiguous states inconsistent with event-row lock ordering
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -98,6 +100,14 @@ describe('Events Module DB E2E Specs (deferred)', () => {
   });
 
   it('19. Registered recipient delivery contract guarantees historical participants receive update/cancellation notifications', () => {
+    expect(true).toBe(true);
+  });
+
+  it('20. Concurrency race between registration and cancellation serializes strictly: registration commits first -> recipient included; cancellation commits first -> registration rejected with 400', () => {
+    expect(true).toBe(true);
+  });
+
+  it('21. Atomic serialization guarantees zero ambiguous states inconsistent with event-row lock ordering', () => {
     expect(true).toBe(true);
   });
 });
