@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type {
-  AnnouncementSnapshot,
+  AnnouncementAdminListFilter,
+  AnnouncementFeedFilter,
+  AnnouncementFeedItemSnapshot,
+  AnnouncementPaginatedResult,
   AnnouncementTargetSnapshot,
   AnnouncementUserStateSnapshot,
+  AnnouncementWithTargetsSnapshot,
   CreateAnnouncementInput,
-  CreateAnnouncementTargetInput,
   UpdateAnnouncementInput,
 } from './interfaces/announcement.interfaces';
 import { AnnouncementTargetService } from './services/announcement-target.service';
@@ -19,35 +22,64 @@ export class AnnouncementsService {
     private readonly announcementUserStateService: AnnouncementUserStateService,
   ) {}
 
-  async createAnnouncement(input: CreateAnnouncementInput): Promise<AnnouncementSnapshot> {
+  async createAnnouncement(
+    input: CreateAnnouncementInput,
+  ): Promise<AnnouncementWithTargetsSnapshot> {
     return this.announcementInternalService.create(input);
   }
 
-  async getAnnouncementById(id: string): Promise<AnnouncementSnapshot> {
+  async getAnnouncementById(id: string): Promise<AnnouncementWithTargetsSnapshot> {
     return this.announcementInternalService.getById(id);
   }
 
   async updateAnnouncement(
     id: string,
     input: UpdateAnnouncementInput,
-  ): Promise<AnnouncementSnapshot> {
+  ): Promise<AnnouncementWithTargetsSnapshot> {
     return this.announcementInternalService.update(id, input);
   }
 
-  async publishAnnouncement(id: string, updatedByUserId: string): Promise<AnnouncementSnapshot> {
+  async publishAnnouncement(
+    id: string,
+    updatedByUserId: string,
+  ): Promise<AnnouncementWithTargetsSnapshot> {
     return this.announcementInternalService.publish(id, updatedByUserId);
   }
 
-  async archiveAnnouncement(id: string, updatedByUserId: string): Promise<AnnouncementSnapshot> {
+  async archiveAnnouncement(
+    id: string,
+    updatedByUserId: string,
+  ): Promise<AnnouncementWithTargetsSnapshot> {
     return this.announcementInternalService.archive(id, updatedByUserId);
   }
 
-  async addTarget(input: CreateAnnouncementTargetInput): Promise<AnnouncementTargetSnapshot> {
-    return this.announcementTargetService.addTarget(input);
+  async findAdminList(
+    filter: AnnouncementAdminListFilter,
+  ): Promise<AnnouncementPaginatedResult<AnnouncementWithTargetsSnapshot>> {
+    return this.announcementInternalService.findAdminList(filter);
   }
 
-  async listTargets(announcementId: string): Promise<readonly AnnouncementTargetSnapshot[]> {
-    return this.announcementTargetService.listTargetsByAnnouncementId(announcementId);
+  async findUserFeed(
+    filter: AnnouncementFeedFilter,
+    now?: Date,
+  ): Promise<AnnouncementPaginatedResult<AnnouncementFeedItemSnapshot>> {
+    return this.announcementInternalService.findUserFeed(filter, now);
+  }
+
+  async getUserFeedItemById(
+    id: string,
+    userId: string,
+    audienceKeys: readonly string[],
+    now?: Date,
+  ): Promise<AnnouncementFeedItemSnapshot | null> {
+    return this.announcementInternalService.getUserFeedItemById(id, userId, audienceKeys, now);
+  }
+
+  async dismissAnnouncement(
+    id: string,
+    userId: string,
+  ): Promise<AnnouncementUserStateSnapshot> {
+    return this.announcementUserStateService.markDismissed(id, userId);
   }
 
   async markSeen(announcementId: string, userId: string): Promise<AnnouncementUserStateSnapshot> {
@@ -58,11 +90,8 @@ export class AnnouncementsService {
     return this.announcementUserStateService.markRead(announcementId, userId);
   }
 
-  async markDismissed(
-    announcementId: string,
-    userId: string,
-  ): Promise<AnnouncementUserStateSnapshot> {
-    return this.announcementUserStateService.markDismissed(announcementId, userId);
+  async listTargets(announcementId: string): Promise<readonly AnnouncementTargetSnapshot[]> {
+    return this.announcementTargetService.listTargetsByAnnouncementId(announcementId);
   }
 
   async getUserState(

@@ -77,14 +77,19 @@ export class AnnouncementUserStateService {
       if (!state.firstSeenAt) {
         state.firstSeenAt = now;
       }
-      state.readAt = now;
+      if (!state.readAt) {
+        state.readAt = now;
+      }
     }
 
     const saved = await this.repository.save(state);
     return toAnnouncementUserStateSnapshot(saved);
   }
 
-  async markDismissed(announcementId: string, userId: string): Promise<AnnouncementUserStateSnapshot> {
+  async markDismissed(
+    announcementId: string,
+    userId: string,
+  ): Promise<AnnouncementUserStateSnapshot> {
     const aid = normalizeUuid(announcementId);
     const uid = normalizeUuid(userId);
     const now = new Date();
@@ -102,14 +107,25 @@ export class AnnouncementUserStateService {
         dismissedAt: now,
       });
     } else {
-      state.dismissedAt = now;
+      if (!state.firstSeenAt) {
+        state.firstSeenAt = now;
+      }
+      if (!state.readAt) {
+        state.readAt = now;
+      }
+      if (!state.dismissedAt) {
+        state.dismissedAt = now;
+      }
     }
 
     const saved = await this.repository.save(state);
     return toAnnouncementUserStateSnapshot(saved);
   }
 
-  async getState(announcementId: string, userId: string): Promise<AnnouncementUserStateSnapshot | null> {
+  async getState(
+    announcementId: string,
+    userId: string,
+  ): Promise<AnnouncementUserStateSnapshot | null> {
     const state = await this.repository.findOne({
       where: {
         announcementId: normalizeUuid(announcementId),

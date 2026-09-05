@@ -1,0 +1,1596 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #004/7
+FAST IMPLEMENTATION MODE
+ANNOUNCEMENTS — TARGETING + PUBLISHING + USER FEED / READ STATE + NOTIFICATION EVENT EMISSION
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production Announcement code
+- controllers
+- DTOs
+- services
+- lifecycle helpers
+- target resolution helpers
+- access/scope logic
+- lazy user-state tracking
+- communication event emission
+- unit/integration/DB e2e specs
+- README/OpenAPI updates
+- report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not mark deferred validation as failure.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture/security/privacy/minors/modular boundaries remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(announcements): add targeting publishing and user feed"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7
+Domain audit/design
+
+#001A
+Corrective event lifecycle + notification idempotency audit
+
+#002/7
+Persistence foundation
+
+#003/7
+CMS implementation
+
+#003A
+Route contract lock
+
+FROZEN AUTHORITATIVE ROUTE COUNTS:
+
+CMS = 8
+Announcements = 8
+Events = 13
+Notifications = 6
+
+FINAL COMMUNITY ROUTE COUNT TARGET = 35
+
+Do NOT change these counts silently.
+
+Frozen Announcement persistence:
+
+Tables:
+1. announcements
+2. announcement_targets
+3. announcement_user_states
+
+Announcement fields include:
+- id
+- title
+- body
+- summary
+- locale
+- priority
+- status
+- scope_type
+- parish_id
+- starts_at
+- ends_at
+- is_pinned
+- cover_media_asset_id
+- published_at
+- created_by_user_id
+- updated_by_user_id
+- timestamps
+
+Targets:
+- GLOBAL
+- PARISH
+- CLASS
+- ROLE
+
+Target key:
+- GLOBAL
+- PARISH:<parishId>
+- CLASS:<classId>
+- ROLE:<parishId>:<roleCode>
+
+User state:
+- firstSeenAt
+- readAt
+- dismissedAt
+
+Lifecycle:
+DRAFT -> PUBLISHED -> ARCHIVED
+
+Publishing emits:
+AnnouncementPublishedEvent
+
+Communication event identity:
+operationKey =
+ANNOUNCEMENT_PUBLISHED:<announcementId>
+
+Notifications module later consumes it in #006.
+
+Permissions:
+announcements.read
+announcements.manage
+announcements.publish
+
+Scope:
+SUPER_ADMIN
+- global/all
+
+PARISH_ADMIN
+- own parish
+
+CATECHIST
+- assigned CLASS only
+- no parish-wide/global announcement management
+
+PARENT/STUDENT
+- read only if targeted
+
+Current:
+#004/7 — ANNOUNCEMENTS
+
+Remaining:
+#005 Events
+#006 Notifications
+#007 Finalization
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Implement complete Announcement MVP:
+
+1. admin list/create/update
+2. explicit publish
+3. archive
+4. target validation
+5. target visibility
+6. actor feed
+7. detail
+8. lazy firstSeen/read state
+9. dismiss
+10. active display window
+11. priority/pinned
+12. post-commit AnnouncementPublishedEvent
+13. stable operationKey
+14. no direct Notifications dependency
+15. OpenAPI/README
+16. tests/specs
+
+Do NOT implement actual notification recipient fan-out here.
+That belongs to #006.
+
+==================================================
+PART A — FINAL ANNOUNCEMENT ROUTE INVENTORY
+==================================================
+
+Implement exactly these 8 routes:
+
+1.
+GET /api/v1/announcements
+
+2.
+GET /api/v1/announcements/:id
+
+3.
+POST /api/v1/announcements/:id/dismiss
+
+4.
+GET /api/v1/admin/announcements
+
+5.
+POST /api/v1/admin/announcements
+
+6.
+PATCH /api/v1/admin/announcements/:id
+
+7.
+POST /api/v1/admin/announcements/:id/publish
+
+8.
+POST /api/v1/admin/announcements/:id/archive
+
+Do NOT add/remove routes silently.
+
+Required final count:
+Announcements = 8
+
+==================================================
+PART B — ANNOUNCEMENT LIFECYCLE
+==================================================
+
+States:
+
+DRAFT
+PUBLISHED
+ARCHIVED
+
+Allowed:
+
+DRAFT -> PUBLISHED
+DRAFT -> ARCHIVED
+PUBLISHED -> ARCHIVED
+
+ARCHIVED:
+terminal
+
+No:
+PUBLISHED -> DRAFT
+ARCHIVED -> PUBLISHED
+
+Repeated publish/archive:
+follow project lifecycle convention.
+Strong preference:
+409 Conflict.
+
+Create lifecycle helper and specs.
+
+==================================================
+PART C — CREATE ANNOUNCEMENT
+==================================================
+
+POST /api/v1/admin/announcements
+
+Permission:
+announcements.manage
+
+Input:
+
+- title
+- body
+- summary?
+- locale?
+- priority?
+- scopeType
+- parishId?
+- startsAt?
+- endsAt?
+- isPinned?
+- coverMediaAssetId?
+- targets[]
+
+Status:
+always DRAFT
+
+Server derives:
+- createdByUserId
+- updatedByUserId
+
+Do NOT accept:
+- publishedAt
+- status
+- actor IDs
+- targetKey
+
+Validate:
+- title/body lengths
+- endsAt > startsAt if both
+- locale
+- UUIDs
+- target consistency
+
+==================================================
+PART D — ADMINISTRATIVE OWNERSHIP SCOPE
+==================================================
+
+Announcement root has:
+scopeType GLOBAL | PARISH
+parishId nullable
+
+Rules:
+
+GLOBAL:
+SuperAdmin only
+parishId null
+
+PARISH:
+parishId required
+SuperAdmin any parish
+ParishAdmin own parish
+Catechist may NOT own/manage parish-scope root announcement
+
+Catechist announcement management:
+must be PARISH root tied to class parish OR if model supports only root GLOBAL/PARISH:
+- create root as PARISH of assigned class
+- but target must be CLASS only
+- access service must enforce that Catechist cannot create parish-wide target
+
+This is important.
+
+Do not introduce CLASS root scope if schema frozen at GLOBAL/PARISH.
+
+==================================================
+PART E — TARGET MODEL
+==================================================
+
+Targets:
+
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+Canonical visibility comes from target rows.
+
+Target validation:
+
+GLOBAL:
+- only SuperAdmin may create
+- no parishId/classId/roleCode
+
+PARISH:
+- parishId required
+- SuperAdmin any parish
+- ParishAdmin own parish
+- Catechist DENIED
+
+CLASS:
+- classId required
+- must belong to root parish if root PARISH
+- SuperAdmin any
+- ParishAdmin class in own parish
+- Catechist only ACTIVE assigned classes
+
+ROLE:
+- parishId required
+- roleCode required
+- SuperAdmin any parish
+- ParishAdmin own parish
+- Catechist DENIED in MVP
+
+Do NOT support global ROLE targeting.
+
+No STUDENT direct target in MVP.
+No ENROLLMENT direct target in MVP.
+
+==================================================
+PART F — TARGET KEY
+==================================================
+
+Use existing deterministic builders:
+
+GLOBAL
+PARISH:<id>
+CLASS:<id>
+ROLE:<parishId>:<roleCode>
+
+No client-provided targetKey.
+
+Duplicate target rows:
+reject or normalize/dedupe before save.
+
+Strong preference:
+dedupe identical targets in service;
+DB unique remains final protection.
+
+==================================================
+PART G — CATECHIST CLASS-ONLY MANAGEMENT
+==================================================
+
+Critical.
+
+Catechist may:
+
+- create/edit/publish/archive announcements
+only when:
+- root parish matches assigned class parish
+- every target is CLASS
+- every class is actively assigned to Catechist
+
+Catechist may NOT:
+- create GLOBAL target
+- create PARISH target
+- create ROLE target
+- target unassigned class
+- target multiple classes if not assigned to all
+
+Use public ClassCatechistAssignmentService only.
+
+No Class repository import.
+
+==================================================
+PART H — PARISHADMIN MANAGEMENT
+==================================================
+
+ParishAdmin may:
+
+- create PARISH root
+- target PARISH
+- target CLASS inside own parish
+- target ROLE inside own parish
+- publish/archive own parish announcements
+
+Cannot:
+- GLOBAL root
+- foreign parish/class
+- global role
+
+==================================================
+PART I — SUPERADMIN MANAGEMENT
+==================================================
+
+SuperAdmin may:
+
+- GLOBAL root + GLOBAL target
+- PARISH root for any parish
+- any PARISH/CLASS/ROLE target consistent with ownership
+
+If GLOBAL root has no GLOBAL target:
+still require explicit valid target(s).
+
+Do not infer target from scope automatically unless product design explicitly prefers.
+
+Strong recommendation:
+require at least one target before publish.
+
+==================================================
+PART J — UPDATE ANNOUNCEMENT
+==================================================
+
+PATCH /api/v1/admin/announcements/:id
+
+Permission:
+announcements.manage
+
+DRAFT:
+editable:
+- title
+- body
+- summary
+- locale
+- priority
+- scopeType/parishId
+- startsAt/endsAt
+- isPinned
+- coverMediaAssetId
+- targets
+
+PUBLISHED:
+Strong recommendation:
+allow only safe editorial/time-window fields:
+- title
+- body
+- summary
+- priority
+- startsAt
+- endsAt
+- isPinned
+- coverMediaAssetId
+
+Do NOT allow:
+- scope change
+- parish change
+- target change
+after publish
+
+Why:
+target changes after notification fan-out would make historical delivery inconsistent.
+
+ARCHIVED:
+read-only.
+
+Document exact immutability.
+
+==================================================
+PART K — PUBLISH
+==================================================
+
+POST /api/v1/admin/announcements/:id/publish
+
+Permission:
+announcements.publish
+
+Validate:
+- status DRAFT
+- actor still authorized
+- target set non-empty
+- target set valid
+- startsAt/endsAt valid
+- no forbidden role targeting
+- Catechist class assignment still active
+
+On publish:
+- status PUBLISHED
+- publishedAt = UTC now
+
+Then emit:
+AnnouncementPublishedEvent
+
+IMPORTANT:
+publish application event only after DB state commit succeeds.
+
+No direct NotificationsService call.
+
+No NotificationsModule import.
+
+==================================================
+PART L — ANNOUNCEMENT PUBLISHED EVENT
+==================================================
+
+Use neutral contract.
+
+Fields:
+
+applicationEventId
+operationKey
+eventType
+occurredAt
+announcementId
+title
+snippet
+priority
+targets
+
+operationKey exactly:
+ANNOUNCEMENT_PUBLISHED:<announcementId>
+
+No PII.
+No full body.
+No staff data.
+
+Use server-generated safe snippet.
+
+Do not trust client summary blindly for push/inbox safety if it may contain sensitive data.
+Use bounded sanitized summary/title.
+
+==================================================
+PART M — EVENT RETRY / REPLAY
+==================================================
+
+Domain repeated publish:
+409 if already PUBLISHED.
+
+But event replay safety:
+#006 notification header uses operationKey unique.
+
+Source publish handler:
+should not regenerate a second logical operation.
+
+If applicationEventId is regenerated on an accidental local re-dispatch:
+operationKey still dedupes downstream.
+
+Document.
+
+==================================================
+PART N — ARCHIVE
+==================================================
+
+POST /api/v1/admin/announcements/:id/archive
+
+Permission:
+announcements.manage
+
+Allowed:
+DRAFT -> ARCHIVED
+PUBLISHED -> ARCHIVED
+
+Archive does NOT emit notification.
+
+Archived item:
+- hidden from user feed
+- remains in admin history
+- read state retained
+
+No hard delete.
+
+==================================================
+PART O — ADMIN LIST
+==================================================
+
+GET /api/v1/admin/announcements
+
+Permission:
+announcements.manage
+
+Query:
+- page
+- limit max 50
+- status?
+- priority?
+- scopeType?
+- parishId?
+- targetType?
+- classId?
+- locale?
+- search?
+
+Scope:
+
+SuperAdmin:
+all
+
+ParishAdmin:
+own parish only
+
+Catechist:
+only announcements whose target CLASS is among actively assigned classes
+
+Important:
+Catechist admin list should NOT reveal parish-wide announcements they cannot manage merely because they can read them.
+
+Use set-based query.
+
+No per-row access calls.
+
+==================================================
+PART P — ACTOR FEED
+==================================================
+
+GET /api/v1/announcements
+
+Permission:
+announcements.read
+
+Authenticated only.
+
+Return visible ACTIVE announcements.
+
+Visible if:
+
+status = PUBLISHED
+
+AND:
+publishedAt <= now
+
+AND:
+startsAt is null OR startsAt <= now
+
+AND:
+endsAt is null OR endsAt > now
+
+AND:
+actor matches at least one target
+
+AND:
+not dismissed by actor
+
+Target matching:
+
+GLOBAL:
+all authenticated users
+
+PARISH:
+actor belongs to parish/current contextual membership
+
+CLASS:
+actor is:
+- active assigned Catechist
+- active enrolled Student
+- active Parent guardian of active enrolled student
+
+ROLE:
+actor holds role within targeted parish
+
+Do not broaden based on mere platform role.
+
+==================================================
+PART Q — TARGET RESOLUTION FOR READS
+==================================================
+
+Need efficient actor context resolver.
+
+Create:
+AnnouncementAudienceResolver
+or equivalent.
+
+Input:
+AuthenticatedUser
+
+Output:
+- userId
+- role codes
+- parishIds
+- classIds where actor is audience member
+
+For Parent:
+classIds derive from linked active child enrollments.
+
+For Student:
+classIds derive from active enrollment.
+
+For Catechist:
+classIds derive from active assignments.
+
+Use public APIs only.
+
+No foreign repos.
+
+Batch/set-based as much as public APIs allow.
+
+==================================================
+PART R — ROLE TARGET READ SEMANTICS
+==================================================
+
+ROLE target:
+ROLE:<parishId>:<roleCode>
+
+Actor must:
+- have exact roleCode
+AND
+- be contextually associated with parishId
+
+Do not target all PARENT globally.
+
+Do not treat guardian relationship alone as parish role unless project model says so.
+
+Document exact resolver.
+
+==================================================
+PART S — PUBLIC FEED DTO
+==================================================
+
+AnnouncementListItemDto:
+
+- id
+- title
+- summary
+- priority
+- locale
+- startsAt
+- endsAt
+- isPinned
+- coverMediaAssetId
+- publishedAt
+- isRead?
+- firstSeenAt?
+- dismissed? usually false because filtered
+
+Do NOT include:
+- body in list
+- createdByUserId
+- updatedByUserId
+- internal targets
+- parish membership internals
+- targetKey
+
+Sort:
+isPinned DESC
+priority weight DESC
+publishedAt DESC
+id DESC
+
+Define deterministic priority ordering:
+URGENT > HIGH > NORMAL > LOW
+
+==================================================
+PART T — ANNOUNCEMENT DETAIL
+==================================================
+
+GET /api/v1/announcements/:id
+
+Permission:
+announcements.read
+
+Must first authorize visibility using same audience logic.
+
+If not targeted:
+prefer 404 to avoid resource-existence leakage.
+
+On successful detail:
+- lazily set firstSeenAt if absent
+- optionally set readAt at same time
+
+Need freeze read semantics.
+
+Strong recommendation:
+detail view = read.
+So:
+firstSeenAt = now if null
+readAt = now if null
+
+This keeps model simple.
+
+Required verdict:
+DETAIL MARKS READ: YES
+
+==================================================
+PART U — LAZY USER STATE
+==================================================
+
+No fan-out rows on publish.
+
+Create/update state only on:
+- detail view
+- dismiss
+
+Potential:
+feed should not write firstSeenAt for every list item.
+Strong preference:
+NO write on feed.
+
+Thus:
+GET /announcements list = pure read
+GET /announcements/:id = firstSeen + read
+POST /dismiss = dismissedAt
+
+No GET-time mutation?
+Unlike CMS, announcement detail intentionally records read state.
+This is accepted interaction-state mutation.
+
+Document distinction.
+
+==================================================
+PART V — DISMISS
+==================================================
+
+POST /api/v1/announcements/:id/dismiss
+
+Permission:
+announcements.read
+
+Only if actor is targeted/visible.
+
+Sets:
+dismissedAt = now
+
+If no state row:
+create with:
+firstSeenAt maybe now
+readAt maybe now
+dismissedAt now
+
+Strong preference:
+dismiss implies read.
+
+Repeated dismiss:
+idempotent return existing state or 200.
+
+Choose project convention.
+
+Strong recommendation:
+idempotent 200.
+
+==================================================
+PART W — READ STATE IN FEED
+==================================================
+
+Because list feed should show unread/read:
+
+Need left join announcement_user_states for current user.
+
+isRead:
+state.readAt != null
+
+No state row:
+isRead false
+
+Do not create state rows during list.
+
+No N+1.
+
+==================================================
+PART X — TIME WINDOW
+==================================================
+
+startsAt:
+display window start
+
+endsAt:
+display window end
+
+Published but future startsAt:
+not visible yet
+
+Past endsAt:
+not visible
+
+Status remains PUBLISHED historically.
+
+No GET-time archival.
+
+Admin still sees.
+
+==================================================
+PART Y — SCHEDULED ANNOUNCEMENT PUBLISHING
+==================================================
+
+Frozen Announcement status lacks SCHEDULED.
+
+Therefore do NOT invent SCHEDULED lifecycle.
+
+startsAt controls visibility, not publication state.
+
+Admin may:
+- publish now
+- startsAt future => visible later
+
+This is enough for MVP.
+
+No separate scheduled publisher needed for Announcements.
+
+==================================================
+PART Z — NOTIFICATION EVENT TARGET SNAPSHOT
+==================================================
+
+AnnouncementPublishedEvent should include target descriptors.
+
+These descriptors represent target snapshot at publish time.
+
+This is important because #006 fan-out must use publish-time targets.
+
+Do not have Notifications query Announcement tables directly.
+
+No reverse dependency.
+
+==================================================
+PART AA — EVENT PAYLOAD PRIVACY
+==================================================
+
+Safe title/snippet only.
+
+Do not include:
+- child names
+- emails
+- phone
+- class roster
+- guardian info
+- sensitive pastoral content
+- raw body
+
+Deep-link:
+Notifications #006 can build or event may include:
+actionUrl = /announcements/:id
+
+If actionUrl not in event contract:
+notification orchestrator can derive from source type/id.
+
+Do not expand contract unnecessarily.
+
+==================================================
+PART AB — SERVICE ARCHITECTURE
+==================================================
+
+Use:
+
+AnnouncementInternalService
+- persistence root
+
+AnnouncementTargetService
+- target persistence/query
+
+AnnouncementUserStateService
+- lazy state
+
+AnnouncementAccessService
+- management scope
+
+AnnouncementAudienceResolver
+- actor visible scopes
+
+AnnouncementsService
+- public facade/business orchestration
+
+Maybe:
+AnnouncementPublishingService
+if clean.
+
+AnnouncementsModule exports:
+AnnouncementsService only.
+
+==================================================
+PART AC — ACCESS SERVICE
+==================================================
+
+Complete:
+
+assertCanCreateAnnouncement
+assertCanManageAnnouncement
+assertCanPublishAnnouncement
+assertCanArchiveAnnouncement
+assertTargetsAllowedForActor
+assertCanViewAnnouncement
+
+Use public APIs.
+
+No repository access outside module.
+
+==================================================
+PART AD — ADMIN DTOs
+==================================================
+
+Create:
+
+CreateAnnouncementDto
+UpdateAnnouncementDto
+AnnouncementTargetInputDto
+AnnouncementAdminListQueryDto
+AnnouncementAdminResponseDto
+AnnouncementAdminListResponseDto
+
+Do not accept:
+targetKey
+createdBy
+updatedBy
+publishedAt
+status
+
+==================================================
+PART AE — USER DTOs
+==================================================
+
+Create:
+
+AnnouncementFeedQueryDto
+AnnouncementListItemDto
+AnnouncementDetailDto
+AnnouncementFeedResponseDto
+DismissAnnouncementResponseDto
+
+Detail may include:
+body
+
+List should not include body.
+
+No internal targets unless product explicitly needs "why shown".
+Strong preference:
+omit.
+
+==================================================
+PART AF — FEED FILTERS
+==================================================
+
+Potential:
+page
+limit max 50
+priority?
+locale?
+unreadOnly?
+
+If unreadOnly:
+join state and filter readAt null.
+
+Optional:
+classId/parishId should NOT be client-controlled to widen target access.
+
+Avoid those filters unless intersected.
+
+Strong MVP:
+priority
+locale
+unreadOnly
+page/limit
+
+==================================================
+PART AG — ADMIN TARGET DISPLAY
+==================================================
+
+Admin DTO may include target descriptors:
+- targetType
+- parishId
+- classId
+- roleCode
+
+Do not expose targetKey unless useful internally.
+Strong preference:
+omit targetKey.
+
+==================================================
+PART AH — ERROR CONTRACT
+==================================================
+
+Add/use:
+
+AnnouncementNotFoundError
+AnnouncementAccessDeniedError
+AnnouncementTargetInvalidError
+AnnouncementTargetNotAllowedError
+AnnouncementAlreadyPublishedError
+AnnouncementNotEditableError
+InvalidAnnouncementTransitionError
+
+Map:
+400 validation
+401 auth
+403 management scope
+404 user visibility/resource not found
+409 lifecycle
+422 if domain target invalid by convention
+
+==================================================
+PART AI — OPENAPI
+==================================================
+
+Document all 8 routes.
+
+User:
+- feed
+- detail
+- dismiss
+
+Admin:
+- list
+- create
+- update
+- publish
+- archive
+
+Annotate:
+- auth
+- permissions
+- scope
+- response DTOs
+- pagination
+- 400/401/403/404/409
+
+No runtime Swagger.
+
+==================================================
+PART AJ — README
+==================================================
+
+Add Announcement section:
+
+- operational/community broadcasts
+- not CMS
+- DRAFT/PUBLISHED/ARCHIVED
+- GLOBAL/PARISH root ownership
+- GLOBAL/PARISH/CLASS/ROLE targets
+- Catechist CLASS-only management
+- actor feed visibility
+- lazy read state
+- detail marks read
+- dismiss
+- startsAt/endsAt visibility
+- publish emits neutral AnnouncementPublishedEvent
+- no direct Notification dependency
+- no fan-out rows in Announcement module
+- runtime validation deferred
+
+Do not claim whole phase complete.
+
+==================================================
+PART AK — UNIT TESTS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Lifecycle:
+- DRAFT publish
+- DRAFT archive
+- PUBLISHED archive
+- invalid transitions
+- archived terminal
+
+Target validation:
+- GLOBAL
+- PARISH
+- CLASS
+- ROLE
+- duplicate targets
+- role requires parish
+- class/parish consistency
+
+SuperAdmin:
+- global
+- any parish
+
+ParishAdmin:
+- own parish
+- own class
+- own parish role
+- global denied
+- foreign denied
+
+Catechist:
+- assigned class create/update/publish
+- unassigned class denied
+- parish target denied
+- role target denied
+- global denied
+
+Update:
+- draft target editable
+- published target immutable
+- published scope immutable
+
+Feed:
+- global
+- parish
+- class student
+- class parent
+- class catechist
+- role scoped
+- wrong parish denied
+- dismissed hidden
+- future startsAt hidden
+- expired endsAt hidden
+
+State:
+- feed no write
+- detail firstSeen/read
+- dismiss implies read
+- repeated dismiss idempotent
+
+Event:
+- publish emits once after persistence
+- operationKey deterministic
+- safe payload
+- no PII/body
+
+==================================================
+PART AL — INTEGRATION SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL cases:
+
+1 create DRAFT root
+2 target_key unique
+3 multiple targets
+4 publish
+5 archive
+6 published target immutability
+7 lazy state unique
+8 detail marks read
+9 dismiss
+10 feed excludes dismissed
+11 time window
+12 class target visibility
+13 role target visibility
+14 Catechist assigned class scope
+15 ParishAdmin own parish scope
+16 event publish contract
+17 no Notification table writes from Announcement module
+18 no hard delete
+
+==================================================
+PART AM — DB E2E SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Admin:
+
+SuperAdmin:
+- global create/list/update/publish/archive
+
+ParishAdmin:
+- own parish
+- own class target
+- role target own parish
+- global denied
+- foreign denied
+
+Catechist:
+- assigned class create/publish
+- unassigned 403
+- parish target 403
+- role 403
+- global 403
+
+Parent/Student:
+- admin routes 403
+
+Feed:
+- targeted items 200
+- unrelated hidden/404
+- class parent visibility
+- class student visibility
+- detail marks read
+- dismiss removes from feed
+- unreadOnly behavior
+
+Unauthenticated:
+- user feed 401
+- admin 401
+
+Privacy:
+- list no body
+- no audit IDs
+- no internal target keys
+- event payload no PII
+
+==================================================
+PART AN — MODULE BOUNDARY
+==================================================
+
+Confirm:
+
+AnnouncementsModule:
+- exports AnnouncementsService only
+- no forwardRef
+- no NotificationsModule import
+- no Notification entity/repo import
+- no FamilyPortal
+- no cross-module repositories
+- ApplicationEvents neutral dependency allowed
+
+Update boundary specs if needed.
+
+Do not run.
+
+==================================================
+PART AO — PERFORMANCE / N+1
+==================================================
+
+Mandatory static inspection:
+
+- feed target resolution set-based
+- no per-announcement foreign service checks
+- user state left join
+- admin list set-based
+- target rows loaded in bounded/batch query
+- pagination max 50
+- no notification fanout here
+
+If target matching becomes query-complex:
+prefer resolve actor audience keys once:
+GLOBAL
+PARISH:x
+CLASS:y
+ROLE:p:r
+
+Then DB query:
+target_key IN (...)
+
+This is strongly recommended.
+
+==================================================
+PART AP — STATIC INSPECTION
+==================================================
+
+Before finish inspect:
+
+- exactly 8 Announcement routes
+- no route count drift
+- Catechist CLASS-only management
+- ParishAdmin own parish
+- SuperAdmin global/all
+- Parent/Student read only
+- no broad global parent child-specific target
+- no direct Notification dependency
+- publish event after commit
+- operationKey exact
+- no PII
+- list body omitted
+- detail visibility protected
+- lazy state no fanout
+- no N+1
+- no entity leakage
+- no cycles
+
+Fix obvious issues by inspection.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+- actual Notification inbox fanout (#006)
+- Notification controllers (#006)
+- Event module business logic (#005)
+- push delivery
+- preferences
+- email/SMS
+- direct STUDENT target type
+- direct ENROLLMENT target type
+- acknowledgement/compliance workflow
+- attachment join table
+- recurrence
+- runtime validation
+- demo seed/Postman
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_004_ANNOUNCEMENTS_MODULE_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Final 8-route inventory
+7 Lifecycle
+8 Create contract
+9 Root ownership scope
+10 Target model
+11 Target key handling
+12 Catechist class-only management
+13 ParishAdmin scope
+14 SuperAdmin scope
+15 Update immutability
+16 Publish behavior
+17 AnnouncementPublishedEvent
+18 OperationKey/replay semantics
+19 Archive behavior
+20 Admin list
+21 Actor feed
+22 Audience resolver
+23 GLOBAL target
+24 PARISH target
+25 CLASS target
+26 ROLE target
+27 Time-window semantics
+28 Lazy user state
+29 Detail marks read
+30 Dismiss behavior
+31 Feed read-state mapping
+32 Public/user DTOs
+33 Admin DTOs
+34 Data minimization
+35 Error contract
+36 OpenAPI
+37 README
+38 Service architecture
+39 Module boundary
+40 Performance/N+1
+41 Unit tests written
+42 Integration tests written
+43 DB e2e tests written
+44 Tests executed
+45 DB validation
+46 quality:full
+47 Docker
+48 npm audit
+49 Static inspection
+50 Risks/deferred
+51 BLOCKER/HIGH/MEDIUM/LOW
+52 #005 readiness
+53 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+ANNOUNCEMENT ROUTE COUNT: 8
+
+ANNOUNCEMENT CREATE READY: YES/NO
+ANNOUNCEMENT UPDATE READY: YES/NO
+ANNOUNCEMENT LIFECYCLE READY: YES/NO
+ANNOUNCEMENT PUBLISH READY: YES/NO
+ANNOUNCEMENT ARCHIVE READY: YES/NO
+
+ANNOUNCEMENT TARGET MODEL READY: YES/NO
+GLOBAL TARGET SAFE: YES/NO
+PARISH TARGET SAFE: YES/NO
+CLASS TARGET SAFE: YES/NO
+ROLE TARGET SAFE: YES/NO
+
+CATECHIST CLASS-ONLY MANAGEMENT SAFE: YES/NO
+PARISH ADMIN SCOPE SAFE: YES/NO
+SUPERADMIN SCOPE READY: YES/NO
+
+ACTOR FEED READY: YES/NO
+LAZY USER STATE READY: YES/NO
+DETAIL MARKS READ: YES/NO
+DISMISS READY: YES/NO
+TIME WINDOW FILTER READY: YES/NO
+
+ANNOUNCEMENT PUBLISHED EVENT READY: YES/NO
+ANNOUNCEMENT OPERATION KEY READY: YES/NO
+NO DIRECT NOTIFICATIONS DEPENDENCY: YES/NO
+EVENT PAYLOAD PII SAFE: YES/NO
+
+DATA MINIMIZATION READY: YES/NO
+N+1/PERFORMANCE READY BY INSPECTION: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+FINAL COMMUNITY ROUTE COUNT TARGET: 35
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#005 READINESS: YES/NO
+
+==================================================
+#005 GATE
+==================================================
+
+Proceed if:
+
+- exactly 8 routes
+- lifecycle ready
+- target model safe
+- Catechist CLASS-only management enforced
+- actor feed ready
+- lazy user state ready
+- publish event ready
+- no direct Notifications dependency
+- no PII
+- no N+1
+- module boundary clean
+- tests/specs written
+- BLOCKER=0
+- HIGH=0
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #005/7 —
+EVENTS — LIFECYCLE + VISIBILITY + REGISTRATION / CAPACITY + CHECK-IN + NOTIFICATION EVENTS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #004 status
+- route count
+- lifecycle
+- target model
+- Catechist scope
+- feed/read state
+- publish event
+- privacy/N+1
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #005 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(announcements): add targeting publishing and user feed"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #005 automatically.

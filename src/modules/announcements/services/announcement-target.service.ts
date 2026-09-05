@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { AnnouncementTargetEntity } from '../entities/announcement-target.entity';
 import type {
   AnnouncementTargetSnapshot,
   CreateAnnouncementTargetInput,
+  TargetDescriptorInput,
 } from '../interfaces/announcement.interfaces';
 import { buildAnnouncementTargetKey } from '../utils/announcement-key.util';
 
@@ -61,6 +62,51 @@ export class AnnouncementTargetService {
     return toAnnouncementTargetSnapshot(saved);
   }
 
+  async replaceTargets(
+    announcementId: string,
+    targets: readonly TargetDescriptorInput[],
+  ): Promise<readonly AnnouncementTargetSnapshot[]> {
+    const aid = normalizeUuid(announcementId);
+
+    // Remove existing targets
+    await this.repository.delete({ announcementId: aid });
+
+    // Deduplicate targets by targetKey
+    const targetKeyMap = new Map<string, TargetDescriptorInput>();
+    for (const target of targets) {
+      const key = buildAnnouncementTargetKey({
+        targetType: target.targetType,
+        parishId: target.parishId,
+        classId: target.classId,
+        roleCode: target.roleCode,
+      });
+      if (!targetKeyMap.has(key)) {
+        targetKeyMap.set(key, target);
+      }
+    }
+
+    const entities: AnnouncementTargetEntity[] = [];
+    for (const [key, t] of targetKeyMap.entries()) {
+      entities.push(
+        this.repository.create({
+          announcementId: aid,
+          targetType: t.targetType,
+          parishId: t.parishId ? normalizeUuid(t.parishId) : null,
+          classId: t.classId ? normalizeUuid(t.classId) : null,
+          roleCode: t.roleCode ? t.roleCode.trim().toUpperCase() : null,
+          targetKey: key,
+        }),
+      );
+    }
+
+    if (entities.length === 0) {
+      return [];
+    }
+
+    const saved = await this.repository.save(entities);
+    return saved.map(toAnnouncementTargetSnapshot);
+  }
+
   async listTargetsByAnnouncementId(
     announcementId: string,
   ): Promise<readonly AnnouncementTargetSnapshot[]> {
@@ -70,7 +116,27 @@ export class AnnouncementTargetService {
     return entities.map(toAnnouncementTargetSnapshot);
   }
 
-  async removeTargetsByAnnouncementId(announcementId: string): Promise<void> {
-    await this.repository.delete({ announcementId: normalizeUuid(announcementId) });
+  async listTargetsByAnnouncementIds(
+    announcementIds: readonly string[],
+  ): Promise<Map<string, AnnouncementTargetSnapshot[]>> {
+    const uniqueIds = Array.from(new Set(announcementIds.map(normalizeUuid)));
+    const targetMap = new Map<string, AnnouncementTargetSnapshot[]>();
+
+    if (uniqueIds.length === 0) {
+      return targetMap;
+    }
+
+    const entities = await this.repository.find({
+      where: { announcementId: In(uniqueIds) },
+    });
+
+    for (const entity of entities) {
+      const aid = entity.announcementId;
+      const list = targetMap.get(aid) ?? [];
+      list.push(toAnnouncementTargetSnapshot(entity));
+      targetMap.set(aid, list);
+    }
+
+    return targetMap;
   }
 }

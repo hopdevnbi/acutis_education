@@ -834,6 +834,64 @@ Corrected CMS route inventory (resolving the administrative draft management con
 - **Cover Media Asset:** Scalar `cover_media_asset_id` stored without TypeORM foreign relation or entity coupling to `MediaModule`.
 - **Locale:** Authored directly per entry (default `vi-VN`). Exact match filtering without runtime coupling to `LocalizationModule`.
 
+## Announcements API (Targeting, Publishing & User Feed — #004/7)
+
+The Announcements module (`src/modules/announcements/`) provides targeted operational and community broadcasts for students, parents, catechists, and parish administrators. It is distinct from the CMS module: Announcements have audience targeting (`GLOBAL`, `PARISH`, `CLASS`, `ROLE`), user-level read/dismiss states, active display windows, and emit application events for downstream notification delivery (#006).
+
+### Bounded Context & Architecture
+
+- **Owned Tables:** `announcements`, `announcement_targets`, `announcement_user_states`.
+- **Public Facade:** `AnnouncementsService` exported exclusively.
+- **Strict Decoupling:** Zero direct dependency on `NotificationsModule` or notification entities. Publishes neutral `AnnouncementPublishedEvent` via `ApplicationEventPublisher`.
+- **No Notification Fan-out Rows:** User interaction state is strictly lazy (`firstSeenAt`, `readAt`, `dismissedAt`). No pre-created recipient rows exist in the Announcements module.
+
+### Administrative Ownership & Target Model
+
+- **Scope Types:** `GLOBAL` (SuperAdmin only) or `PARISH` (ParishAdmin own parish, Catechist assigned class parish).
+- **Audience Targets:**
+  - `GLOBAL`: All authenticated platform users (SuperAdmin only).
+  - `PARISH`: All members belonging to the specified parish (SuperAdmin, ParishAdmin).
+  - `CLASS`: All active assigned Catechists, enrolled Students, and linked Parents of the class.
+  - `ROLE`: Users holding the specified role within the targeted parish (e.g. `ROLE:<parishId>:CATECHIST`).
+- **Catechist Class-Only Scope:**
+  - Catechists may create/update/publish/archive announcements ONLY when root parish matches their assigned class parish, EVERY target is `CLASS`, and EVERY class is actively assigned to the Catechist.
+  - Catechists are strictly forbidden from creating `GLOBAL`, `PARISH`, or `ROLE` targets.
+
+### Lifecycle & Immutability
+
+- **States:** `DRAFT` → `PUBLISHED` → `ARCHIVED`. `ARCHIVED` is terminal.
+- **Transitions:** `DRAFT` can transition to `PUBLISHED` (via publish action) or `ARCHIVED`. `PUBLISHED` can transition to `ARCHIVED`. Transitions back to `DRAFT` or from `ARCHIVED` to `PUBLISHED` are rejected with `409 Conflict`.
+- **Field Immutability:** Once `PUBLISHED`, `scopeType`, `parishId`, and `targets` are strictly immutable to preserve historical notification and delivery integrity. `ARCHIVED` entries are read-only.
+
+### User Feed, Active Window & Lazy Read State
+
+- **Active Display Window:** `startsAt` and `endsAt` control feed visibility without mutating publication status (`status = PUBLISHED`).
+- **Audience Resolution:** `AnnouncementAudienceResolver` builds audience keys (`GLOBAL`, `PARISH:<id>`, `CLASS:<id>`, `ROLE:<id>:<role>`) in a single set-based pass using exported public APIs (`ClassModule`, `EnrollmentModule`, `StudentModule`, `ParishModule`, `AccessControlModule`).
+- **Pure Feed Read:** `GET /api/v1/announcements` reads feed and left-joins user state without writing state rows. Excludes dismissed announcements.
+- **Detail Marks Read:** `GET /api/v1/announcements/:id` verifies actor targeting, lazily records `firstSeenAt` and `readAt`, and returns full body.
+- **Dismiss:** `POST /api/v1/announcements/:id/dismiss` marks `dismissedAt` (and guarantees `firstSeenAt` and `readAt`). Idempotent `200 OK`.
+
+### Event Emission & Replay Safety
+
+- **Post-Commit Event:** On publication, emits `AnnouncementPublishedEvent` with:
+  - `applicationEventId`: unique UUID trace instance.
+  - `operationKey`: deterministic `ANNOUNCEMENT_PUBLISHED:<announcementId>` for downstream notification deduplication.
+  - `snippet`: bounded, sanitized summary (no child PII or raw body).
+  - `targets`: publish-time target snapshot.
+
+### Route Inventory (8 Routes)
+
+| Method | Path | Description | Access / Permission |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/announcements` | Actor feed (active, targeted, not dismissed) | `announcements.read` (Authenticated) |
+| `GET` | `/api/v1/announcements/:id` | Announcement detail (marks seen & read) | `announcements.read` (Targeted actor) |
+| `POST` | `/api/v1/announcements/:id/dismiss` | Dismiss announcement from feed | `announcements.read` (Targeted actor) |
+| `GET` | `/api/v1/admin/announcements` | Admin list scoped by actor authority | `announcements.manage` (Staff) |
+| `POST` | `/api/v1/admin/announcements` | Create announcement draft with targets | `announcements.manage` (Staff) |
+| `PATCH` | `/api/v1/admin/announcements/:id` | Update announcement (targets locked if published) | `announcements.manage` (Staff) |
+| `POST` | `/api/v1/admin/announcements/:id/publish` | Publish announcement & emit event | `announcements.publish` (Staff) |
+| `POST` | `/api/v1/admin/announcements/:id/archive` | Archive announcement | `announcements.manage` (Staff) |
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.

@@ -1,0 +1,363 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #003A
+CORRECTIVE CONTRACT LOCK
+CMS ROUTE DELTA + COMMUNITY ROUTE COUNT RECONCILIATION
+AUDIT / DOC CORRECTION ONLY — FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+AUDIT / DOC CORRECTION ONLY.
+
+DO NOT:
+- implement new Announcement business code
+- implement Event business code
+- implement Notification business code
+- create new entities or migrations
+- run tests
+- run lint/typecheck/build
+- run Docker
+- run DB commands
+- run migrations
+- run seed commands
+- run npm audit
+- run Postman/Newman
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+No commit required unless tracked documentation is intentionally corrected.
+
+CONTEXT
+-------
+Phase:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS
+
+Completed:
+#001/7 Domain Audit + Design
+#001A Corrective Contract Audit
+#002/7 Persistence Foundation
+#003/7 CMS Module
+
+Read completely:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001A_CORRECTIVE_CONTRACT_AUDIT_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_002_PERSISTENCE_FOUNDATION_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003_CMS_MODULE_REPORT.md
+
+==================================================
+ISSUE — ROUTE CONTRACT DRIFT
+==================================================
+
+#001A explicitly froze:
+
+CMS = 6
+Announcements = 8
+Events = 13
+Notifications = 6
+
+Total = 33
+
+#003 legitimately discovered a HIGH usability gap in CMS:
+admin UI could not list/get DRAFT/SCHEDULED/ARCHIVED entries.
+
+#003 added:
+
+GET /api/v1/admin/cms/entries
+GET /api/v1/admin/cms/entries/:id
+
+Therefore CMS route count becomes:
+
+CMS = 8
+
+This is an accepted contract correction.
+
+However #003 report then states:
+
+CMS = 8
+Announcements = 8
+Events = 11
+Notifications = 8
+Total = 35
+
+This is invalid contract drift.
+
+#003 did NOT redesign Events or Notifications.
+
+The frozen #001A counts must remain:
+
+Announcements = 8
+Events = 13
+Notifications = 6
+
+Therefore corrected target must be:
+
+CMS = 8
+Announcements = 8
+Events = 13
+Notifications = 6
+
+TOTAL = 35
+
+==================================================
+PART A — VERIFY #001A EVENT INVENTORY
+==================================================
+
+Confirm exact frozen 13 Event routes:
+
+1 GET /api/v1/events
+2 GET /api/v1/events/:id
+3 POST /api/v1/events/:id/registrations
+4 POST /api/v1/events/:id/registrations/cancel
+5 GET /api/v1/me/event-registrations
+6 GET /api/v1/admin/events
+7 POST /api/v1/admin/events
+8 PATCH /api/v1/admin/events/:id
+9 POST /api/v1/admin/events/:id/publish
+10 POST /api/v1/admin/events/:id/cancel
+11 POST /api/v1/admin/events/:id/complete
+12 POST /api/v1/admin/events/:id/archive
+13 POST /api/v1/admin/events/:id/checkin
+
+Do NOT remove or merge any route during this corrective prompt.
+
+Required verdict:
+EVENT ROUTE CONTRACT REMAINS 13: YES/NO
+
+==================================================
+PART B — VERIFY #001A NOTIFICATION INVENTORY
+==================================================
+
+Confirm exact frozen 6 Notification routes:
+
+1 GET /api/v1/me/notifications
+2 GET /api/v1/me/notifications/unread-count
+3 POST /api/v1/me/notifications/:id/read
+4 POST /api/v1/me/notifications/read-all
+5 POST /api/v1/me/notification-devices
+6 DELETE /api/v1/me/notification-devices/:id
+
+Do NOT invent two additional Notification routes.
+
+Required verdict:
+NOTIFICATION ROUTE CONTRACT REMAINS 6: YES/NO
+
+==================================================
+PART C — VERIFY ANNOUNCEMENT INVENTORY
+==================================================
+
+Confirm frozen 8 Announcement routes remain unchanged:
+
+1 GET /api/v1/announcements
+2 GET /api/v1/announcements/:id
+3 POST /api/v1/announcements/:id/dismiss
+4 GET /api/v1/admin/announcements
+5 POST /api/v1/admin/announcements
+6 PATCH /api/v1/admin/announcements/:id
+7 POST /api/v1/admin/announcements/:id/publish
+8 POST /api/v1/admin/announcements/:id/archive
+
+Required verdict:
+ANNOUNCEMENT ROUTE CONTRACT REMAINS 8: YES/NO
+
+==================================================
+PART D — LOCK CMS INVENTORY AT 8
+==================================================
+
+Confirm final CMS contract:
+
+1 GET /api/v1/cms/entries
+2 GET /api/v1/cms/entries/:slug
+3 POST /api/v1/cms/entries
+4 PATCH /api/v1/cms/entries/:id
+5 POST /api/v1/cms/entries/:id/publish
+6 POST /api/v1/cms/entries/:id/archive
+7 GET /api/v1/admin/cms/entries
+8 GET /api/v1/admin/cms/entries/:id
+
+The two admin reads are accepted as a justified contract correction.
+
+Required verdict:
+CMS ROUTE CONTRACT LOCKED AT 8: YES/NO
+
+==================================================
+PART E — FINAL COMMUNITY ROUTE TARGET
+==================================================
+
+Freeze:
+
+CMS = 8
+Announcements = 8
+Events = 13
+Notifications = 6
+
+FINAL COMMUNITY ROUTE COUNT TARGET = 35
+
+Mathematically:
+8 + 8 + 13 + 6 = 35
+
+Do not allow later prompts to change these counts silently.
+
+Any future route addition/removal:
+- must be explicitly called out as contract delta
+- must include reason/severity
+- must recalculate final total
+
+==================================================
+PART F — CORRECT DOCUMENTATION
+==================================================
+
+Correct any #003 documentation that says:
+
+Events = 11
+Notifications = 8
+
+Update:
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003_CMS_MODULE_REPORT.md
+only if repository workflow permits correcting generated docs.
+
+Also correct README route-count wording if #003 accidentally wrote wrong module counts there.
+
+Do not alter production route code outside CMS.
+
+==================================================
+PART G — STATIC VERIFY CMS ITSELF
+==================================================
+
+Do not reimplement CMS.
+
+By inspection only confirm:
+
+- CMS final routes = 8
+- admin list/detail added intentionally
+- CMS BLOCKER/HIGH = 0
+- no new Event/Notification route changes were made in #003
+- #004 can proceed after route contract is locked
+
+==================================================
+PART H — SEVERITY
+==================================================
+
+Classify inherited issue:
+
+HIGH:
+Community contract drift:
+Events 13 -> 11 and Notifications 6 -> 8 appeared in #003 report without design/implementation basis.
+
+After correction:
+BLOCKER = 0
+HIGH = 0
+
+If actual source code reveals Event/Notification routes were unexpectedly added/removed during #003:
+DO NOT silently accept it.
+Report exact files and keep #004 readiness NO until reconciled.
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003A_ROUTE_CONTRACT_LOCK_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 Inherited route contract
+4 #003 CMS route delta
+5 Invalid route-count drift
+6 CMS final route inventory
+7 Announcement frozen route inventory
+8 Event frozen route inventory
+9 Notification frozen route inventory
+10 Corrected module counts
+11 Corrected final community route target
+12 Source-code drift inspection
+13 Documentation corrections
+14 README corrections
+15 Risks/deferred
+16 BLOCKER/HIGH/MEDIUM/LOW
+17 #004 readiness
+18 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+CMS ROUTE CONTRACT LOCKED AT 8: YES/NO
+ANNOUNCEMENT ROUTE CONTRACT REMAINS 8: YES/NO
+EVENT ROUTE CONTRACT REMAINS 13: YES/NO
+NOTIFICATION ROUTE CONTRACT REMAINS 6: YES/NO
+
+FINAL COMMUNITY ROUTE COUNT TARGET: 35
+
+NO UNPLANNED EVENT ROUTE DRIFT: YES/NO
+NO UNPLANNED NOTIFICATION ROUTE DRIFT: YES/NO
+
+CMS IMPLEMENTATION STILL READY: YES/NO
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#004 READINESS: YES/NO
+
+==================================================
+#004 GATE
+==================================================
+
+Proceed only if:
+
+- CMS = 8
+- Announcements = 8
+- Events = 13
+- Notifications = 6
+- final total = 35
+- no source-code route drift
+- CMS remains ready
+- BLOCKER=0
+- HIGH=0
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #004/7 —
+ANNOUNCEMENTS — TARGETING + PUBLISHING + USER FEED / READ STATE + NOTIFICATION EVENT EMISSION
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- corrective status
+- CMS route count
+- Announcement route count
+- Event route count
+- Notification route count
+- final total
+- source-code drift yes/no
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Do NOT run validation commands.
+Do NOT print git add.
+Do NOT run git add/commit/push.

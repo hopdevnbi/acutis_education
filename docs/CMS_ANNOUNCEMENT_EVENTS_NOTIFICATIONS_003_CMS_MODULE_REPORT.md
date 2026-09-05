@@ -286,7 +286,7 @@ Supported query parameters in `CmsPublicListQueryDto`:
 
 ## 24. Corrected Total Community Route Count Target
 
-**35 routes** (CMS: 8, Announcements: 8, Events: 11, Notifications: 8).
+**35 routes** (CMS: 8, Announcements: 8, Events: 13, Notifications: 6).
 
 ---
 
