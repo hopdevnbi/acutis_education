@@ -64,6 +64,27 @@ export class AttendanceService {
     return this.attendanceRepository.count({ where: { sessionId } });
   }
 
+  async countMarkedBySessionIds(
+    rawSessionIds: readonly string[],
+  ): Promise<ReadonlyMap<string, number>> {
+    if (rawSessionIds.length === 0) {
+      return new Map();
+    }
+
+    const sessionIds = rawSessionIds.map((id) => normalizeUuid(id));
+    const rows = await this.attendanceRepository
+      .createQueryBuilder('attendance')
+      .select('attendance.sessionId', 'sessionId')
+      .addSelect('COUNT(1)', 'markedCount')
+      .where('attendance.sessionId IN (:...sessionIds)', { sessionIds })
+      .groupBy('attendance.sessionId')
+      .getRawMany<{ sessionId: string; markedCount: string }>();
+
+    return new Map(
+      rows.map((row) => [normalizeUuid(row.sessionId), Number(row.markedCount)] as const),
+    );
+  }
+
   async upsertRecordsForSession(
     rawSessionId: string,
     records: readonly UpsertAttendanceRecordInput[],
@@ -109,9 +130,9 @@ export class AttendanceService {
           throw new AttendanceEnrollmentNotInSessionRosterError();
         }
 
-        const status = parseAttendanceStatus(record.status);
+        const status = parseAttendanceStatus(String(record.status));
         const note = normalizeAttendanceNote(record.note);
-        const studentId = normalizeUuid(record.studentId);
+        const studentId = normalizeUuid(rosterEntry.studentId);
         const markedByUserId = normalizeUuid(record.markedByUserId);
 
         let existing = await attendanceRepository.findOne({

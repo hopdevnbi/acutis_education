@@ -11,8 +11,8 @@ export interface AttendanceRecordSnapshot {
 
 export interface UpsertAttendanceRecordInput {
   readonly enrollmentId: string;
-  readonly studentId: string;
-  readonly status: AttendanceStatus;
+  readonly studentId?: string;
+  readonly status: AttendanceStatus | string;
   readonly note?: string | null;
   readonly markedByUserId: string;
 }

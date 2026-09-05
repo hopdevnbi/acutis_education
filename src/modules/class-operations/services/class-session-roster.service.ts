@@ -34,18 +34,23 @@ export class ClassSessionRosterService {
     return this.rosterRepository.count({ where: { sessionId } });
   }
 
-  async findBySessionAndEnrollment(
-    rawSessionId: string,
-    rawEnrollmentId: string,
-  ): Promise<SessionRosterEntrySnapshot | null> {
-    const row = await this.rosterRepository.findOne({
-      where: {
-        sessionId: normalizeUuid(rawSessionId),
-        enrollmentId: normalizeUuid(rawEnrollmentId),
-      },
-    });
+  async countBySessionIds(rawSessionIds: readonly string[]): Promise<ReadonlyMap<string, number>> {
+    if (rawSessionIds.length === 0) {
+      return new Map();
+    }
 
-    return row === null ? null : toSessionRosterEntrySnapshot(row);
+    const sessionIds = rawSessionIds.map((id) => normalizeUuid(id));
+    const rows = await this.rosterRepository
+      .createQueryBuilder('roster')
+      .select('roster.sessionId', 'sessionId')
+      .addSelect('COUNT(1)', 'rosterCount')
+      .where('roster.sessionId IN (:...sessionIds)', { sessionIds })
+      .groupBy('roster.sessionId')
+      .getRawMany<{ sessionId: string; rosterCount: string }>();
+
+    return new Map(
+      rows.map((row) => [normalizeUuid(row.sessionId), Number(row.rosterCount)] as const),
+    );
   }
 
   async replaceRoster(

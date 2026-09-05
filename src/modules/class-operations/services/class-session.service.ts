@@ -13,6 +13,7 @@ import {
 import type {
   CreateClassSessionInput,
   ListClassSessionsByClassInput,
+  ClassSessionListResult,
   UpdateClassSessionInput,
   ClassSessionSnapshot,
 } from '../interfaces/class-session.interface';
@@ -47,8 +48,10 @@ export class ClassSessionService {
     return session === null ? null : toClassSessionSnapshot(session);
   }
 
-  async listSessionsByClass(input: ListClassSessionsByClassInput): Promise<ClassSessionSnapshot[]> {
+  async listSessionsByClass(input: ListClassSessionsByClassInput): Promise<ClassSessionListResult> {
     const classId = normalizeUuid(input.classId);
+    const page = input.page ?? 1;
+    const limit = input.limit ?? 20;
     const queryBuilder = this.classSessionRepository
       .createQueryBuilder('session')
       .where('session.classId = :classId', { classId });
@@ -69,11 +72,23 @@ export class ClassSessionService {
       });
     }
 
-    queryBuilder.orderBy('session.startsAt', 'ASC');
+    const total = await queryBuilder.getCount();
+
+    queryBuilder
+      .orderBy('session.startsAt', 'DESC')
+      .addOrderBy('session.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
     const sessions = await queryBuilder.getMany();
 
-    return sessions.map(toClassSessionSnapshot);
+    return {
+      items: sessions.map(toClassSessionSnapshot),
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
   }
 
   async createSession(

@@ -78,6 +78,24 @@ describe('Enrollment and catechist assignment API (db e2e)', () => {
     }
 
     await AppDataSource.query(`
+      DELETE FROM attendance_records
+      WHERE session_id IN (
+        SELECT id FROM class_sessions
+        WHERE class_id IN (SELECT id FROM classes WHERE code LIKE '${TEST_CODE_PREFIX}%')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_session_roster
+      WHERE session_id IN (
+        SELECT id FROM class_sessions
+        WHERE class_id IN (SELECT id FROM classes WHERE code LIKE '${TEST_CODE_PREFIX}%')
+      )
+    `);
+    await AppDataSource.query(`
+      DELETE FROM class_sessions
+      WHERE class_id IN (SELECT id FROM classes WHERE code LIKE '${TEST_CODE_PREFIX}%')
+    `);
+    await AppDataSource.query(`
       DELETE FROM enrollments
       WHERE student_id IN (SELECT id FROM students WHERE full_name LIKE '${TEST_CODE_PREFIX}%')
     `);

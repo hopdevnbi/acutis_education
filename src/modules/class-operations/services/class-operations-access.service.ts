@@ -6,21 +6,25 @@ import {
 } from '../../access-control/constants/role-codes.constants';
 import { AccessControlService } from '../../access-control/services/access-control.service';
 import { ClassCatechistAssignmentService } from '../../class/services/class-catechist-assignment.service';
+import { ClassService } from '../../class/services/class.service';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { ParishScopeService } from '../../parish/services/parish-scope.service';
 import { LearnerSelfScopeService } from '../../student/services/learner-self-scope.service';
 import { StudentGuardianService } from '../../student/services/student-guardian.service';
+import { ClassOperationsAccessDeniedError } from '../errors/class-operations.errors';
 import { ClassSessionService } from './class-session.service';
 
 /**
- * Access shell for Class Operations.
- * Full HTTP denial mapping lands in #003/#004; this prepares public-API-based checks.
+ * Staff and future Parent/Learner access helpers for Class Operations.
+ * Staff endpoints require assigned Catechist, ParishAdmin parish scope, or SuperAdmin.
+ * Parent/Student never pass staff asserts via role alone or parish membership alone.
  */
 @Injectable()
 export class ClassOperationsAccessService {
   constructor(
     private readonly accessControlService: AccessControlService,
     private readonly parishScopeService: ParishScopeService,
+    private readonly classService: ClassService,
     private readonly classCatechistAssignmentService: ClassCatechistAssignmentService,
     private readonly enrollmentService: EnrollmentService,
     private readonly studentGuardianService: StudentGuardianService,
@@ -70,18 +74,52 @@ export class ClassOperationsAccessService {
     return this.parishScopeService.hasActiveParishMembership(rawUserId, rawParishId);
   }
 
-  async canManageSessionWrites(rawUserId: string, rawSessionId: string): Promise<boolean> {
+  async canStaffAccessClass(rawUserId: string, rawClassId: string): Promise<boolean> {
     if (await this.isSuperAdmin(rawUserId)) {
       return true;
     }
 
-    const session = await this.classSessionService.getSessionById(rawSessionId);
+    const classSnapshot = await this.classService.getClassById(rawClassId);
 
-    if (await this.canManageClassOperationsAsParishAdmin(rawUserId, session.parishId)) {
+    if (await this.canManageClassOperationsAsParishAdmin(rawUserId, classSnapshot.parishId)) {
       return true;
     }
 
-    return this.canManageClassOperationsAsCatechist(rawUserId, session.classId);
+    return this.canManageClassOperationsAsCatechist(rawUserId, classSnapshot.id);
+  }
+
+  async canStaffAccessSession(rawUserId: string, rawSessionId: string): Promise<boolean> {
+    const session = await this.classSessionService.getSessionById(rawSessionId);
+
+    return this.canStaffAccessClass(rawUserId, session.classId);
+  }
+
+  async assertCanStaffManageClass(rawUserId: string, rawClassId: string): Promise<void> {
+    if (await this.canStaffAccessClass(rawUserId, rawClassId)) {
+      return;
+    }
+
+    throw new ClassOperationsAccessDeniedError();
+  }
+
+  async assertCanStaffReadClass(rawUserId: string, rawClassId: string): Promise<void> {
+    await this.assertCanStaffManageClass(rawUserId, rawClassId);
+  }
+
+  async assertCanStaffManageSession(rawUserId: string, rawSessionId: string): Promise<void> {
+    if (await this.canStaffAccessSession(rawUserId, rawSessionId)) {
+      return;
+    }
+
+    throw new ClassOperationsAccessDeniedError();
+  }
+
+  async assertCanStaffReadSession(rawUserId: string, rawSessionId: string): Promise<void> {
+    await this.assertCanStaffManageSession(rawUserId, rawSessionId);
+  }
+
+  async canManageSessionWrites(rawUserId: string, rawSessionId: string): Promise<boolean> {
+    return this.canStaffAccessSession(rawUserId, rawSessionId);
   }
 
   async canReadEnrollmentAttendanceAsParent(

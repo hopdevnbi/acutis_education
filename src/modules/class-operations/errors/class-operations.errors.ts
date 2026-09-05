@@ -74,3 +74,24 @@ export class InvalidAttendanceNoteError extends Error {
     this.name = 'InvalidAttendanceNoteError';
   }
 }
+
+export class ClassOperationsAccessDeniedError extends Error {
+  constructor() {
+    super('Class operations access denied.');
+    this.name = 'ClassOperationsAccessDeniedError';
+  }
+}
+
+export class ClassSessionClassNotActiveError extends Error {
+  constructor() {
+    super('Class must be ACTIVE to create a class session.');
+    this.name = 'ClassSessionClassNotActiveError';
+  }
+}
+
+export class ClassSessionUpdateRequiresFieldsError extends Error {
+  constructor() {
+    super('At least one class session field must be provided for update.');
+    this.name = 'ClassSessionUpdateRequiresFieldsError';
+  }
+}

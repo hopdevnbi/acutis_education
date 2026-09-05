@@ -1,31 +1,52 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { normalizeUuid } from '../../../database/uuid-v4.util';
+import { ClassStatus } from '../../class/enums/class-status.enum';
+import { ClassService } from '../../class/services/class.service';
 import { ENROLLMENT_LIST_MAX_LIMIT } from '../../enrollment/constants/enrollment.constants';
 import { EnrollmentStatus } from '../../enrollment/enums/enrollment-status.enum';
 import { EnrollmentService } from '../../enrollment/services/enrollment.service';
 import { StudentService } from '../../student/services/student.service';
+import {
+  CLASS_SESSION_LIST_DEFAULT_LIMIT,
+  CLASS_SESSION_LIST_DEFAULT_PAGE,
+} from '../constants/class-operations.constants';
+import { AttendanceRecordEntity } from '../entities/attendance-record.entity';
+import { ClassSessionEntity } from '../entities/class-session.entity';
 import { ClassSessionStatus } from '../enums/class-session-status.enum';
+import {
+  ClassSessionClassNotActiveError,
+  ClassSessionNotFoundError,
+  ClassSessionUpdateRequiresFieldsError,
+} from '../errors/class-operations.errors';
 import type {
   AttendanceEnrollmentSummary,
   AttendanceRecordSnapshot,
   UpsertAttendanceRecordInput,
 } from '../interfaces/attendance.interface';
 import type {
+  BulkAttendanceClientRecordInput,
+  ClassSessionListResult,
   ClassSessionSnapshot,
+  ClassSessionWithCounts,
   CreateClassSessionInput,
   FreezeRosterEntryInput,
   ListClassSessionsByClassInput,
+  SessionAttendanceItem,
+  SessionAttendanceView,
   SessionRosterEntrySnapshot,
   UpdateClassSessionInput,
 } from '../interfaces/class-session.interface';
 import { AttendanceService } from './attendance.service';
 import { ClassSessionRosterService } from './class-session-roster.service';
 import { ClassSessionService } from './class-session.service';
+import { assertRosterMutable } from '../utils/roster-immutability.util';
 
 @Injectable()
 export class ClassOperationsService {
   constructor(
     private readonly dataSource: DataSource,
+    private readonly classService: ClassService,
     private readonly classSessionService: ClassSessionService,
     private readonly classSessionRosterService: ClassSessionRosterService,
     private readonly attendanceService: AttendanceService,
@@ -37,8 +58,56 @@ export class ClassOperationsService {
     return this.classSessionService.getSessionById(rawSessionId);
   }
 
-  listSessionsByClass(input: ListClassSessionsByClassInput): Promise<ClassSessionSnapshot[]> {
+  async getSessionWithCounts(rawSessionId: string): Promise<ClassSessionWithCounts> {
+    const session = await this.classSessionService.getSessionById(rawSessionId);
+    const rosterCount = await this.classSessionRosterService.countBySessionId(session.id);
+    const markedCount = await this.attendanceService.countBySessionId(session.id);
+
+    return {
+      ...session,
+      rosterCount,
+      markedCount,
+      unmarkedCount: Math.max(rosterCount - markedCount, 0),
+    };
+  }
+
+  listSessionsByClass(input: ListClassSessionsByClassInput): Promise<ClassSessionListResult> {
     return this.classSessionService.listSessionsByClass(input);
+  }
+
+  async listSessionsByClassWithCounts(input: ListClassSessionsByClassInput): Promise<{
+    items: ClassSessionWithCounts[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }> {
+    const result = await this.classSessionService.listSessionsByClass({
+      ...input,
+      page: input.page ?? CLASS_SESSION_LIST_DEFAULT_PAGE,
+      limit: input.limit ?? CLASS_SESSION_LIST_DEFAULT_LIMIT,
+    });
+
+    const sessionIds = result.items.map((item) => item.id);
+    const [rosterCounts, markedCounts] = await Promise.all([
+      this.classSessionRosterService.countBySessionIds(sessionIds),
+      this.attendanceService.countMarkedBySessionIds(sessionIds),
+    ]);
+
+    return {
+      ...result,
+      items: result.items.map((session) => {
+        const rosterCount = rosterCounts.get(session.id) ?? 0;
+        const markedCount = markedCounts.get(session.id) ?? 0;
+
+        return {
+          ...session,
+          rosterCount,
+          markedCount,
+          unmarkedCount: Math.max(rosterCount - markedCount, 0),
+        };
+      }),
+    };
   }
 
   listRosterBySessionId(rawSessionId: string): Promise<SessionRosterEntrySnapshot[]> {
@@ -55,6 +124,34 @@ export class ClassOperationsService {
 
   getEnrollmentAttendanceSummary(rawEnrollmentId: string): Promise<AttendanceEnrollmentSummary> {
     return this.attendanceService.getEnrollmentAttendanceSummary(rawEnrollmentId);
+  }
+
+  async createScheduledSessionForClass(input: {
+    readonly classId: string;
+    readonly title?: string | null;
+    readonly startsAt: Date;
+    readonly endsAt: Date;
+    readonly createdByUserId: string;
+  }): Promise<ClassSessionWithCounts> {
+    const classSnapshot = await this.classService.getClassById(input.classId);
+
+    if (classSnapshot.status !== ClassStatus.Active) {
+      throw new ClassSessionClassNotActiveError();
+    }
+
+    const createInput: CreateClassSessionInput = {
+      classId: classSnapshot.id,
+      parishId: classSnapshot.parishId,
+      academicYearId: classSnapshot.academicYearId,
+      title: input.title,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      createdByUserId: input.createdByUserId,
+    };
+
+    const { session } = await this.createScheduledSessionWithRoster(createInput);
+
+    return this.getSessionWithCounts(session.id);
   }
 
   async createScheduledSessionWithRoster(input: CreateClassSessionInput): Promise<{
@@ -75,37 +172,73 @@ export class ClassOperationsService {
   }
 
   async refreshSessionRoster(rawSessionId: string): Promise<SessionRosterEntrySnapshot[]> {
-    const session = await this.classSessionService.getSessionById(rawSessionId);
-    const attendanceCount = await this.attendanceService.countBySessionId(session.id);
-    const rosterEntries = await this.buildActiveRosterEntries(session.classId);
+    return this.dataSource.transaction(async (entityManager) => {
+      const sessionId = normalizeUuid(rawSessionId);
+      const sessionRepository = entityManager.getRepository(ClassSessionEntity);
+      const attendanceRepository = entityManager.getRepository(AttendanceRecordEntity);
+      const sessionEntity = await sessionRepository.findOne({
+        where: { id: sessionId },
+      });
 
-    return this.classSessionRosterService.replaceRoster(session.id, rosterEntries, {
-      sessionStatus: session.status,
-      attendanceCount,
+      if (sessionEntity === null) {
+        throw new ClassSessionNotFoundError();
+      }
+
+      const attendanceCount = await attendanceRepository.count({
+        where: { sessionId: sessionEntity.id },
+      });
+
+      assertRosterMutable(sessionEntity.status, attendanceCount);
+
+      const rosterEntries = await this.buildActiveRosterEntries(sessionEntity.classId);
+
+      return this.classSessionRosterService.replaceRoster(sessionEntity.id, rosterEntries, {
+        sessionStatus: sessionEntity.status,
+        attendanceCount,
+        entityManager,
+      });
     });
   }
 
   updateSession(
     rawSessionId: string,
-    input: UpdateClassSessionInput,
+    input: UpdateClassSessionInput & {
+      readonly title?: string | null;
+      readonly startsAt?: Date;
+      readonly endsAt?: Date;
+    },
   ): Promise<ClassSessionSnapshot> {
+    if (input.title === undefined && input.startsAt === undefined && input.endsAt === undefined) {
+      throw new ClassSessionUpdateRequiresFieldsError();
+    }
+
     return this.classSessionService.updateSession(rawSessionId, input);
   }
 
-  completeSession(rawSessionId: string, updatedByUserId: string): Promise<ClassSessionSnapshot> {
-    return this.classSessionService.transitionSession(
+  async completeSession(
+    rawSessionId: string,
+    updatedByUserId: string,
+  ): Promise<ClassSessionWithCounts> {
+    await this.classSessionService.transitionSession(
       rawSessionId,
       ClassSessionStatus.Completed,
       updatedByUserId,
     );
+
+    return this.getSessionWithCounts(rawSessionId);
   }
 
-  cancelSession(rawSessionId: string, updatedByUserId: string): Promise<ClassSessionSnapshot> {
-    return this.classSessionService.transitionSession(
+  async cancelSession(
+    rawSessionId: string,
+    updatedByUserId: string,
+  ): Promise<ClassSessionWithCounts> {
+    await this.classSessionService.transitionSession(
       rawSessionId,
       ClassSessionStatus.Cancelled,
       updatedByUserId,
     );
+
+    return this.getSessionWithCounts(rawSessionId);
   }
 
   upsertAttendanceForSession(
@@ -113,6 +246,68 @@ export class ClassOperationsService {
     records: readonly UpsertAttendanceRecordInput[],
   ): Promise<AttendanceRecordSnapshot[]> {
     return this.attendanceService.upsertRecordsForSession(rawSessionId, records);
+  }
+
+  async bulkUpsertAttendanceFromClient(
+    rawSessionId: string,
+    records: readonly BulkAttendanceClientRecordInput[],
+    markedByUserId: string,
+  ): Promise<SessionAttendanceView> {
+    await this.attendanceService.upsertRecordsForSession(
+      rawSessionId,
+      records.map((record) => ({
+        enrollmentId: record.enrollmentId,
+        status: record.status,
+        note: record.note,
+        markedByUserId,
+      })),
+    );
+
+    return this.getSessionAttendanceView(rawSessionId);
+  }
+
+  async getSessionAttendanceView(rawSessionId: string): Promise<SessionAttendanceView> {
+    const session = await this.classSessionService.getSessionById(rawSessionId);
+    const [roster, attendance] = await Promise.all([
+      this.classSessionRosterService.listBySessionId(session.id),
+      this.attendanceService.listBySessionId(session.id),
+    ]);
+
+    const attendanceByEnrollmentId = new Map(
+      attendance.map((row) => [row.enrollmentId, row] as const),
+    );
+
+    const items: SessionAttendanceItem[] = roster
+      .map((entry) => {
+        const mark = attendanceByEnrollmentId.get(entry.enrollmentId);
+
+        return {
+          enrollmentId: entry.enrollmentId,
+          studentId: entry.studentId,
+          displayName: entry.displayNameSnapshot,
+          status: mark?.status ?? null,
+          note: mark?.note ?? null,
+          markedAt: mark?.markedAt ?? null,
+        };
+      })
+      .sort((left, right) => {
+        const byName = left.displayName.localeCompare(right.displayName);
+        if (byName !== 0) {
+          return byName;
+        }
+
+        return left.enrollmentId.localeCompare(right.enrollmentId);
+      });
+
+    const markedCount = items.filter((item) => item.status !== null).length;
+
+    return {
+      session,
+      rosterCount: items.length,
+      markedCount,
+      unmarkedCount: Math.max(items.length - markedCount, 0),
+      items,
+    };
   }
 
   private async buildActiveRosterEntries(rawClassId: string): Promise<FreezeRosterEntryInput[]> {

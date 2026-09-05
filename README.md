@@ -275,6 +275,36 @@ List query parameters: `page`, `limit`, `sortBy`, `sort`, optional `academicYear
 
 Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activation requires an ACTIVE parish, ACTIVE academic year, and ACTIVE catechism level.
 
+## Class Operations API (Attendance)
+
+Staff-facing class session and attendance APIs owned by `class-operations` (not Family Portal). Recurring schedule templates and Parent/Student attendance history reads are deferred.
+
+**Ownership:** `class_sessions`, `class_session_roster`, `attendance_records`.
+
+**Session lifecycle:** `SCHEDULED` → `COMPLETED` | `CANCELLED` (no hard delete; no reopen).
+
+**Attendance statuses:** `PRESENT` | `ABSENT` | `LATE` | `EXCUSED`. UNMARKED = roster row with no attendance row.
+
+**Roster:** ACTIVE enrollments are snapshotted at session create. Refresh allowed only while `SCHEDULED` and zero attendance marks.
+
+| Method | Route | Permission | Notes |
+| ------ | ----- | ---------- | ----- |
+| `POST` | `/api/v1/classes/:classId/sessions` | `class-sessions.manage` | Create SCHEDULED + freeze roster (class must be ACTIVE) |
+| `GET` | `/api/v1/classes/:classId/sessions` | `class-sessions.read` | Paginated; `page`, `limit` (max 50), optional `from`, `to`, `status` |
+| `GET` | `/api/v1/class-sessions/:sessionId` | `class-sessions.read` | Detail + roster/marked/unmarked counts |
+| `PATCH` | `/api/v1/class-sessions/:sessionId` | `class-sessions.manage` | Title/times while SCHEDULED only |
+| `POST` | `/api/v1/class-sessions/:sessionId/cancel` | `class-sessions.manage` | Soft cancel |
+| `POST` | `/api/v1/class-sessions/:sessionId/complete` | `class-sessions.manage` | Completes and locks attendance |
+| `POST` | `/api/v1/class-sessions/:sessionId/roster/refresh` | `class-sessions.manage` | SCHEDULED + zero marks only |
+| `GET` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.read` | Staff roster + marks |
+| `PUT` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.manage` | Bulk upsert; omitted learners stay UNMARKED |
+
+**Staff scope:** assigned Catechist (ACTIVE assignment), ParishAdmin (own parish), SuperAdmin. Parent/Student are denied on these staff routes even if they hold read permissions. Permission never replaces scope.
+
+**Bulk PUT:** transactional all-or-nothing; unique `(sessionId, enrollmentId)`; enrollment must be on frozen roster; note max 500 (never logged).
+
+Parent/Student attendance history and enrollment summaries are planned for a later prompt. This phase is **not** complete until demo/Postman finalization.
+
 ## Student API
 
 Authenticated student and guardian endpoints (require JWT + RBAC):

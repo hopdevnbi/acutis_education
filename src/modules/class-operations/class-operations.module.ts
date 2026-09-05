@@ -6,6 +6,8 @@ import { ClassModule } from '../class/class.module';
 import { EnrollmentModule } from '../enrollment/enrollment.module';
 import { ParishModule } from '../parish/parish.module';
 import { StudentModule } from '../student/student.module';
+import { ClassSessionAttendanceController } from './controllers/class-session-attendance.controller';
+import { ClassSessionsController } from './controllers/class-sessions.controller';
 import { AttendanceRecordEntity } from './entities/attendance-record.entity';
 import { ClassSessionRosterEntity } from './entities/class-session-roster.entity';
 import { ClassSessionEntity } from './entities/class-session.entity';
@@ -29,6 +31,7 @@ import { ClassSessionService } from './services/class-session.service';
     AuthModule,
     AccessControlModule,
   ],
+  controllers: [ClassSessionsController, ClassSessionAttendanceController],
   providers: [
     ClassOperationsService,
     ClassSessionService,
