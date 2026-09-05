@@ -32,7 +32,6 @@ export interface CreateCmsEntryInput {
   readonly summary?: string | null;
   readonly body: string;
   readonly locale?: string;
-  readonly status?: CmsEntryStatus;
   readonly coverMediaAssetId?: string | null;
   readonly isFeatured?: boolean;
   readonly scheduledFor?: Date | null;
@@ -41,12 +40,52 @@ export interface CreateCmsEntryInput {
 }
 
 export interface UpdateCmsEntryInput {
+  readonly type?: CmsEntryType;
+  readonly scopeType?: CmsScopeType;
+  readonly parishId?: string | null;
+  readonly slug?: string;
   readonly title?: string;
   readonly summary?: string | null;
   readonly body?: string;
+  readonly locale?: string;
   readonly coverMediaAssetId?: string | null;
   readonly isFeatured?: boolean;
   readonly scheduledFor?: Date | null;
   readonly expiresAt?: Date | null;
   readonly updatedByUserId: string;
+}
+
+export interface PublicCmsListFilter {
+  readonly page: number;
+  readonly limit: number;
+  readonly type?: CmsEntryType;
+  readonly locale?: string;
+  readonly isFeatured?: boolean;
+  readonly parishId?: string;
+  readonly allowedParishIds: readonly string[];
+}
+
+export interface AdminCmsListFilter {
+  readonly page: number;
+  readonly limit: number;
+  readonly status?: CmsEntryStatus;
+  readonly type?: CmsEntryType;
+  readonly scopeType?: CmsScopeType;
+  readonly parishId?: string;
+  readonly locale?: string;
+  readonly search?: string;
+  readonly isSuperAdmin: boolean;
+  readonly adminParishIds: readonly string[];
+}
+
+export interface CmsPaginatedResult<T> {
+  readonly items: readonly T[];
+  readonly total: number;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface CmsScheduledPublishResult {
+  readonly processedCount: number;
+  readonly publishedEntryIds: readonly string[];
 }

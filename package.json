@@ -48,6 +48,7 @@
     "seed:family-portal-demo": "ts-node --project tsconfig.json scripts/seed-family-portal-demo.ts",
     "seed:class-operations-demo": "ts-node --project tsconfig.json scripts/seed-class-operations-demo.ts",
     "seed:gamification-demo": "ts-node --project tsconfig.json scripts/seed-gamification-demo.ts",
+    "cms:publish-scheduled": "ts-node --project tsconfig.json scripts/process-scheduled-cms-publications.ts",
     "localization:process-jobs": "ts-node --project tsconfig.json scripts/localization-process-jobs.ts"
   },
   "dependencies": {

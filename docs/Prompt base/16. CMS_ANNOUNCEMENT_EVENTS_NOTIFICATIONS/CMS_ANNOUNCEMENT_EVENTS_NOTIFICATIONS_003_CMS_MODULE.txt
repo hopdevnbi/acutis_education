@@ -1,0 +1,1301 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #003/7
+FAST IMPLEMENTATION MODE
+CMS MODULE — CONTENT CRUD + PUBLISHING LIFECYCLE + PUBLIC / SCOPED READS
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production CMS code
+- controllers
+- DTOs
+- services
+- lifecycle helpers
+- access/scope logic
+- scheduled-publication runner/helper
+- unit/integration/DB e2e specs
+- README/OpenAPI updates
+- report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+- scheduled publication runner
+
+Do not mark deferred validation as failure.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+SCHEDULED PUBLISHER EXECUTED: NO — deferred
+
+Architecture/security/privacy/modular ownership remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "feat(cms): add content publishing and reads"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7
+Domain audit/design
+
+#001A
+Corrective contract audit
+
+#002/7
+Persistence foundation
+
+Frozen CMS persistence:
+
+Module:
+src/modules/cms/
+
+Owned table:
+cms_entries
+
+Fields include:
+- type PAGE | ARTICLE | NEWS
+- scope_type GLOBAL | PARISH
+- scope_key
+- parish_id
+- slug
+- title
+- summary
+- body
+- locale
+- status DRAFT | SCHEDULED | PUBLISHED | ARCHIVED
+- cover_media_asset_id
+- is_featured
+- scheduled_for
+- published_at
+- expires_at
+- created_by_user_id
+- updated_by_user_id
+- timestamps
+
+Unique:
+(scope_key, slug)
+
+RBAC:
+cms.read
+cms.manage
+
+Scope:
+SUPER_ADMIN:
+- GLOBAL
+- all PARISH
+
+PARISH_ADMIN:
+- own PARISH only
+- cannot manage GLOBAL
+
+CATECHIST / PARENT / STUDENT:
+- published reads only
+
+Public strategy:
+- anonymous public routes may read GLOBAL + PUBLISHED only
+- authenticated scoped users may read GLOBAL plus their eligible PARISH content
+
+Localization:
+- direct authored `locale`
+- no runtime LocalizationModule dependency
+
+Media:
+- scalar `cover_media_asset_id`
+- no Media entity/repository relation
+
+Final CMS target API count:
+6 routes
+
+1. GET /api/v1/cms/entries
+2. GET /api/v1/cms/entries/:slug
+3. POST /api/v1/cms/entries
+4. PATCH /api/v1/cms/entries/:id
+5. POST /api/v1/cms/entries/:id/publish
+6. POST /api/v1/cms/entries/:id/archive
+
+Current:
+#003/7 — CMS
+
+Remaining:
+#004 Announcements
+#005 Events
+#006 Notifications
+#007 Finalization
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Implement complete CMS MVP:
+
+1. CMS admin create/update
+2. DRAFT/SCHEDULED/PUBLISHED/ARCHIVED lifecycle
+3. immediate publication
+4. scheduled publication
+5. archive
+6. public GLOBAL reads
+7. authenticated GLOBAL + eligible PARISH reads
+8. slug routing
+9. filters/pagination
+10. featured handling
+11. locale handling
+12. data minimization
+13. static OpenAPI/README
+14. tests/specs
+
+Do NOT implement Announcement/Event/Notification business behavior here.
+
+==================================================
+PART A — CMS LIFECYCLE
+==================================================
+
+Implement exact lifecycle helper.
+
+States:
+DRAFT
+SCHEDULED
+PUBLISHED
+ARCHIVED
+
+Allowed:
+
+DRAFT -> PUBLISHED
+DRAFT -> SCHEDULED
+DRAFT -> ARCHIVED
+
+SCHEDULED -> PUBLISHED
+SCHEDULED -> DRAFT only if user explicitly unschedules?
+Audit existing product conventions.
+
+Strong preference:
+allow SCHEDULED -> DRAFT via PATCH/unschedule only if clean.
+Otherwise require update scheduledFor while SCHEDULED.
+
+PUBLISHED -> ARCHIVED
+
+ARCHIVED:
+terminal in MVP
+
+No:
+PUBLISHED -> DRAFT
+ARCHIVED -> PUBLISHED
+ARCHIVED -> DRAFT
+
+Required:
+freeze exact transition matrix in code/spec/report.
+
+==================================================
+PART B — CREATE CMS ENTRY
+==================================================
+
+POST /api/v1/cms/entries
+
+Permission:
+cms.manage
+
+Allowed actors:
+SUPER_ADMIN
+PARISH_ADMIN
+
+Create should default to DRAFT unless scheduling fields explicitly request SCHEDULED.
+
+Strong preference:
+body may include:
+- type
+- scopeType
+- parishId?
+- slug
+- title
+- summary?
+- body
+- locale?
+- coverMediaAssetId?
+- isFeatured?
+- scheduledFor?
+- expiresAt?
+
+Server derives:
+- scopeKey
+- createdByUserId
+- updatedByUserId
+- status
+
+Do NOT accept:
+- publishedAt
+- createdAt
+- updatedAt
+- createdByUserId
+- updatedByUserId
+- scopeKey
+
+If scheduledFor provided:
+- must be future UTC
+- status becomes SCHEDULED
+
+If not:
+- DRAFT
+
+Do not create PUBLISHED directly through POST.
+Use publish action.
+
+==================================================
+PART C — UPDATE CMS ENTRY
+==================================================
+
+PATCH /api/v1/cms/entries/:id
+
+Permission:
+cms.manage
+
+Lifecycle-sensitive editing:
+
+DRAFT:
+editable:
+- type
+- scope
+- parish
+- slug
+- title
+- summary
+- body
+- locale
+- cover
+- featured
+- scheduledFor
+- expiresAt
+
+SCHEDULED:
+editable:
+- title
+- summary
+- body
+- locale
+- cover
+- featured
+- scheduledFor
+- expiresAt
+- slug/scope only if publication has never occurred
+
+PUBLISHED:
+immutable:
+- slug
+- scopeType
+- parishId
+- type if changing type would break public URL semantics
+
+editable:
+- title
+- summary
+- body
+- locale
+- coverMediaAssetId
+- isFeatured
+- expiresAt
+
+ARCHIVED:
+read-only
+
+Choose exact policy and document.
+
+==================================================
+PART D — SLUG NORMALIZATION
+==================================================
+
+Implement deterministic slug policy.
+
+Prefer:
+- trim
+- lowercase
+- ASCII-safe kebab slug if current project utility exists
+- if user supplies slug, validate instead of silently transliterating Unicode unless project already does slugify
+
+Avoid unstable automatic Vietnamese transliteration unless existing dependency/convention exists.
+
+Strong recommendation:
+accept explicit slug matching:
+
+^[a-z0-9]+(?:-[a-z0-9]+)*$
+
+Max length e.g. 160.
+
+If title-to-slug generation is requested by product convention:
+use a deterministic utility.
+
+Required:
+no silent collision suffixing in backend MVP.
+Collision => 409.
+
+==================================================
+PART E — SCOPE VALIDATION
+==================================================
+
+GLOBAL:
+- SUPER_ADMIN only
+- parishId must be null
+- scopeKey = GLOBAL
+
+PARISH:
+- parishId required
+- SuperAdmin any parish
+- ParishAdmin own active parish only
+- scopeKey = PARISH:<parishId>
+
+Use public Parish/ParishScope service only.
+
+No foreign repository.
+
+==================================================
+PART F — MEDIA REFERENCE
+==================================================
+
+If coverMediaAssetId provided:
+
+Audit whether MediaAssetService has public validation method.
+
+If yes:
+validate referenced asset existence/access safely.
+
+If not:
+retain scalar UUID and defer strict runtime asset validation.
+
+Do NOT import Media entity/repository.
+
+Do NOT add another table.
+
+Document exact behavior.
+
+==================================================
+PART G — IMMEDIATE PUBLISH
+==================================================
+
+POST /api/v1/cms/entries/:id/publish
+
+Permission:
+cms.manage
+
+Allowed:
+DRAFT -> PUBLISHED
+SCHEDULED -> PUBLISHED only if:
+- scheduledFor <= now
+OR
+- explicit authorized manual override is allowed
+
+Strong recommendation:
+authorized manual publish may publish a SCHEDULED item early.
+
+On publish:
+- status = PUBLISHED
+- publishedAt = UTC now
+- scheduledFor may remain as historical schedule metadata or clear it
+
+Choose exact policy.
+
+No application notification event for generic CMS content in MVP.
+
+No automatic Notification fan-out.
+
+==================================================
+PART H — ARCHIVE
+==================================================
+
+POST /api/v1/cms/entries/:id/archive
+
+Permission:
+cms.manage
+
+Allowed:
+DRAFT -> ARCHIVED
+SCHEDULED -> ARCHIVED
+PUBLISHED -> ARCHIVED
+
+ARCHIVED -> archive again:
+409 or idempotent return.
+
+Use repository convention.
+
+Strong preference:
+409 lifecycle conflict.
+
+Archived entry disappears from published/public feed.
+
+No hard delete route in frozen API.
+
+Even though audit allowed possible draft hard-delete, final route inventory contains no DELETE.
+Therefore:
+NO DELETE CMS ENDPOINT IN MVP.
+
+Document explicitly.
+
+==================================================
+PART I — SCHEDULED PUBLISHING
+==================================================
+
+Need implement scheduled publication service/runner without cron dependency.
+
+Create pure service method:
+
+publishDueEntries(now = new Date())
+
+Behavior:
+- query SCHEDULED
+- scheduledFor <= now
+- transition to PUBLISHED
+- set publishedAt deterministically
+- bounded batch
+
+No GET-time mutation.
+
+Add script:
+
+scripts/process-scheduled-cms-publications.ts
+
+or generic scheduled publication script only if Announcements can later reuse cleanly.
+
+Strong preference:
+CMS-owned runner now, Announcement gets its own if necessary.
+
+Protect environment only if runner mutates DB and follows existing safe background-runner conventions.
+
+Do NOT execute.
+
+Add package script only if repository convention supports it:
+`cms:publish-scheduled`
+or similar.
+
+==================================================
+PART J — PUBLIC LIST
+==================================================
+
+GET /api/v1/cms/entries
+
+This route must support anonymous access.
+
+Anonymous:
+only:
+- status PUBLISHED
+- scope GLOBAL
+- publishedAt <= now
+- expiresAt null OR expiresAt > now
+
+Authenticated:
+may additionally include actor-eligible PARISH entries.
+
+Need avoid forcing auth for public content.
+
+Audit current `@Public()`/optional auth pattern.
+
+If optional authenticated principal is difficult:
+use optional JWT guard or separate internal resolution.
+
+Do NOT expose DRAFT/SCHEDULED/ARCHIVED through public list.
+
+==================================================
+PART K — AUTHENTICATED PARISH VISIBILITY
+==================================================
+
+For authenticated:
+SUPER_ADMIN:
+public endpoint should still behave like normal consumer feed unless explicit preview mode exists.
+Strong default:
+published GLOBAL + active parish memberships only, not every parish.
+
+PARISH_ADMIN:
+GLOBAL + own active parish
+
+CATECHIST:
+GLOBAL + active parish memberships
+
+PARENT:
+GLOBAL + parish(es) from active contextual membership/enrollment where public APIs permit
+
+STUDENT:
+GLOBAL + parish(es) from active enrollment
+
+Need inspect existing public scope APIs.
+
+Do not query foreign repos.
+
+If user can belong to multiple parishes:
+support set of parish IDs.
+
+No cross-parish leakage.
+
+==================================================
+PART L — PUBLIC LIST FILTERS
+==================================================
+
+DTO:
+
+CmsPublicListQueryDto
+
+Potential:
+page
+limit max 50
+type?
+locale?
+featured?
+parishId?
+
+Be careful with parishId:
+client cannot use parishId to widen access.
+
+If parishId supplied:
+intersect with actor-visible parish set.
+
+Anonymous parishId:
+must NOT reveal parish-scoped content.
+
+Sort:
+featured DESC
+publishedAt DESC
+id DESC
+
+Or:
+publishedAt DESC + id DESC if featured separation is handled UI-side.
+
+Choose deterministic order.
+
+==================================================
+PART M — PUBLIC DETAIL BY SLUG
+==================================================
+
+GET /api/v1/cms/entries/:slug
+
+Potential slug ambiguity:
+same slug may exist GLOBAL and different PARISH scopes.
+
+A plain slug route cannot uniquely identify both if authenticated user belongs to multiple parishes.
+
+This needs exact resolution.
+
+Strong safe strategy:
+
+1. For anonymous:
+resolve GLOBAL only.
+
+2. For authenticated:
+- prefer matching eligible PARISH entry if exactly one
+- otherwise GLOBAL fallback
+
+But if user belongs to multiple parishes and same slug exists in two:
+ambiguous.
+
+Better contract:
+use optional `parishId` query for scoped lookup:
+GET /cms/entries/:slug?parishId=...
+
+If parishId omitted:
+GLOBAL only.
+
+This preserves deterministic URL behavior.
+
+Review #001 contract and decide without adding route count.
+
+Recommended final:
+- default slug lookup = GLOBAL
+- `?parishId=<uuid>` explicitly selects parish-scoped version after access check
+
+List can still include both.
+
+Document.
+
+==================================================
+PART N — ADMIN LIST GAP
+==================================================
+
+Frozen CMS API inventory has only 6 routes and does NOT contain a separate admin list/get-by-id route.
+
+Need admin users to edit drafts.
+
+Possible approach:
+reuse GET /cms/entries with a privileged admin query such as:
+`view=manage`
+
+But this risks mixing public and admin semantics.
+
+Alternative:
+POST/PATCH response supplies IDs, but admin cannot later list drafts.
+
+This is a CONTRACT GAP worth resolving within #003.
+
+Evaluate carefully.
+
+Strong recommendation:
+add:
+GET /api/v1/admin/cms/entries
+
+and perhaps:
+GET /api/v1/admin/cms/entries/:id
+
+This would increase CMS route count from 6 to 8 and total phase route count from 33 to 35.
+
+However #001A froze 33 routes.
+
+Do NOT silently add routes.
+
+Required action:
+audit actual usability.
+
+If admin draft management is impossible with 6 routes:
+classify as HIGH contract gap and implement the minimal needed admin read routes, updating total route target.
+
+If POST response + client-kept ID is considered insufficient for a real CMS admin UI, add the routes.
+
+Strong recommendation:
+ADD both admin list and admin detail.
+
+Why:
+CMS CRUD cannot be operationally managed without retrieving DRAFT/SCHEDULED/ARCHIVED content.
+
+If added:
+- document corrected CMS route count = 8
+- corrected total route count = 35
+- explain justified contract correction
+- no need separate corrective prompt if static implementation can safely include it, but report must flag contract delta.
+
+Use project route convention:
+GET /api/v1/admin/cms/entries
+GET /api/v1/admin/cms/entries/:id
+
+==================================================
+PART O — ADMIN CMS LIST
+==================================================
+
+If implementing corrected admin routes:
+
+GET /api/v1/admin/cms/entries
+
+Permission:
+cms.manage
+
+Filters:
+- page/limit max 50
+- status
+- type
+- scopeType
+- parishId
+- locale
+- search optional if easy
+
+Scope:
+SuperAdmin:
+GLOBAL/all parish
+
+ParishAdmin:
+own parish only
+
+Catechist/Parent/Student:
+403
+
+Stable sort:
+updatedAt DESC + id DESC
+
+No N+1.
+
+==================================================
+PART P — ADMIN CMS DETAIL
+==================================================
+
+GET /api/v1/admin/cms/entries/:id
+
+Permission:
+cms.manage
+
+Scope:
+SuperAdmin global/all
+ParishAdmin own parish
+
+Return full admin DTO including:
+- status
+- scheduledFor
+- publishedAt
+- created/updated timestamps
+- creator/updater IDs only if staff audit convention permits
+
+No cross-parish.
+
+==================================================
+PART Q — PUBLIC DTO MINIMIZATION
+==================================================
+
+Public DTO:
+
+CmsEntryPublicResponseDto
+
+May include:
+- id
+- type
+- slug
+- title
+- summary
+- body on detail only
+- locale
+- coverMediaAssetId
+- isFeatured
+- publishedAt
+- expiresAt
+- parishId only if useful to route UI
+
+Do not include:
+- createdByUserId
+- updatedByUserId
+- scheduledFor
+- internal scopeKey
+- draft status metadata
+
+List should preferably omit full body.
+
+Use:
+CmsEntryListItemDto
+CmsEntryDetailDto
+
+==================================================
+PART R — ADMIN DTOs
+==================================================
+
+Create:
+
+CreateCmsEntryDto
+UpdateCmsEntryDto
+CmsEntryAdminResponseDto
+CmsEntryAdminListQueryDto
+CmsEntryAdminListResponseDto
+
+No entity leakage.
+
+==================================================
+PART S — ERRORS
+==================================================
+
+Add/use:
+
+CmsEntryNotFoundError
+CmsSlugConflictError
+CmsEntryNotEditableError
+InvalidCmsLifecycleTransitionError
+CmsScopeAccessDeniedError
+InvalidCmsScheduleError
+
+Map:
+400 validation
+401 auth
+403 scope
+404 not found
+409 slug/lifecycle
+422 schedule/domain if project convention uses it
+
+==================================================
+PART T — FEATURED SEMANTICS
+==================================================
+
+isFeatured is editorial highlighting only.
+
+No global uniqueness such as "only one featured".
+
+Multiple entries can be featured.
+
+Public list:
+either sort featured first or filter.
+
+Do not overbuild banner placement slots.
+
+==================================================
+PART U — EXPIRATION SEMANTICS
+==================================================
+
+expiresAt:
+- hides content from public feeds/detail after expiration
+- does NOT mutate status on GET
+- published row remains PUBLISHED historically until scheduler/admin archives it
+
+Admin list still shows it.
+
+Scheduled processor may optionally archive expired published entries if useful, but strong preference:
+do not mutate automatically unless requirements justify.
+
+No GET mutation.
+
+==================================================
+PART V — LOCALE
+==================================================
+
+Locale:
+- validate BCP47-ish format using existing project locale utility if available
+- otherwise bounded string validation
+- default `vi-VN` only if project convention confirms
+
+Do not invoke LocalizationService.
+
+Public `locale` filter:
+exact normalized locale match.
+
+No auto-translation.
+
+==================================================
+PART W — ACCESS SERVICE
+==================================================
+
+Complete CmsAccessService:
+
+assertCanManageCmsScope(actor, scope)
+listVisibleParishIds(actor)
+assertCanReadParishCms(actor, parishId)
+assertCanManageEntry(actor, entry)
+
+Use only public services.
+
+Anonymous is allowed only GLOBAL published.
+
+No admin impersonation concern here because public route is content visibility, not `/me`.
+
+==================================================
+PART X — SERVICE ARCHITECTURE
+==================================================
+
+Keep:
+
+CmsEntryService
+- persistence primitives
+
+CmsService
+- public facade/business orchestration
+
+May create:
+CmsPublishingService
+CmsQueryService
+
+Do not export additional services.
+
+CmsModule exports CmsService only.
+
+==================================================
+PART Y — OPENAPI
+==================================================
+
+Document public routes:
+
+GET /cms/entries
+GET /cms/entries/:slug
+
+Admin:
+POST/PATCH/publish/archive
+plus admin list/detail if contract correction accepted
+
+Annotate:
+- public anonymous behavior
+- optional authenticated parish visibility
+- management permission
+- scope
+- response DTO
+- pagination
+- 400/401/403/404/409
+
+Do not run Swagger.
+
+==================================================
+PART Z — README
+==================================================
+
+Add CMS section:
+
+- editorial/public content only
+- not Curriculum/LearningContent
+- PAGE/ARTICLE/NEWS
+- GLOBAL/PARISH
+- lifecycle
+- scheduled publishing
+- anonymous GLOBAL published reads
+- authenticated parish reads
+- slug resolution
+- no GET-time mutation
+- locale authored directly
+- media scalar reference
+- no delete endpoint
+- validation deferred
+
+If route count changes from 6 -> 8:
+document clearly.
+
+Do not claim whole Community phase complete.
+
+==================================================
+PART AA — UNIT TESTS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Lifecycle:
+- DRAFT publish
+- DRAFT schedule
+- SCHEDULED publish
+- archive allowed
+- invalid transitions
+- archived terminal
+
+Create:
+- server derives scopeKey
+- SuperAdmin GLOBAL
+- ParishAdmin own PARISH
+- ParishAdmin GLOBAL denied
+- cross-parish denied
+- scheduled future validation
+
+Update:
+- published slug immutable
+- published scope immutable
+- archived not editable
+
+Slug:
+- validation
+- collision
+- GLOBAL/PARISH scope key semantics
+
+Public visibility:
+- anonymous GLOBAL only
+- authenticated eligible parish
+- expired hidden
+- scheduled hidden
+- archived hidden
+- parishId filter cannot widen scope
+
+Detail:
+- deterministic GLOBAL/parish resolution
+
+DTO:
+- list body omitted
+- public audit fields omitted
+
+Scheduled:
+- due only
+- future skipped
+- bounded processing
+- no GET mutation
+
+==================================================
+PART AB — INTEGRATION SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL cases:
+
+1. create GLOBAL DRAFT
+2. create PARISH DRAFT
+3. unique GLOBAL slug
+4. same slug allowed in separate parish
+5. schedule
+6. publish
+7. archive
+8. invalid lifecycle
+9. published slug immutable at service layer
+10. anonymous list excludes parish
+11. parish list includes eligible
+12. expired hidden
+13. featured filtering/sort
+14. scheduled processor publishes due rows
+15. no hard delete
+16. admin list scope
+
+==================================================
+PART AC — DB E2E SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Anonymous:
+- GET GLOBAL list 200
+- GLOBAL detail 200
+- parish content not leaked
+- draft/scheduled/archived not leaked
+
+SuperAdmin:
+- create GLOBAL
+- create parish
+- update
+- publish
+- archive
+- admin list/detail if added
+
+ParishAdmin:
+- own parish create/update/publish/archive
+- GLOBAL create 403
+- foreign parish 403
+
+Catechist/Parent/Student:
+- public/scoped published reads
+- admin mutation 403
+
+Validation:
+- bad slug 400
+- duplicate slug 409
+- invalid schedule
+- unknown id 404
+- invalid lifecycle 409
+
+Unauthenticated mutation:
+401
+
+==================================================
+PART AD — MODULE BOUNDARY
+==================================================
+
+Confirm:
+
+CmsModule:
+- exports CmsService only
+- no forwardRef
+- no foreign repos/entities
+- no LocalizationModule
+- no NotificationsModule
+- no Announcements/Events dependency
+- no new tables
+
+Update specs if needed.
+
+Do not run.
+
+==================================================
+PART AE — STATIC INSPECTION
+==================================================
+
+Before finish inspect:
+
+- no GET-time mutations
+- anonymous only GLOBAL published
+- parish scope cannot be client-widened
+- admin scopes server-validated
+- slug lookup deterministic
+- published immutable URL/scope
+- no delete endpoint
+- no entity leakage
+- no N+1
+- pagination bounded
+- timestamps UTC
+- no foreign repo import
+- no cycles
+
+Also inspect whether 6-route frozen CMS contract is operationally sufficient.
+
+If adding admin list/detail:
+document the contract delta and corrected route counts.
+
+Fix obvious code issues by inspection.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+- Announcements business endpoints (#004)
+- Announcement notification fan-out
+- Events (#005)
+- Notifications inbox (#006)
+- push provider delivery
+- email/SMS
+- localization runtime
+- attachments table
+- CMS comments
+- CMS tags/categories unless already required
+- SEO metadata engine
+- revisions/version history table
+- runtime validation
+- demo seed/Postman
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_003_CMS_MODULE_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 CMS lifecycle
+7 Create contract
+8 Update contract
+9 Slug strategy
+10 Scope enforcement
+11 Media validation/reference behavior
+12 Publish behavior
+13 Archive behavior
+14 Delete policy
+15 Scheduled publishing
+16 Scheduled runner
+17 Public anonymous list
+18 Authenticated parish visibility
+19 Public list filters
+20 Public detail slug resolution
+21 Admin read contract gap analysis
+22 Final CMS route inventory
+23 Final CMS route count
+24 Corrected total community route count if changed
+25 Admin list
+26 Admin detail
+27 Public DTOs
+28 Admin DTOs
+29 Error contract
+30 Featured semantics
+31 Expiration semantics
+32 Locale semantics
+33 Access service
+34 Service architecture
+35 OpenAPI
+36 README
+37 Module boundary
+38 Unit tests written
+39 Integration tests written
+40 DB e2e tests written
+41 Tests executed
+42 DB validation
+43 quality:full
+44 Docker
+45 npm audit
+46 Scheduled publisher execution
+47 Static inspection
+48 Risks/deferred
+49 BLOCKER/HIGH/MEDIUM/LOW
+50 #004 readiness
+51 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+CMS CREATE READY: YES/NO
+CMS UPDATE READY: YES/NO
+CMS LIFECYCLE READY: YES/NO
+CMS SCHEDULED PUBLISHING READY: YES/NO
+CMS SCHEDULED RUNNER READY: YES/NO
+
+CMS GLOBAL SCOPE SAFE: YES/NO
+CMS PARISH SCOPE SAFE: YES/NO
+CMS SLUG ROUTING READY: YES/NO
+CMS PUBLIC ANONYMOUS READ READY: YES/NO
+CMS AUTHENTICATED PARISH READ READY: YES/NO
+CMS EXPIRATION FILTER READY: YES/NO
+CMS DATA MINIMIZATION READY: YES/NO
+
+CMS ADMIN LIST NEEDED: YES/NO
+CMS ADMIN DETAIL NEEDED: YES/NO
+
+FINAL CMS ROUTE COUNT: <integer>
+FINAL COMMUNITY ROUTE COUNT TARGET: <integer>
+
+NO CMS DELETE ENDPOINT IN MVP: YES/NO
+NO GET-TIME MUTATION: YES/NO
+NO LOCALIZATION RUNTIME COUPLING: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+SCHEDULED PUBLISHER EXECUTED: NO — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#004 READINESS: YES/NO
+
+==================================================
+#004 GATE
+==================================================
+
+Proceed if:
+
+- CMS lifecycle ready
+- management scope safe
+- public/scoped reads safe
+- scheduled publication design implemented
+- slug routing deterministic
+- no GET mutations
+- route contract operationally complete
+- tests/specs written
+- module boundary clean
+- BLOCKER=0
+- HIGH=0
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #004/7 —
+ANNOUNCEMENTS — TARGETING + PUBLISHING + USER FEED / READ STATE + NOTIFICATION EVENT EMISSION
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #003 status
+- lifecycle
+- public/scoped reads
+- scheduled publishing
+- route-count decision
+- security/scope
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #004 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(cms): add content publishing and reads"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #004 automatically.

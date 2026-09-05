@@ -3,7 +3,11 @@ import { SUPER_ADMIN_ROLE_CODE } from '../../access-control/constants/role-codes
 import { AccessControlService } from '../../access-control/services/access-control.service';
 import { ParishScopeService } from '../../parish/services/parish-scope.service';
 import { CmsScopeType } from '../enums/cms.enums';
-import { CmsAccessDeniedError } from '../errors/cms.errors';
+import {
+  CmsAccessDeniedError,
+  CmsScopeAccessDeniedError,
+  InvalidCmsScopeError,
+} from '../errors/cms.errors';
 
 @Injectable()
 export class CmsAccessService {
@@ -13,11 +17,11 @@ export class CmsAccessService {
   ) {}
 
   async isSuperAdmin(userId: string): Promise<boolean> {
-    const roles = await this.accessControlService.listUserRoles(userId);
+    const roles = await this.accessControlService.getRolesForUser(userId);
     return roles.some((role) => role.code === SUPER_ADMIN_ROLE_CODE);
   }
 
-  async assertCanManageCms(
+  async assertCanManageCmsScope(
     userId: string,
     target: { scopeType: CmsScopeType; parishId?: string | null },
   ): Promise<void> {
@@ -26,20 +30,61 @@ export class CmsAccessService {
     }
 
     if (target.scopeType === CmsScopeType.Global) {
-      throw new CmsAccessDeniedError('Only super administrators can manage global CMS entries.');
+      throw new CmsScopeAccessDeniedError(
+        'Only super administrators can manage global CMS entries.',
+      );
     }
 
     if (!target.parishId) {
-      throw new CmsAccessDeniedError('Parish ID is required for parish CMS entries.');
+      throw new InvalidCmsScopeError('Parish ID is required for parish CMS entries.');
     }
 
-    const memberships = await this.parishScopeService.listActiveParishIdsForMember(userId);
-    const hasParish = memberships
-      .map((id) => id.toLowerCase())
-      .includes(target.parishId.toLowerCase());
+    const hasMembership = await this.parishScopeService.hasActiveParishMembership(
+      userId,
+      target.parishId,
+    );
 
-    if (!hasParish) {
-      throw new CmsAccessDeniedError('Not a member of the target parish for this CMS entry.');
+    if (!hasMembership) {
+      throw new CmsScopeAccessDeniedError(
+        'Not authorized to manage CMS entries for this parish.',
+      );
+    }
+  }
+
+  async assertCanManageEntry(
+    userId: string,
+    entry: { scopeType: CmsScopeType; parishId: string | null },
+  ): Promise<void> {
+    await this.assertCanManageCmsScope(userId, {
+      scopeType: entry.scopeType,
+      parishId: entry.parishId,
+    });
+  }
+
+  async listVisibleParishIds(userId: string): Promise<string[]> {
+    return this.parishScopeService.listActiveParishIdsForMember(userId);
+  }
+
+  async assertCanReadParishCms(userId: string | null, parishId: string): Promise<void> {
+    if (!userId) {
+      throw new CmsAccessDeniedError(
+        'Anonymous users cannot access parish-scoped CMS entries.',
+      );
+    }
+
+    if (await this.isSuperAdmin(userId)) {
+      return;
+    }
+
+    const hasMembership = await this.parishScopeService.hasActiveParishMembership(
+      userId,
+      parishId,
+    );
+
+    if (!hasMembership) {
+      throw new CmsAccessDeniedError(
+        'Not authorized to view CMS entries for this parish.',
+      );
     }
   }
 }

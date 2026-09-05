@@ -788,6 +788,52 @@ npm run seed:localization-demo
 
 Postman collection: `docs/postman/Acutis-Education-Localization.postman_collection.json`
 
+## CMS API (Editorial Content & Publishing — #003/7)
+
+The CMS module (`src/modules/cms/`) provides editorial content management for parish and platform news, articles, and static pages (`PAGE`, `ARTICLE`, `NEWS`). It is completely distinct from pedagogical `Curriculum` and `LearningContent` modules.
+
+### Scope & Visibility
+
+- **GLOBAL Scope:** SuperAdmin managed only; visible to all anonymous and authenticated users once published.
+- **PARISH Scope:** Managed by SuperAdmin or authorized ParishAdmin for their active parish; visible to authenticated users belonging to that parish once published.
+- **Anonymous Reads:** `GET /api/v1/cms/entries` serves only published, non-expired `GLOBAL` entries.
+- **Authenticated Reads:** Intersects actor's active parish memberships to return eligible parish entries alongside global content.
+- **Slug Resolution:** `GET /api/v1/cms/entries/:slug` defaults to `GLOBAL` scope. Passing `?parishId=<uuid>` queries parish-scoped content after membership access validation.
+- **Data Minimization:** Public list entries omit body and audit metadata. Public detail entries omit creator/updater IDs and internal scope keys.
+
+### Content Lifecycle & Immutability
+
+- **Lifecycle States:** `DRAFT` → `SCHEDULED` → `PUBLISHED` → `ARCHIVED`.
+- **Transitions:** `DRAFT` transitions to `PUBLISHED` via publish action, or `SCHEDULED` when a future `scheduledFor` is set. `SCHEDULED` transitions to `PUBLISHED` on publish action or scheduled runner. `SCHEDULED` can revert to `DRAFT` when `scheduledFor` is explicitly cleared. `ARCHIVED` is terminal.
+- **Immutability:** Once `PUBLISHED`, `slug`, `type`, `scopeType`, and `parishId` cannot be modified to protect public URL integrity. `ARCHIVED` entries are completely read-only.
+- **No Hard Delete:** No `DELETE` endpoint is exposed in MVP; historical integrity is preserved through `ARCHIVED` state.
+- **No GET-time Mutations:** Content expiration (`expiresAt`) and scheduled publication dates are evaluated at query time; row states are never mutated on GET requests.
+
+### Scheduled Publishing
+
+- **Pure Service Method:** `cmsService.publishDueEntries(now)` claims and transitions due `SCHEDULED` items to `PUBLISHED`.
+- **CLI Runner:** `npm run cms:publish-scheduled` (`scripts/process-scheduled-cms-publications.ts`). Execution is deferred in Fast Mode.
+
+### Route Inventory (8 Routes)
+
+Corrected CMS route inventory (resolving the administrative draft management contract gap from 6 to 8 routes; updating total community target from 33 to 35 routes):
+
+| Method | Path | Description | Access / Permission |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/cms/entries` | Public list published entries | Anonymous (GLOBAL) / Authenticated (GLOBAL + parish) |
+| `GET` | `/api/v1/cms/entries/:slug` | Public entry detail by slug | Anonymous (GLOBAL) / Authenticated (`?parishId=`) |
+| `POST` | `/api/v1/cms/entries` | Create new entry (DRAFT / SCHEDULED) | `cms.manage` (SuperAdmin / ParishAdmin) |
+| `PATCH` | `/api/v1/cms/entries/:id` | Update editable entry fields | `cms.manage` (within scope) |
+| `POST` | `/api/v1/cms/entries/:id/publish` | Immediately publish entry | `cms.manage` (within scope) |
+| `POST` | `/api/v1/cms/entries/:id/archive` | Archive entry | `cms.manage` (within scope) |
+| `GET` | `/api/v1/admin/cms/entries` | Admin list across all statuses | `cms.manage` (SuperAdmin all / ParishAdmin own) |
+| `GET` | `/api/v1/admin/cms/entries/:id` | Admin get entry by ID | `cms.manage` (SuperAdmin all / ParishAdmin own) |
+
+### Media & Localization Boundaries
+
+- **Cover Media Asset:** Scalar `cover_media_asset_id` stored without TypeORM foreign relation or entity coupling to `MediaModule`.
+- **Locale:** Authored directly per entry (default `vi-VN`). Exact match filtering without runtime coupling to `LocalizationModule`.
+
 ## Project rules
 
 See `PROJECT_RULES.md` and `AGENTS.md` for engineering, security, and workflow requirements.
