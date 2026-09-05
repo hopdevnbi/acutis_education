@@ -1,0 +1,606 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #005A
+CORRECTIVE IMPLEMENTATION / CONTRACT HARDENING
+EVENT CAPACITY CONCURRENCY + CANCELLATION PRIVACY + REGISTERED-RECIPIENT DELIVERY
+FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- corrective production code
+- corrective neutral event contracts if needed
+- corrective unit/integration/DB e2e specs
+- report
+
+DO NOT RUN by default:
+- tests/Jest
+- lint/typecheck/build/format
+- quality/quality:full
+- npm audit
+- DB prepare/reset/migrations
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not treat deferred validation as failure.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, print exactly:
+
+git commit -m "fix(events): harden capacity and notification delivery contracts"
+
+Do not execute it.
+
+CONTEXT
+-------
+Phase:
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS
+
+Completed:
+#001
+#001A
+#002
+#003
+#003A
+#004
+#005
+
+Current Events report:
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005_EVENTS_MODULE_REPORT.md
+
+Current route contract:
+CMS = 8
+Announcements = 8
+Events = 14
+Notifications = 6
+Community target = 36
+
+Do NOT change route count in this corrective prompt unless absolutely necessary.
+
+==================================================
+CORRECTIVE ISSUE 1 — CAPACITY TRANSACTION IS NOT PROVEN RACE-SAFE
+==================================================
+
+Current #005 report states:
+
+- registration uses `dataSource.transaction`
+- active count is read
+- capacity compared
+- registration inserted
+- "guarantees zero over-subscription races"
+
+A transaction alone under ordinary MSSQL READ COMMITTED does NOT guarantee this.
+
+Two concurrent transactions can both:
+1. read activeCount = N
+2. see N < capacity
+3. both insert
+4. exceed capacity
+
+Required correction:
+
+Implement one explicit concurrency-safe MSSQL strategy.
+
+Preferred options:
+
+OPTION A — pessimistic lock event row
+-------------------------------------
+Within one transaction / QueryRunner:
+- SELECT event row using pessimistic write lock
+- or MSSQL-compatible UPDLOCK/HOLDLOCK semantics
+- then count active REGISTERED + ATTENDED
+- then insert/reactivate registration
+- commit
+
+All registrations for the same event serialize on the event row.
+
+OPTION B — SERIALIZABLE transaction
+------------------------------------
+Use SERIALIZABLE isolation for registration transaction.
+
+Need ensure TypeORM/MSSQL implementation is explicit and reliable.
+
+Strong preference:
+event-row pessimistic write lock or SERIALIZABLE, whichever matches existing repository conventions cleanly.
+
+Required:
+- exact lock/isolation strategy
+- code evidence
+- concurrency-oriented spec written
+- do NOT claim "race safe" from transaction alone
+
+Also verify re-registration of CANCELLED row occurs under same capacity lock.
+
+==================================================
+CORRECTIVE ISSUE 2 — RAW CANCELLATION REASON MUST NOT ENTER NOTIFICATION EVENT
+==================================================
+
+Current event payload includes:
+`cancellationReason`
+
+Current report says privacy-safe because trimmed/bounded.
+
+This is insufficient.
+
+Free-form text can still contain:
+- child name
+- health detail
+- family issue
+- pastoral/confessional note
+- staff-only operational detail
+
+Required correction:
+
+Persist admin cancellationReason in Events if needed for staff audit.
+
+BUT EventCancelledEvent must NOT expose the raw reason.
+
+Use safe payload such as:
+
+cancellationSummary:
+"Event cancelled"
+
+or a controlled enum/reason code if already available.
+
+Strong MVP:
+generic safe summary.
+
+Contract example:
+
+EventCancelledEvent {
+  applicationEventId
+  operationKey
+  eventType
+  occurredAt
+  eventId
+  title
+  cancellationSummary
+  targets
+  registeredRecipientUserIds
+  cancelledAt
+}
+
+Do NOT include raw `cancellationReason`.
+
+Update:
+- communication event contract
+- Events emission
+- tests
+- README/report
+
+Do not put raw reason into Notifications later.
+
+==================================================
+CORRECTIVE ISSUE 3 — TARGET DESCRIPTORS DO NOT GUARANTEE HISTORICAL REGISTRANT DELIVERY
+==================================================
+
+#005 concluded:
+
+REGISTERED ATTENDEES COVERED BY TARGET SNAPSHOT: YES
+
+That conclusion is not guaranteed if #006 resolves target descriptors against CURRENT membership.
+
+Example:
+1. Parent/Student is eligible and registers.
+2. Enrollment, class assignment, parish membership, or guardian link changes.
+3. Event is updated/cancelled.
+4. Notification fan-out resolves CLASS/PARISH targets using current data.
+5. Previously registered attendee may no longer be in current audience expansion.
+
+Therefore target descriptors alone do not guarantee delivery to registered attendees.
+
+Required correction:
+
+For EventUpdatedEvent and EventCancelledEvent, include an explicit bounded/deduped list:
+
+registeredRecipientUserIds: string[]
+
+Resolve this from Events-owned registration rows at emission time.
+
+Rules:
+- include `event_registrations.user_id` for active/historical relevant registrants
+- at minimum include registrations in REGISTERED or ATTENDED state
+- decide whether CANCELLED registrants should receive later cancellation/update notifications:
+  strong default NO
+- dedupe user IDs
+- internal UUIDs only
+- no names/emails/phones
+- no student PII
+
+For child registrations:
+`event_registrations.user_id` is the authenticated guardian account that performed registration.
+This is sufficient MVP delivery ownership.
+
+Do NOT query Notifications from Events.
+Do NOT make Notifications query Events repository.
+
+#006 should merge:
+- recipients expanded from event target descriptors
+PLUS
+- `registeredRecipientUserIds`
+
+and dedupe before recipient inserts.
+
+Required verdict after correction:
+
+REGISTERED ATTENDEE DELIVERY SNAPSHOT READY: YES
+
+Do NOT retain the old verdict wording as if target descriptors alone guarantee it.
+
+==================================================
+PART A — EVENT CONTRACT UPDATE
+==================================================
+
+Update neutral communication event contracts.
+
+EventUpdatedEvent:
+add:
+registeredRecipientUserIds: readonly string[]
+
+EventCancelledEvent:
+add:
+registeredRecipientUserIds: readonly string[]
+
+EventPublishedEvent:
+does NOT require registered recipients because none should exist before publication.
+
+No PII.
+
+No full registration snapshots.
+
+==================================================
+PART B — REGISTERED RECIPIENT RESOLUTION
+==================================================
+
+Add Events-owned method, e.g.:
+
+EventRegistrationService.listNotificationRecipientUserIds(eventId)
+
+Set-based query:
+SELECT DISTINCT user_id
+FROM event_registrations
+WHERE event_id = ?
+AND status IN ('REGISTERED','ATTENDED')
+
+No foreign service calls.
+
+Return UUID array.
+
+No N+1.
+
+Use this only for update/cancel event emission.
+
+==================================================
+PART C — POST-COMMIT EVENT EMISSION
+==================================================
+
+Maintain:
+DB mutation commits first
+then communication event publishes.
+
+For significant update:
+- persist update/version
+- after commit obtain or retain registeredRecipientUserIds safely
+- emit EventUpdatedEvent
+
+For cancellation:
+- persist cancellation
+- registrations remain
+- emit EventCancelledEvent with registeredRecipientUserIds
+
+Be careful about timing consistency.
+
+Strong preference:
+query recipient IDs inside same transaction before commit if needed for a consistent snapshot,
+return them from transaction result,
+then publish after commit.
+
+Do not publish inside transaction.
+
+==================================================
+PART D — CAPACITY LOCK IMPLEMENTATION
+==================================================
+
+Registration and CANCELLED -> REGISTERED reactivation must both use the same concurrency-safe critical section.
+
+Required flow:
+
+transaction begin
+-> acquire event-specific write/range lock
+-> load event + validate status/deadline
+-> inspect existing registration
+-> if new/reactivation needs a slot:
+   count REGISTERED + ATTENDED
+-> enforce capacity
+-> insert/reactivate
+-> commit
+
+Do not lock globally.
+
+Do not hold locks during foreign service calls.
+
+Important:
+guardian/audience eligibility should be checked before transaction where safe,
+but final event status/window/capacity must be checked inside locked transaction.
+
+==================================================
+PART E — CAPACITY SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Unit/static specs:
+- lock/isolation strategy is invoked
+- capacity count occurs after lock
+- new insert under lock
+- reactivation under lock
+- unlimited capacity path still correct
+
+Integration future MSSQL spec:
+capacity=1
+two concurrent registration attempts
+expected:
+one success
+one 409 EventCapacityReached
+active count = 1
+
+Write the spec even though not executed now.
+
+==================================================
+PART F — PRIVACY SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Assert EventCancelledEvent:
+- contains cancellationSummary
+- does NOT contain cancellationReason
+- does NOT contain child names
+- does NOT contain emails/phones
+- does NOT include body/notes
+
+If TypeScript structural shape makes negative compile-time assertion difficult,
+use mapper/event builder unit spec against object keys.
+
+==================================================
+PART G — REGISTERED RECIPIENT SPECS
+==================================================
+
+WRITE, DO NOT RUN.
+
+Cases:
+- self registration USER A -> A included
+- child registration by Parent A -> Parent A user ID included
+- multiple child registrations by same parent -> user ID deduped
+- REGISTERED included
+- ATTENDED included
+- CANCELLED excluded
+- no registrations -> []
+- target audience membership later changes but explicit registeredRecipientUserIds still preserves registrant delivery contract
+
+==================================================
+PART H — NOTIFICATION #006 CONTRACT HANDOFF
+==================================================
+
+Document explicitly for #006:
+
+AnnouncementPublishedEvent:
+fan-out from target descriptors only.
+
+EventPublishedEvent:
+fan-out from target descriptors only.
+
+EventUpdatedEvent:
+fan-out recipients =
+target-descriptor expansion
+UNION
+registeredRecipientUserIds
+
+EventCancelledEvent:
+fan-out recipients =
+target-descriptor expansion
+UNION
+registeredRecipientUserIds
+
+Deduplicate user IDs before insert.
+
+Notification idempotency remains:
+UNIQUE notifications.operation_key
+UNIQUE notification_recipients(notification_id, recipient_user_id)
+
+==================================================
+PART I — ROUTE CONTRACT
+==================================================
+
+No route additions required.
+
+Keep:
+Events = 14
+
+Community target:
+8 + 8 + 14 + 6 = 36
+
+Required:
+FINAL EVENT ROUTE COUNT: 14
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+==================================================
+PART J — MODULE BOUNDARY
+==================================================
+
+Reconfirm:
+- EventsModule exports EventsService only
+- no NotificationsModule import
+- no Notification repository/entity
+- no ClassOperations import
+- no FamilyPortal
+- no forwardRef
+- neutral ApplicationEvents only
+
+==================================================
+PART K — STATIC INSPECTION
+==================================================
+
+Before finish verify by code inspection:
+
+1. capacity path uses explicit lock/isolation
+2. count happens within locked/serializable transaction
+3. re-registration uses same protection
+4. raw cancellationReason absent from communication event
+5. safe cancellationSummary present
+6. registeredRecipientUserIds generated set-based
+7. only REGISTERED/ATTENDED included
+8. event publication unaffected
+9. update/cancel events carry explicit registered recipients
+10. no PII
+11. no direct Notifications dependency
+12. route count remains 14
+13. tests/specs written
+14. no validation commands run
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_005A_CORRECTIVE_EVENTS_HARDENING_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 Issues inherited from #005
+4 Capacity race analysis
+5 Final MSSQL concurrency strategy
+6 Registration critical section
+7 Re-registration critical section
+8 Capacity concurrency test spec
+9 Cancellation privacy issue
+10 Final cancellation event payload
+11 Raw reason retention vs notification summary
+12 Registered-recipient delivery gap
+13 Registered recipient query
+14 Recipient status inclusion rules
+15 EventUpdatedEvent correction
+16 EventCancelledEvent correction
+17 Post-commit event flow
+18 #006 recipient-union handoff
+19 Idempotency interaction
+20 Route contract unchanged
+21 Module boundary
+22 Unit tests written
+23 Integration tests written
+24 DB e2e/concurrency specs written
+25 Tests executed
+26 DB validation
+27 quality:full
+28 Docker
+29 npm audit
+30 Static inspection
+31 Risks/deferred
+32 BLOCKER/HIGH/MEDIUM/LOW
+33 #006 readiness
+34 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+CAPACITY MSSQL CONCURRENCY SAFE BY DESIGN: YES/NO
+CAPACITY EXPLICIT LOCK/ISOLATION PRESENT: YES/NO
+RE-REGISTRATION USES SAME CAPACITY LOCK: YES/NO
+
+RAW CANCELLATION REASON EXCLUDED FROM COMMUNICATION EVENT: YES/NO
+CANCELLATION EVENT PRIVACY SAFE: YES/NO
+
+REGISTERED RECIPIENT QUERY READY: YES/NO
+REGISTERED ATTENDEE DELIVERY SNAPSHOT READY: YES/NO
+EVENT_UPDATED REGISTERED RECIPIENTS READY: YES/NO
+EVENT_CANCELLED REGISTERED RECIPIENTS READY: YES/NO
+
+#006 RECIPIENT UNION CONTRACT READY: YES/NO
+
+NO DIRECT NOTIFICATIONS DEPENDENCY: YES/NO
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+FINAL EVENT ROUTE COUNT: 14
+FINAL COMMUNITY ROUTE COUNT TARGET: 36
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+DB E2E / CONCURRENCY SPECS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#006 READINESS: YES/NO
+
+==================================================
+#006 GATE
+==================================================
+
+Proceed only if:
+
+- explicit MSSQL-safe capacity concurrency strategy exists
+- re-registration uses same protection
+- raw cancellationReason is absent from notification event payload
+- registeredRecipientUserIds are snapshotted for update/cancel
+- #006 recipient union semantics are frozen
+- no direct Notifications dependency
+- route count remains 14
+- BLOCKER=0
+- HIGH=0
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #006/7 —
+NOTIFICATIONS — RECIPIENT FAN-OUT + INBOX / READ STATE + DEVICE REGISTRATION + INTEGRATION HARDENING
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #005A status
+- capacity concurrency fix
+- cancellation privacy fix
+- registered-recipient delivery fix
+- route count
+- BLOCKER/HIGH/MEDIUM
+- #006 readiness
+- report path
+
+Then exactly:
+
+git commit -m "fix(events): harden capacity and notification delivery contracts"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #006 automatically.

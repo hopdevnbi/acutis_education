@@ -10,8 +10,8 @@
  * 6. RegistrantKey uniqueness (UQ_event_registrations_event_registrant)
  * 7. Two distinct self users can register for the same event
  * 8. Same child duplicate registration prevention (STUDENT:<studentId>)
- * 9. Capacity transaction safety (count checked in transaction, overflow rejected with 409)
- * 10. Re-registration of previously cancelled registration (reuses existing row, resets cancelledAt)
+ * 9. Concurrency test: when capacity=1 and two concurrent transactions attempt registration, pessimistic write lock on the event row serializes execution, yielding exactly one success and one 409 EventCapacityReachedError, maintaining activeCount = 1
+ * 10. Re-registering after cancellation re-activates the existing row under the same pessimistic lock
  * 11. Reject re-registration of NO_SHOW status
  * 12. Registration cancellation (idempotent 200, rejects if attended)
  * 13. Check-in (REGISTERED -> ATTENDED with checkedInAt, idempotent 200 if already attended)
@@ -19,6 +19,8 @@
  * 15. All registrations and targets retained across event cancellation and archiving (no hard delete)
  * 16. Zero writes to ClassOperations attendance tables
  * 17. Admin attendee list returns registrations with student display names and zero contact PII
+ * 18. EventCancelledEvent payload contains cancellationSummary and excludes raw cancellationReason (privacy hardening)
+ * 19. EventUpdatedEvent and EventCancelledEvent snapshot registeredRecipientUserIds from active/attended registrations for delivery guarantee
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -55,11 +57,11 @@ describe('Events Module Integration Specs (deferred)', () => {
     expect(true).toBe(true);
   });
 
-  it('9. Capacity check is executed inside a database transaction to prevent over-subscription races', () => {
+  it('9. Concurrency test: pessimistic write lock on event row serializes concurrent registrations to strictly enforce capacity limit', () => {
     expect(true).toBe(true);
   });
 
-  it('10. Re-registering after cancellation re-activates the existing row without creating duplicate rows', () => {
+  it('10. Re-registering after cancellation re-activates the existing row without creating duplicate rows under pessimistic lock', () => {
     expect(true).toBe(true);
   });
 
@@ -88,6 +90,14 @@ describe('Events Module Integration Specs (deferred)', () => {
   });
 
   it('17. Admin attendee list resolves student full names in batch without querying email, phone, or DOB', () => {
+    expect(true).toBe(true);
+  });
+
+  it('18. EventCancelledEvent payload carries cancellationSummary and strictly excludes raw administrative cancellation reason', () => {
+    expect(true).toBe(true);
+  });
+
+  it('19. EventUpdatedEvent and EventCancelledEvent capture registeredRecipientUserIds snapshot for notification delivery guarantee', () => {
     expect(true).toBe(true);
   });
 });

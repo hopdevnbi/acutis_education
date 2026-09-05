@@ -68,6 +68,7 @@ export interface EventUpdatedEvent extends CommunicationApplicationEventBase {
   readonly startsAt: Date;
   readonly venueName: string | null;
   readonly targets: readonly CommunicationTargetDescriptor[];
+  readonly registeredRecipientUserIds: readonly string[];
   readonly updatedAt: Date;
 }
 
@@ -75,8 +76,9 @@ export interface EventCancelledEvent extends CommunicationApplicationEventBase {
   readonly eventType: typeof COMMUNICATION_EVENT_TYPES.EventCancelled;
   readonly eventId: string;
   readonly title: string;
-  readonly cancellationReason: string;
+  readonly cancellationSummary: string;
   readonly targets: readonly CommunicationTargetDescriptor[];
+  readonly registeredRecipientUserIds: readonly string[];
   readonly cancelledAt: Date;
 }
 

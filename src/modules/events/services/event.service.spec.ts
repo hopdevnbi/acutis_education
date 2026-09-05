@@ -76,6 +76,7 @@ describe('EventInternalService', () => {
 
     eventRegistrationService = {
       countActiveByEventId: jest.fn().mockResolvedValue(10),
+      listNotificationRecipientUserIds: jest.fn().mockResolvedValue(['user-1', 'user-2']),
     };
 
     eventPublisher = {
@@ -195,6 +196,7 @@ describe('EventInternalService', () => {
           eventType: 'COMMUNICATION_EVENT.EVENT_UPDATED',
           operationKey: `EVENT_UPDATED:${eventId}:v2`,
           changeSummary: 'VENUE',
+          registeredRecipientUserIds: ['user-1', 'user-2'],
         }),
       );
     });
@@ -217,7 +219,7 @@ describe('EventInternalService', () => {
   });
 
   describe('cancel', () => {
-    it('transitions to CANCELLED, increments version, and emits EventCancelledEvent', async () => {
+    it('transitions to CANCELLED, increments version, and emits EventCancelledEvent with cancellationSummary and without raw reason', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({
         ...mockDraftEntity,
         status: EventStatus.Published,
@@ -226,7 +228,7 @@ describe('EventInternalService', () => {
 
       const result = await service.cancel(
         eventId,
-        'Due to extreme typhoon warning.',
+        'Confidential reason with child student medical note.',
         authorUserId,
       );
 
@@ -236,8 +238,16 @@ describe('EventInternalService', () => {
         expect.objectContaining({
           eventType: 'COMMUNICATION_EVENT.EVENT_CANCELLED',
           operationKey: `EVENT_CANCELLED:${eventId}`,
+          cancellationSummary: 'Event cancelled',
+          registeredRecipientUserIds: ['user-1', 'user-2'],
         }),
       );
+
+      const publishedPayload = eventPublisher.publishCommunicationEvent.mock.calls[0][0];
+      expect(publishedPayload.cancellationReason).toBeUndefined();
+      expect(publishedPayload.cancellationSummary).toBe('Event cancelled');
+      expect(JSON.stringify(publishedPayload)).not.toContain('Confidential reason with child student medical note.');
+    });
     });
   });
 });

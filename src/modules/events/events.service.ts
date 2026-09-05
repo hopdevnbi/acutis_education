@@ -135,4 +135,8 @@ export class EventsService {
   async listTargets(eventId: string): Promise<readonly EventTargetSnapshot[]> {
     return this.eventTargetService.listTargetsByEventId(eventId);
   }
+
+  async listNotificationRecipientUserIds(eventId: string): Promise<string[]> {
+    return this.eventRegistrationService.listNotificationRecipientUserIds(eventId);
+  }
 }

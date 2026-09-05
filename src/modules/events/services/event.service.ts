@@ -309,6 +309,9 @@ export class EventInternalService {
               },
             ];
 
+      const registeredRecipientUserIds =
+        await this.eventRegistrationService.listNotificationRecipientUserIds(saved.id);
+
       const eventPayload: EventUpdatedEvent = {
         applicationEventId: generateUuidV4(),
         operationKey: buildEventOperationKey({
@@ -325,6 +328,7 @@ export class EventInternalService {
         startsAt: saved.startsAt,
         venueName: saved.venueName,
         targets: targetDescriptors,
+        registeredRecipientUserIds,
         updatedAt: saved.updatedAt,
       };
 
@@ -447,11 +451,8 @@ export class EventInternalService {
             },
           ];
 
-    // Safe bounded cancellation reason
-    const safeReason =
-      saved.cancellationReason && saved.cancellationReason.length > 200
-        ? `${saved.cancellationReason.slice(0, 197)}...`
-        : saved.cancellationReason ?? 'Event cancelled by administration.';
+    const registeredRecipientUserIds =
+      await this.eventRegistrationService.listNotificationRecipientUserIds(saved.id);
 
     const eventPayload: EventCancelledEvent = {
       applicationEventId: generateUuidV4(),
@@ -463,8 +464,9 @@ export class EventInternalService {
       occurredAt: new Date(),
       eventId: saved.id,
       title: saved.title,
-      cancellationReason: safeReason,
+      cancellationSummary: 'Event cancelled',
       targets: targetDescriptors,
+      registeredRecipientUserIds,
       cancelledAt: saved.cancelledAt,
     };
 

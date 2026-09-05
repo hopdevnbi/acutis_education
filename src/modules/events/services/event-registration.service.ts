@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { normalizeUuid } from '../../../database/uuid-v4.util';
 import { StudentService } from '../../student/services/student.service';
 import { EventRegistrationEntity } from '../entities/event-registration.entity';
@@ -13,6 +13,7 @@ import {
   EventAlreadyRegisteredError,
   EventCapacityReachedError,
   EventCheckInNotAllowedError,
+  EventNotFoundError,
   EventNotRegistrableError,
   EventRegistrationCannotCancelError,
   EventRegistrationConflictError,
@@ -89,6 +90,37 @@ export class EventRegistrationService {
     }
 
     return this.dataSource.transaction(async (manager) => {
+      // Concurrency safety: acquire pessimistic write lock on the event row in MSSQL
+      const eventRepo = manager.getRepository(EventEntity);
+      const lockedEvent = await eventRepo.findOne({
+        where: { id: eid },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedEvent) {
+        throw new EventNotFoundError();
+      }
+
+      // Re-validate event state under lock
+      if (lockedEvent.status !== EventStatus.Published) {
+        throw new EventNotRegistrableError('Registrations are only accepted for PUBLISHED events.');
+      }
+
+      if (!lockedEvent.isRegistrationRequired) {
+        throw new EventNotRegistrableError('Registration is not enabled or required for this event.');
+      }
+
+      if (now.getTime() >= lockedEvent.startsAt.getTime()) {
+        throw new EventNotRegistrableError('Cannot register for an event that has already started.');
+      }
+
+      if (
+        lockedEvent.registrationDeadline &&
+        now.getTime() > lockedEvent.registrationDeadline.getTime()
+      ) {
+        throw new EventNotRegistrableError('Event registration deadline has passed.');
+      }
+
       const registrationRepo = manager.getRepository(EventRegistrationEntity);
 
       // Check existing registration
@@ -111,8 +143,8 @@ export class EventRegistrationService {
         }
       }
 
-      // Capacity verification inside transaction
-      if (event.capacity !== null && event.capacity > 0) {
+      // Capacity verification inside transaction under event pessimistic write lock
+      if (lockedEvent.capacity !== null && lockedEvent.capacity > 0) {
         const activeCount = await registrationRepo.count({
           where: {
             eventId: eid,
@@ -120,13 +152,13 @@ export class EventRegistrationService {
           },
         });
 
-        if (activeCount >= event.capacity) {
+        if (activeCount >= lockedEvent.capacity) {
           throw new EventCapacityReachedError();
         }
       }
 
       if (existing && existing.status === EventRegistrationStatus.Cancelled) {
-        // Re-activate previously cancelled registration
+        // Re-activate previously cancelled registration under the same capacity lock
         existing.status = EventRegistrationStatus.Registered;
         existing.registeredAt = now;
         existing.cancelledAt = null;
@@ -294,6 +326,24 @@ export class EventRegistrationService {
       countMap.set(normalizeUuid(row.eventId), Number(row.cnt));
     }
     return countMap;
+  }
+
+  async listNotificationRecipientUserIds(
+    eventId: string,
+    manager?: EntityManager,
+  ): Promise<string[]> {
+    const eid = normalizeUuid(eventId);
+    const repo = manager ? manager.getRepository(EventRegistrationEntity) : this.repository;
+    const rows = await repo
+      .createQueryBuilder('reg')
+      .select('DISTINCT reg.userId', 'userId')
+      .where('reg.eventId = :eid', { eid })
+      .andWhere('reg.status IN (:...statuses)', {
+        statuses: [EventRegistrationStatus.Registered, EventRegistrationStatus.Attended],
+      })
+      .getRawMany<{ userId: string }>();
+
+    return rows.map((r) => normalizeUuid(r.userId));
   }
 
   async findMyRegistrations(

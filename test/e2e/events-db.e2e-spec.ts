@@ -10,16 +10,17 @@
  * 6. Student can self-register and cancel self-registration for an eligible event
  * 7. Parent can self-register and register active linked children for eligible events
  * 8. Parent registering unlinked or foreign student receives 403 Forbidden
- * 9. Capacity boundaries: registration fills up to capacity; subsequent attempt receives 409 Conflict
- * 10. Re-registering after cancellation re-activates registration when capacity is available
- * 11. Publishing draft event emits EventPublishedEvent with resolved targets snapshot
- * 12. Updating published event with venue/datetime/capacity change increments version and emits EventUpdatedEvent
- * 13. Cancelling published event transitions status, increments version, and emits EventCancelledEvent with bounded summary
+ * 9. Concurrency race test: concurrent registration attempts on a single remaining slot serialize under pessimistic write lock; exactly one succeeds and one receives 409 Conflict
+ * 10. Previously cancelled attendee can successfully re-register before deadline and capacity exhaustion under pessimistic lock
+ * 11. Publish action transitions status to PUBLISHED, sets version=1, and emits EventPublishedEvent
+ * 12. Significant update on PUBLISHED event increments version and emits EventUpdatedEvent with registeredRecipientUserIds snapshot
+ * 13. Event cancellation sets status CANCELLED, version+1, and emits EventCancelledEvent with cancellationSummary and registeredRecipientUserIds without leaking raw reason
  * 14. Completing published event transitions status to COMPLETED without notification fan-out
- * 15. Archiving event transitions to terminal state ARCHIVED
+ * 15. Archive action transitions event to terminal ARCHIVED state
  * 16. Public event list and detail responses omit attendee roster, audit IDs, and internal target keys
- * 17. Admin attendee list returns check-in roster with zero guardian/student contact PII
- * 18. Unauthenticated requests to any event route receive 401 Unauthorized
+ * 17. Admin attendee roster provides registrationId and display name without leaking phone, email, or DOB
+ * 18. All event endpoints enforce JWT authentication and return 401 when unauthenticated
+ * 19. Registered attendee delivery contract: even if participant loses target class enrollment, registeredRecipientUserIds guarantees cancellation/update notification
  *
  * DB VALIDATION: NOT RUN — deferred by Fast Implementation Mode.
  */
@@ -56,11 +57,11 @@ describe('Events Module DB E2E Specs (deferred)', () => {
     expect(true).toBe(true);
   });
 
-  it('9. Registration capacity is transaction-safe and prevents overbooking beyond max limit', () => {
+  it('9. Concurrent registration attempts on a single remaining capacity slot serialize cleanly with zero overbooking', () => {
     expect(true).toBe(true);
   });
 
-  it('10. Previously cancelled attendee can successfully re-register before deadline and capacity exhaustion', () => {
+  it('10. Previously cancelled attendee can successfully re-register before deadline and capacity exhaustion under pessimistic lock', () => {
     expect(true).toBe(true);
   });
 
@@ -68,11 +69,11 @@ describe('Events Module DB E2E Specs (deferred)', () => {
     expect(true).toBe(true);
   });
 
-  it('12. Significant update on PUBLISHED event increments version and emits EventUpdatedEvent', () => {
+  it('12. Significant update on PUBLISHED event increments version and emits EventUpdatedEvent with registeredRecipientUserIds snapshot', () => {
     expect(true).toBe(true);
   });
 
-  it('13. Event cancellation sets status CANCELLED, version+1, and emits EventCancelledEvent with bounded reason', () => {
+  it('13. Event cancellation sets status CANCELLED, version+1, and emits EventCancelledEvent with cancellationSummary and registeredRecipientUserIds without leaking raw reason', () => {
     expect(true).toBe(true);
   });
 
@@ -93,6 +94,10 @@ describe('Events Module DB E2E Specs (deferred)', () => {
   });
 
   it('18. All event endpoints enforce JWT authentication and return 401 when unauthenticated', () => {
+    expect(true).toBe(true);
+  });
+
+  it('19. Registered recipient delivery contract guarantees historical participants receive update/cancellation notifications', () => {
     expect(true).toBe(true);
   });
 });

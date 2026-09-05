@@ -929,8 +929,8 @@ The Events module (`src/modules/events/`) provides parish and community event sc
 
 - **Registrant Keys:** `USER:<userId>` (self registration) or `STUDENT:<studentId>` (parent registering linked child).
 - **Guardian Verification:** For child registration, actor must have `PARENT` role and an active guardian link verified via `StudentGuardianService.assertGuardianLinked`. Child must be audience eligible.
-- **Transaction Safety:** Registration capacity validation runs inside a database transaction (`SERIALIZABLE` / row-level locks) counting `REGISTERED` + `ATTENDED` records to prevent over-subscription races.
-- **Re-Registration:** An attendee with a previously `CANCELLED` registration can re-register before deadline/capacity exhaustion by re-activating the existing row. Attendees marked `NO_SHOW` are barred from re-registering.
+- **Pessimistic Lock Concurrency Safety:** Registration capacity validation runs inside `dataSource.transaction` using an explicit pessimistic write lock (`lock: { mode: 'pessimistic_write' }`) on the `EventEntity` row in MSSQL (UPDLOCK). All concurrent registration attempts for the same event serialize on this lock, evaluate active counts (`REGISTERED` + `ATTENDED`), and reject over-subscription races with `409 Conflict`.
+- **Re-Registration:** An attendee with a previously `CANCELLED` registration can re-register before deadline/capacity exhaustion by re-activating the existing row under the same pessimistic lock. Attendees marked `NO_SHOW` are barred from re-registering.
 - **Cancellation:** `POST /api/v1/events/:id/registrations/cancel` transitions `REGISTERED` → `CANCELLED`. Idempotent `200 OK` if already cancelled. Rejects cancellation once `ATTENDED` or `NO_SHOW`.
 
 ### Check-In & Attendee Lookup Contract
@@ -942,9 +942,9 @@ The Events module (`src/modules/events/`) provides parish and community event sc
 
 - **Post-Commit Emissions:**
   - `EventPublishedEvent`: `operationKey = EVENT_PUBLISHED:<eventId>`, includes targets snapshot (or resolved fallback scope).
-  - `EventUpdatedEvent`: emitted only for significant changes (`DATE_TIME`, `VENUE`, `CAPACITY`), `operationKey = EVENT_UPDATED:<eventId>:v<version>`.
-  - `EventCancelledEvent`: `operationKey = EVENT_CANCELLED:<eventId>`, includes safe/bounded reason.
-- **Target Coverage:** Because targets are immutable after publish and registration requires audience eligibility, all registered attendees are guaranteed to be covered by the event's target snapshot during fan-out (#006).
+  - `EventUpdatedEvent`: emitted only for significant changes (`DATE_TIME`, `VENUE`, `CAPACITY`), `operationKey = EVENT_UPDATED:<eventId>:v<version>`, carries `registeredRecipientUserIds`.
+  - `EventCancelledEvent`: `operationKey = EVENT_CANCELLED:<eventId>`, carries safe `cancellationSummary: "Event cancelled"` (raw reason retained solely in DB for staff audit) and `registeredRecipientUserIds`.
+- **Recipient Union Guarantee (#006 Hand-off):** To protect against subsequent class or parish membership shifts, downstream Notifications fan-out in #006 will merge target-descriptor expansion `UNION` `registeredRecipientUserIds` and deduplicate before inbox insertion, guaranteeing delivery to all active and attended registrants.
 
 ### Route Inventory (14 Routes)
 

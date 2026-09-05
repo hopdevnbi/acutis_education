@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import type { DataSource, Repository } from 'typeorm';
 import { StudentService } from '../../student/services/student.service';
 import { EventRegistrationEntity } from '../entities/event-registration.entity';
+import { EventEntity } from '../entities/event.entity';
 import {
   EventRegistrationStatus,
   EventScopeType,
@@ -23,6 +24,7 @@ import { EventRegistrationService } from './event-registration.service';
 describe('EventRegistrationService', () => {
   let service: EventRegistrationService;
   let repository: jest.Mocked<Partial<Repository<EventRegistrationEntity>>>;
+  let eventRepoMock: { findOne: jest.Mock };
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let studentService: jest.Mocked<Partial<StudentService>>;
 
@@ -86,10 +88,24 @@ describe('EventRegistrationService', () => {
       createQueryBuilder: jest.fn(),
     };
 
+    eventRepoMock = {
+      findOne: jest.fn().mockImplementation((options) => {
+        return Promise.resolve({
+          ...mockPublishedEvent,
+          ...options?.where,
+        });
+      }),
+    };
+
     dataSource = {
       transaction: jest.fn().mockImplementation(async (cb) => {
         const mockManager = {
-          getRepository: () => repository,
+          getRepository: (entity: any) => {
+            if (entity === EventEntity) {
+              return eventRepoMock;
+            }
+            return repository;
+          },
         };
         return cb(mockManager);
       }),
@@ -112,6 +128,18 @@ describe('EventRegistrationService', () => {
   });
 
   describe('register', () => {
+    it('acquires pessimistic_write lock on the event entity row', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+      (repository.count as jest.Mock).mockResolvedValue(0);
+
+      await service.register(mockPublishedEvent, userId);
+
+      expect(eventRepoMock.findOne).toHaveBeenCalledWith({
+        where: { id: eventId },
+        lock: { mode: 'pessimistic_write' },
+      });
+    });
+
     it('successfully registers within capacity', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
       (repository.count as jest.Mock).mockResolvedValue(0);
@@ -136,7 +164,7 @@ describe('EventRegistrationService', () => {
       );
     });
 
-    it('throws EventCapacityReachedError if capacity is exceeded in transaction', async () => {
+    it('throws EventCapacityReachedError if capacity is exceeded in transaction after lock', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
       (repository.count as jest.Mock).mockResolvedValue(2); // capacity is 2
 
@@ -145,7 +173,7 @@ describe('EventRegistrationService', () => {
       );
     });
 
-    it('allows re-registration of previously cancelled registration', async () => {
+    it('allows re-registration of previously cancelled registration under the same capacity lock', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({
         ...mockRegistration,
         status: EventRegistrationStatus.Cancelled,
@@ -156,9 +184,13 @@ describe('EventRegistrationService', () => {
       const result = await service.register(mockPublishedEvent, userId);
       expect(result.status).toBe(EventRegistrationStatus.Registered);
       expect(result.cancelledAt).toBeNull();
+      expect(eventRepoMock.findOne).toHaveBeenCalledWith({
+        where: { id: eventId },
+        lock: { mode: 'pessimistic_write' },
+      });
     });
 
-    it('rejects re-registration of NO_SHOW status', async () => {
+    it('rejects re-registration of NO_SHOW status under lock', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue({
         ...mockRegistration,
         status: EventRegistrationStatus.NoShow,
@@ -167,6 +199,21 @@ describe('EventRegistrationService', () => {
       await expect(service.register(mockPublishedEvent, userId)).rejects.toThrow(
         EventRegistrationConflictError,
       );
+    });
+
+    it('proceeds without capacity check if event capacity is null (unlimited)', async () => {
+      eventRepoMock.findOne.mockResolvedValue({
+        ...mockPublishedEvent,
+        capacity: null,
+      });
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.register(
+        { ...mockPublishedEvent, capacity: null },
+        userId,
+      );
+      expect(result.status).toBe(EventRegistrationStatus.Registered);
+      expect(repository.count).not.toHaveBeenCalled();
     });
   });
 
@@ -238,6 +285,46 @@ describe('EventRegistrationService', () => {
       await expect(service.checkIn(eventId, registrationId)).rejects.toThrow(
         EventCheckInNotAllowedError,
       );
+    });
+  });
+
+  describe('listNotificationRecipientUserIds', () => {
+    it('queries DISTINCT user_id for REGISTERED and ATTENDED statuses', async () => {
+      const qbMock = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { userId: '22222222-2222-4222-8222-222222222222' },
+          { userId: '33333333-3333-4333-8333-333333333333' },
+        ]),
+      };
+      (repository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      const userIds = await service.listNotificationRecipientUserIds(eventId);
+
+      expect(qbMock.select).toHaveBeenCalledWith('DISTINCT reg.userId', 'userId');
+      expect(qbMock.where).toHaveBeenCalledWith('reg.eventId = :eid', { eid: eventId });
+      expect(qbMock.andWhere).toHaveBeenCalledWith('reg.status IN (:...statuses)', {
+        statuses: [EventRegistrationStatus.Registered, EventRegistrationStatus.Attended],
+      });
+      expect(userIds).toEqual([
+        '22222222-2222-4222-8222-222222222222',
+        '33333333-3333-4333-8333-333333333333',
+      ]);
+    });
+
+    it('returns empty array when no active registrations exist', async () => {
+      const qbMock = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+      (repository.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+      const userIds = await service.listNotificationRecipientUserIds(eventId);
+      expect(userIds).toEqual([]);
     });
   });
 });
