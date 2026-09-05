@@ -1,0 +1,1644 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #002/7
+FAST IMPLEMENTATION MODE
+PERSISTENCE FOUNDATION + MODULE SHELLS / TABLES / RBAC / APPLICATION EVENT CONTRACTS
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+WRITE:
+- production persistence code
+- module shells
+- entities
+- migrations
+- enums/interfaces
+- RBAC seeds/constants
+- neutral application event contracts
+- unit/integration spec files
+- report
+
+DO NOT RUN by default:
+- npm test / Jest
+- npm run test:*
+- lint
+- typecheck
+- build
+- format
+- quality
+- quality:full
+- npm audit
+- DB prepare/reset
+- migrations against DB
+- seed execution
+- Docker
+- Postman/Newman
+
+Do not mark deferred validation as failure.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture/security/privacy/modular ownership remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "feat(community): add cms announcement event notification foundation"
+
+Do not execute it.
+
+CONTEXT
+-------
+Completed:
+
+#001/7
+Domain audit + architecture + API/schema design
+
+#001A
+Corrective contract audit
+
+Frozen decisions:
+
+MODULE STRATEGY:
+4 modules:
+- cms
+- announcements
+- events
+- notifications
+
+TABLES:
+exactly 10
+
+1. cms_entries
+2. announcements
+3. announcement_targets
+4. announcement_user_states
+5. events
+6. event_targets
+7. event_registrations
+8. notifications
+9. notification_recipients
+10. notification_devices
+
+ROUTES:
+final target total = 33
+
+CMS = 6
+Announcements = 8
+Events = 13
+Notifications = 6
+
+EVENT LIFECYCLE:
+DRAFT
+-> PUBLISHED
+-> CANCELLED or COMPLETED
+-> ARCHIVED
+
+Also:
+DRAFT -> ARCHIVED
+
+Explicit action endpoints later:
+publish
+cancel
+complete
+archive
+
+NOTIFICATION IDEMPOTENCY:
+communication application events carry:
+- applicationEventId
+- operationKey
+- eventType
+- source id/reference
+- occurredAt / lifecycle timestamp
+
+notifications:
+- UNIQUE(operation_key)
+- UNIQUE(application_event_id)
+
+notification_recipients:
+- UNIQUE(notification_id, recipient_user_id)
+
+MSSQL SAFE UNIQUES:
+cms_entries:
+- non-null scope_key
+- UNIQUE(scope_key, slug)
+
+event_registrations:
+- non-null registrant_key
+- UNIQUE(event_id, registrant_key)
+
+EVENT VERSION:
+- optimistic integer version
+- EVENT_UPDATED operationKey:
+  EVENT_UPDATED:<eventId>:v<version>
+
+EVENT ADMIN SCOPE:
+GLOBAL / PARISH / CLASS
+
+EVENT TARGETS:
+audience eligibility only
+if no target rows => falls back to admin scope
+
+CMS:
+GLOBAL / PARISH scope
+
+ANNOUNCEMENTS:
+GLOBAL / PARISH / CLASS / ROLE targets
+
+NOTIFICATIONS:
+- in-app inbox in MVP
+- device registration in MVP
+- actual push provider delivery deferred
+- preferences deferred
+- email/SMS deferred
+- no generic manual notification create
+
+Current:
+#002/7 — persistence foundation only
+
+Do NOT implement full CMS/Announcement/Event/Notification business controllers yet.
+
+==================================================
+MANDATORY READING
+==================================================
+
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001A_CORRECTIVE_CONTRACT_AUDIT_REPORT.md
+
+Inspect patterns:
+
+src/modules/gamification/
+src/modules/class-operations/
+src/modules/media/
+src/modules/parish/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/auth/
+src/modules/access-control/
+src/modules/application-events/
+src/database/migrations/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+package.json
+test/
+
+Do not deep-audit unrelated modules.
+
+==================================================
+PART A — CREATE FOUR MODULE SHELLS
+==================================================
+
+Create:
+
+src/modules/cms/
+src/modules/announcements/
+src/modules/events/
+src/modules/notifications/
+
+Each module should contain:
+- module file
+- facade service
+- entities
+- enums/interfaces
+- internal services folders
+- errors folder
+- access service shell
+- dto folder placeholder if useful
+
+Exports:
+
+CmsModule
+-> CmsService only
+
+AnnouncementsModule
+-> AnnouncementsService only
+
+EventsModule
+-> EventsService only
+
+NotificationsModule
+-> NotificationsService only
+
+No repository/entity exports.
+
+No forwardRef.
+
+==================================================
+PART B — MODULE DEPENDENCY RULES
+==================================================
+
+CMS may depend on:
+- ParishModule public APIs
+- MediaModule public APIs if runtime validation of media reference is needed later
+
+Announcements may depend on:
+- ParishModule
+- ClassModule
+- EnrollmentModule
+- StudentModule
+- Users/Auth/AccessControl public APIs
+- ApplicationEventsModule
+
+Events may depend on:
+- ParishModule
+- ClassModule
+- EnrollmentModule
+- StudentModule
+- Users/Auth/AccessControl public APIs
+- ApplicationEventsModule
+
+Notifications may depend on:
+- Parish/Class/Enrollment/Student/Users public APIs for target expansion
+- ApplicationEventsModule
+
+Do NOT import:
+- FamilyPortal
+- Gamification
+- ClassOperations
+- LearningProgress
+- Practice
+- Exam
+unless absolutely necessary by public event contract later
+
+No foreign repositories/entities.
+
+No cycles.
+
+==================================================
+PART C — MIGRATION STRATEGY
+==================================================
+
+Create one cohesive new migration for all 10 tables OR split by module only if project convention strongly prefers it.
+
+Preferred:
+one migration for Community/Communications foundation because all 4 modules land together in #002.
+
+Creation order:
+
+1. cms_entries
+2. announcements
+3. announcement_targets
+4. announcement_user_states
+5. events
+6. event_targets
+7. event_registrations
+8. notifications
+9. notification_recipients
+10. notification_devices
+
+Rollback reverse order.
+
+Do not edit landed migrations.
+Do not run migration.
+
+==================================================
+PART D — CMS_ENTRIES TABLE
+==================================================
+
+Create `cms_entries`.
+
+Required columns:
+
+id
+- uniqueidentifier PK
+
+type
+- PAGE | ARTICLE | NEWS
+
+scope_type
+- GLOBAL | PARISH
+
+scope_key
+- non-null varchar
+- GLOBAL
+- PARISH:<parishId>
+
+parish_id
+- nullable UUID
+
+slug
+- varchar/nvarchar
+- normalized lowercase policy later
+
+title
+- nvarchar(200)
+
+summary
+- nvarchar(1000) nullable
+
+body
+- nvarchar(MAX)
+- domain max validation later ~64KB
+
+locale
+- varchar(32)
+- default project locale if convention exists
+
+status
+- DRAFT | SCHEDULED | PUBLISHED | ARCHIVED
+
+cover_media_asset_id
+- nullable scalar UUID
+
+is_featured
+- bit default false
+
+scheduled_for
+- datetime2 nullable
+
+published_at
+- datetime2 nullable
+
+expires_at
+- datetime2 nullable
+
+created_by_user_id
+updated_by_user_id
+- scalar UUIDs
+
+created_at
+updated_at
+
+Unique:
+UNIQUE(scope_key, slug)
+
+Indexes:
+status + published_at
+scope_key + status
+type + status if useful
+
+Checks:
+- valid status/type/scope
+- GLOBAL => parish_id null + scope_key GLOBAL
+- PARISH => parish_id non-null + scope_key prefix
+- scheduled_for required when SCHEDULED
+- published_at required when PUBLISHED
+- expires_at > published_at when both set
+
+No localization relation table in MVP.
+
+==================================================
+PART E — ANNOUNCEMENTS TABLE
+==================================================
+
+Create `announcements`.
+
+Columns:
+
+id
+title
+body
+summary/snippet nullable
+locale
+priority
+status
+parish_id nullable
+starts_at
+ends_at nullable
+is_pinned
+published_at nullable
+created_by_user_id
+updated_by_user_id
+created_at
+updated_at
+
+Enums:
+
+AnnouncementPriority:
+LOW
+NORMAL
+HIGH
+URGENT
+
+AnnouncementStatus:
+DRAFT
+PUBLISHED
+ARCHIVED
+
+Administrative ownership:
+parish_id may be nullable for GLOBAL/SuperAdmin announcements.
+
+If a separate scope_type helps clarify ownership:
+add:
+scope_type GLOBAL | PARISH
+
+Strong preference:
+yes, explicit scope_type + parish_id consistency.
+
+Do not overload targets as ownership.
+
+==================================================
+PART F — ANNOUNCEMENT_TARGETS TABLE
+==================================================
+
+Create `announcement_targets`.
+
+Columns:
+
+id
+announcement_id
+target_type
+parish_id nullable
+class_id nullable
+role_code nullable
+created_at
+
+TargetType:
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+Own FK:
+announcement_id -> announcements.id
+
+Target rules:
+GLOBAL:
+all optional ids null
+
+PARISH:
+parish_id non-null
+
+CLASS:
+class_id non-null
+parish_id may be stored if useful for fast validation
+
+ROLE:
+role_code non-null
+and parish_id REQUIRED in MVP
+to avoid global-role targeting for ordinary admins
+
+Important:
+role target is scoped role, not all platform PARENT globally.
+
+Add check constraints.
+
+Unique target identity:
+avoid duplicate identical target rows.
+
+Use non-null deterministic `target_key` if nullable-composite uniqueness would be unsafe.
+
+Strong preference:
+add `target_key`:
+GLOBAL
+PARISH:<id>
+CLASS:<id>
+ROLE:<parishId>:<roleCode>
+
+UNIQUE(announcement_id, target_key)
+
+==================================================
+PART G — ANNOUNCEMENT_USER_STATES TABLE
+==================================================
+
+Create `announcement_user_states`.
+
+Columns:
+
+id
+announcement_id
+user_id
+first_seen_at nullable
+read_at nullable
+dismissed_at nullable
+created_at
+updated_at
+
+Unique:
+(announcement_id, user_id)
+
+Own FK:
+announcement_id -> announcements.id
+
+Do not pre-create rows on publish.
+
+This table is for lazy interaction state only.
+
+Do not create foreign TypeORM User relation.
+
+==================================================
+PART H — EVENTS TABLE
+==================================================
+
+Create `events`.
+
+Columns:
+
+id
+code
+title
+description/body
+summary/snippet nullable
+locale
+
+scope_type
+- GLOBAL | PARISH | CLASS
+
+scope_key
+- GLOBAL
+- PARISH:<parishId>
+- CLASS:<classId>
+
+parish_id nullable
+class_id nullable
+
+status
+- DRAFT
+- PUBLISHED
+- CANCELLED
+- COMPLETED
+- ARCHIVED
+
+timezone
+- IANA string, e.g. Asia/Ho_Chi_Minh
+
+starts_at
+ends_at
+
+venue_name nullable
+address nullable
+
+capacity nullable
+is_registration_required
+registration_deadline nullable
+
+published_at nullable
+cancelled_at nullable
+cancellation_reason nullable
+
+version
+- int NOT NULL default 0
+
+created_by_user_id
+updated_by_user_id
+
+created_at
+updated_at
+
+Unique:
+code
+
+Indexes:
+status + starts_at + ends_at
+scope_key + status
+parish_id + status if useful
+
+Checks:
+- start < end
+- capacity null or >0
+- registration_deadline < starts_at if non-null
+- valid scope fields
+- DRAFT version >=0
+- PUBLISHED version >=1 eventually enforced in domain layer if DB check cumbersome
+
+No recurrence fields.
+
+==================================================
+PART I — EVENT_TARGETS TABLE
+==================================================
+
+Create `event_targets`.
+
+Same concept as announcements:
+audience eligibility only.
+
+Columns:
+
+id
+event_id
+target_type
+parish_id nullable
+class_id nullable
+role_code nullable
+target_key non-null
+created_at
+
+Target types:
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+Unique:
+(event_id, target_key)
+
+Own FK:
+event_id -> events.id
+
+If no rows:
+audience defaults to Event admin scope.
+
+==================================================
+PART J — EVENT_REGISTRATIONS TABLE
+==================================================
+
+Create `event_registrations`.
+
+Columns:
+
+id
+event_id
+
+registrant_key
+- non-null
+- USER:<userId>
+- STUDENT:<studentId>
+
+user_id
+- authenticated account responsible for registration
+- non-null
+
+student_id
+- nullable
+- populated when Parent registers linked child
+
+enrollment_id
+- nullable contextual snapshot
+
+status
+- REGISTERED
+- CANCELLED
+- ATTENDED
+- NO_SHOW
+
+registered_at
+cancelled_at nullable
+checked_in_at nullable
+
+created_at
+updated_at
+
+Unique:
+(event_id, registrant_key)
+
+Indexes:
+event_id + status
+user_id + status
+student_id + status if useful
+
+Own FK:
+event_id -> events.id
+
+Cross-module scalar ids only.
+
+Check:
+- registrant_key format consistent with student_id presence
+- self registration => USER:<userId> and student_id null
+- child registration => STUDENT:<studentId>
+
+Do not implement registration behavior yet.
+
+==================================================
+PART K — NOTIFICATIONS TABLE
+==================================================
+
+Create `notifications`.
+
+Columns:
+
+id
+application_event_id
+operation_key
+source_type
+source_id
+notification_type
+title
+snippet
+action_url
+created_at
+
+Required unique constraints:
+
+UNIQUE(operation_key)
+UNIQUE(application_event_id)
+
+Index:
+(source_type, source_id)
+
+Enums/constants:
+
+NotificationSourceType:
+ANNOUNCEMENT
+EVENT
+SYSTEM
+
+NotificationType:
+ANNOUNCEMENT_PUBLISHED
+EVENT_PUBLISHED
+EVENT_UPDATED
+EVENT_CANCELLED
+
+No generic manually-authored notification type in MVP.
+
+No PII.
+
+No body with private data.
+
+==================================================
+PART L — NOTIFICATION_RECIPIENTS TABLE
+==================================================
+
+Create `notification_recipients`.
+
+Columns:
+
+id
+notification_id
+recipient_user_id
+is_read
+read_at nullable
+is_dismissed
+created_at
+updated_at optional only if project pattern needs it
+
+Unique:
+(notification_id, recipient_user_id)
+
+Indexes:
+(recipient_user_id, is_read, created_at DESC)
+(recipient_user_id, created_at DESC)
+
+Own FK:
+notification_id -> notifications.id
+
+Do not use foreign User relation graph.
+
+No cascade from user domain.
+Own notification header -> recipients may use CASCADE if deleting own header is ever allowed, but normal domain should retain notification history.
+
+Document retention policy.
+
+==================================================
+PART M — NOTIFICATION_DEVICES TABLE
+==================================================
+
+Create `notification_devices`.
+
+Columns:
+
+id
+user_id
+platform
+provider
+token
+is_active
+app_version nullable
+locale nullable
+last_seen_at
+created_at
+updated_at
+
+Enums:
+
+NotificationDevicePlatform:
+IOS
+ANDROID
+WEB
+
+NotificationDeviceProvider:
+EXPO
+FCM
+APNS
+WEB_PUSH
+or a smaller set if actual app uses Expo first.
+
+Because push delivery is deferred:
+provider can still store future-compatible values.
+
+Critical uniqueness:
+token should not be active for multiple accounts simultaneously.
+
+Re-evaluate #001 proposed UNIQUE(user_id, token).
+
+Strong recommendation:
+UNIQUE(token) globally,
+because a device/push token should belong to one current user.
+
+If token migration across users is allowed:
+registering token to new user should deactivate/reassign old ownership at service layer later.
+
+Required final design:
+choose and document.
+
+Index:
+(user_id, is_active)
+
+==================================================
+PART N — ENTITY DESIGN
+==================================================
+
+Create TypeORM entities for all 10 tables.
+
+Rules:
+- no cross-module relation graphs
+- scalar UUID references only
+- own-module FK relations may still stay scalar
+- no lazy relations
+- no cascades that destroy historical data unexpectedly
+- timestamps consistent
+- enum strings persisted
+- no entity exported publicly
+
+==================================================
+PART O — OWN-MODULE SERVICE FOUNDATIONS
+==================================================
+
+Create narrow internal services.
+
+CMS:
+CmsEntryService
+- persistence primitives
+- no HTTP yet
+
+Announcements:
+AnnouncementService internal/domain persistence
+AnnouncementTargetService
+AnnouncementUserStateService
+
+Events:
+EventService internal persistence
+EventTargetService
+EventRegistrationService persistence shell
+
+Notifications:
+NotificationService internal persistence
+NotificationRecipientService
+NotificationDeviceService
+
+Public facades:
+
+CmsService
+AnnouncementsService
+EventsService
+NotificationsService
+
+Do not expose raw repositories.
+
+Do not implement full workflows/controllers yet.
+
+==================================================
+PART P — ACCESS SERVICE SHELLS
+==================================================
+
+Create:
+
+CmsAccessService
+AnnouncementAccessService
+EventAccessService
+NotificationAccessService
+
+Prepare future public-API-based scope helpers.
+
+Do not over-implement controllers.
+
+Scope principles:
+
+CMS:
+SuperAdmin global/all
+ParishAdmin own parish
+others published reads
+
+Announcements:
+SuperAdmin global/all
+ParishAdmin own parish
+Catechist assigned class only
+actor targeted feed
+
+Events:
+SuperAdmin global/all
+ParishAdmin own parish
+Catechist assigned class only
+Parent linked child
+Student self
+
+Notifications:
+self inbox/device only
+
+No foreign repos.
+
+==================================================
+PART Q — RBAC PERMISSIONS
+==================================================
+
+Add exactly 11 permissions from #001:
+
+cms.read
+cms.manage
+
+announcements.read
+announcements.manage
+announcements.publish
+
+events.read
+events.manage
+events.register
+events.checkin
+
+notifications.read
+notifications.devices
+
+Use current RBAC seed/constants pattern.
+
+Role matrix:
+
+SUPER_ADMIN:
+all except `events.register` only if policy says staff may self-register; permission presence can be harmless but avoid extra grants if not needed
+
+PARISH_ADMIN:
+cms.read/manage
+announcements.read/manage/publish
+events.read/manage/checkin
+notifications.read/devices
+
+CATECHIST:
+cms.read
+announcements.read/manage/publish
+events.read/manage/checkin
+notifications.read/devices
+
+PARENT:
+cms.read
+announcements.read
+events.read/register
+notifications.read/devices
+
+STUDENT:
+cms.read
+announcements.read
+events.read/register
+notifications.read/devices
+
+Important:
+permission != scope.
+
+Catechist manage/publish is CLASS-only later.
+
+==================================================
+PART R — GENERIC COMMUNITY APPLICATION EVENT CONTRACTS
+==================================================
+
+Extend neutral ApplicationEvents infrastructure.
+
+Do NOT mix these into RewardEligibleEvent.
+
+Create contracts under:
+
+src/modules/application-events/contracts/
+
+Use shared base:
+
+CommunicationApplicationEventBase {
+  applicationEventId: string
+  operationKey: string
+  eventType: CommunicationEventType
+}
+
+Contracts:
+
+AnnouncementPublishedEvent
+
+EventPublishedEvent
+
+EventUpdatedEvent
+
+EventCancelledEvent
+
+Target descriptor:
+
+CommunicationTargetDescriptor {
+  targetType
+  parishId?
+  classId?
+  roleCode?
+}
+
+No PII.
+
+No arbitrary metadata blobs.
+
+No full announcement/event bodies.
+
+==================================================
+PART S — APPLICATION EVENT IDENTITY RULES
+==================================================
+
+Freeze operation keys:
+
+ANNOUNCEMENT_PUBLISHED:<announcementId>
+
+EVENT_PUBLISHED:<eventId>
+
+EVENT_UPDATED:<eventId>:v<version>
+
+EVENT_CANCELLED:<eventId>
+
+`applicationEventId`:
+unique UUID per emitted application event instance.
+
+Important:
+notification dedupe uses operationKey as logical-operation identity.
+
+applicationEventId remains unique trace identity.
+
+Do not use regenerated applicationEventId for business dedupe.
+
+==================================================
+PART T — APPLICATION EVENT INFRASTRUCTURE
+==================================================
+
+Audit current ApplicationEventBus.
+
+Extend generically without breaking reward events.
+
+Need publisher/listener registration mechanism for communication events.
+
+Preferred:
+one neutral application event bus with typed handlers.
+
+No source module -> Notifications import.
+
+Do NOT implement notification orchestrator behavior yet (#006).
+
+Only contract/infrastructure readiness.
+
+==================================================
+PART U — CMS ENUMS / INTERFACES
+==================================================
+
+Create:
+
+CmsEntryType
+PAGE
+ARTICLE
+NEWS
+
+CmsScopeType
+GLOBAL
+PARISH
+
+CmsEntryStatus
+DRAFT
+SCHEDULED
+PUBLISHED
+ARCHIVED
+
+Narrow snapshots:
+CmsEntrySnapshot
+
+No HTTP DTOs yet unless foundation benefits.
+
+==================================================
+PART V — ANNOUNCEMENT ENUMS / INTERFACES
+==================================================
+
+Create:
+
+AnnouncementStatus
+DRAFT
+PUBLISHED
+ARCHIVED
+
+AnnouncementPriority
+LOW
+NORMAL
+HIGH
+URGENT
+
+AnnouncementScopeType
+GLOBAL
+PARISH
+
+CommunicationTargetType
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+Snapshots:
+AnnouncementSnapshot
+AnnouncementTargetSnapshot
+AnnouncementUserStateSnapshot
+
+==================================================
+PART W — EVENTS ENUMS / INTERFACES
+==================================================
+
+Create:
+
+EventStatus
+DRAFT
+PUBLISHED
+CANCELLED
+COMPLETED
+ARCHIVED
+
+EventScopeType
+GLOBAL
+PARISH
+CLASS
+
+EventRegistrationStatus
+REGISTERED
+CANCELLED
+ATTENDED
+NO_SHOW
+
+Snapshots:
+EventSnapshot
+EventTargetSnapshot
+EventRegistrationSnapshot
+
+==================================================
+PART X — NOTIFICATION ENUMS / INTERFACES
+==================================================
+
+Create:
+
+NotificationSourceType
+ANNOUNCEMENT
+EVENT
+SYSTEM
+
+NotificationType
+ANNOUNCEMENT_PUBLISHED
+EVENT_PUBLISHED
+EVENT_UPDATED
+EVENT_CANCELLED
+
+NotificationDevicePlatform
+IOS
+ANDROID
+WEB
+
+NotificationDeviceProvider
+choose exact bounded MVP values
+
+Snapshots:
+NotificationSnapshot
+NotificationRecipientSnapshot
+NotificationDeviceSnapshot
+
+==================================================
+PART Y — INDEX / CONSTRAINT STATIC AUDIT
+==================================================
+
+Before finish statically verify:
+
+CMS:
+- scope_key non-null
+- unique(scope_key, slug)
+
+Announcement targets:
+- target_key non-null
+- unique(announcement_id, target_key)
+
+Events:
+- version column
+- lifecycle status enum
+
+Event targets:
+- target_key non-null
+- unique(event_id, target_key)
+
+Registrations:
+- registrant_key non-null
+- unique(event_id, registrant_key)
+
+Notifications:
+- unique(operation_key)
+- unique(application_event_id)
+
+Recipients:
+- unique(notification_id, recipient_user_id)
+
+Devices:
+- chosen token uniqueness safe
+
+Fix any nullable uniqueness trap by design.
+
+==================================================
+PART Z — MODULE BOUNDARY SPECS
+==================================================
+
+Update module-boundary specs.
+
+Assert:
+
+CmsModule:
+- exists
+- exports CmsService only
+
+AnnouncementsModule:
+- exports AnnouncementsService only
+
+EventsModule:
+- exports EventsService only
+
+NotificationsModule:
+- exports NotificationsService only
+
+All:
+- no forwardRef
+- no foreign repository/entity imports
+- no FamilyPortal import
+- no cycles
+
+Announcements/Events:
+may depend on ApplicationEvents neutral contracts only
+
+Notifications:
+must NOT be imported directly by Announcements/Events for delivery
+
+==================================================
+PART AA — UNIT TEST FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+CMS:
+- scopeKey builder
+- lifecycle enum validity
+- slug uniqueness key behavior
+- GLOBAL/PARISH scope validation
+
+Announcements:
+- targetKey builder
+- target validation
+- scoped ROLE target requires parish
+- lazy user state uniqueness model
+
+Events:
+- scopeKey builder
+- registrantKey builder
+- event lifecycle transition helper
+- version/operationKey helper
+- target fallback semantics
+
+Notifications:
+- operationKey formats
+- source/application event uniqueness model
+- recipient uniqueness
+- device token uniqueness policy
+
+RBAC:
+- 11 permissions
+- role grants
+
+Application events:
+- contracts contain no PII
+- operation key helpers deterministic
+
+Module boundary tests.
+
+==================================================
+PART AB — INTEGRATION SPEC FILES
+==================================================
+
+WRITE, DO NOT RUN.
+
+Future MSSQL integration cases:
+
+CMS:
+1. table created
+2. GLOBAL slug uniqueness
+3. PARISH slug uniqueness
+4. two GLOBAL different slugs allowed
+5. lifecycle check constraints
+
+Announcements:
+6. target_key uniqueness
+7. user-state uniqueness
+8. no cross-module cascades
+
+Events:
+9. event code uniqueness
+10. scope consistency
+11. registrant key uniqueness
+12. multiple users self-register same event allowed
+13. same child cannot be registered twice
+14. version default
+
+Notifications:
+15. operation_key unique
+16. application_event_id unique
+17. recipient unique
+18. inbox index fields
+19. device token uniqueness
+
+Cross-module:
+20. no dangerous cascades
+
+Do not start DB.
+
+==================================================
+PART AC — APP MODULE WIRING
+==================================================
+
+Register:
+
+CmsModule
+AnnouncementsModule
+EventsModule
+NotificationsModule
+
+in AppModule.
+
+No controllers with business HTTP routes yet.
+
+ApplicationEventsModule remains available.
+
+==================================================
+PART AD — NO BUSINESS CONTROLLERS YET
+==================================================
+
+Strictly do NOT implement the final 33 HTTP route surface in #002.
+
+No:
+- CMS CRUD controllers
+- Announcement controllers
+- Event registration controllers
+- Notification inbox controllers
+
+Those belong #003–#006.
+
+Foundation-only.
+
+==================================================
+PART AE — SCHEDULER FOUNDATION
+==================================================
+
+Do NOT implement cron/worker execution.
+
+May create pure service/helper contracts for scheduled publication readiness if helpful.
+
+Persist:
+scheduled_for
+starts_at
+ends_at
+published_at
+
+No GET-time mutations.
+
+No scheduled runner script in #002 unless absolutely tiny and architecture-only.
+
+Prefer defer scheduler runner to #003/#004.
+
+==================================================
+PART AF — MEDIA / LOCALIZATION BOUNDARY
+==================================================
+
+Media:
+scalar cover_media_asset_id only.
+
+Announcement multi-attachment join table was previously proposed but final table count is frozen at 10.
+
+Therefore:
+DO NOT create `announcement_attachments` table in MVP #002.
+
+If attachments are still desired later:
+use one optional cover_media_asset_id or defer multi-attachments.
+
+Document this correction explicitly.
+
+Localization:
+locale field only.
+No LocalizationModule runtime dependency.
+
+==================================================
+PART AG — STATIC INSPECTION
+==================================================
+
+By inspection only verify:
+
+- exactly 10 entities/tables
+- no accidental 11th attachment/preferences table
+- 4 module shells
+- export-only facades
+- no forwardRef
+- no foreign entity/repo imports
+- operationKey contract stable
+- event version present
+- targetKey/registrantKey/scopeKey non-null
+- MSSQL nullable uniqueness traps resolved
+- device token uniqueness policy coherent
+- RBAC permissions exactly 11
+- AppModule wiring correct
+- migration/entity alignment
+
+Fix obvious code issues by inspection only.
+
+==================================================
+STRICT OUT OF SCOPE
+==================================================
+
+Do NOT implement:
+
+- CMS HTTP workflows (#003)
+- Announcement publishing/feed (#004)
+- Announcement -> notification fanout (#004/#006)
+- Event registration business logic (#005)
+- Event lifecycle HTTP (#005)
+- Notification inbox/device endpoints (#006)
+- notification orchestrator fanout (#006)
+- push provider delivery
+- notification preferences
+- email/SMS
+- waitlist
+- recurrence
+- multi-attachment table
+- runtime validation
+- demo seed
+- Postman
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_002_PERSISTENCE_FOUNDATION_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 State inherited
+4 Files created
+5 Files modified
+6 Module shells
+7 Module imports
+8 Module exports
+9 Table ownership
+10 Final 10-table schema
+11 cms_entries
+12 announcements
+13 announcement_targets
+14 announcement_user_states
+15 events
+16 event_targets
+17 event_registrations
+18 notifications
+19 notification_recipients
+20 notification_devices
+21 Enum model
+22 Snapshot/interface model
+23 scope_key strategy
+24 target_key strategy
+25 registrant_key strategy
+26 notification operationKey strategy
+27 applicationEventId strategy
+28 Event version strategy
+29 Device token uniqueness strategy
+30 Index/unique constraints
+31 FK/cascade strategy
+32 Persistence services
+33 Public facades
+34 Access service shells
+35 RBAC permissions
+36 Role matrix
+37 Communication event contracts
+38 ApplicationEvents infrastructure changes
+39 Media boundary
+40 Localization boundary
+41 Scheduler foundation
+42 Module boundary specs
+43 Unit tests written
+44 Integration tests written
+45 Tests executed
+46 DB validation
+47 quality:full
+48 Docker
+49 npm audit
+50 Static inspection
+51 Risks/deferred
+52 BLOCKER/HIGH/MEDIUM/LOW
+53 #003 readiness
+54 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+FOUR MODULE SHELLS READY: YES/NO
+
+TEN-TABLE SCHEMA IMPLEMENTED: YES/NO
+
+CMS PERSISTENCE READY: YES/NO
+ANNOUNCEMENT PERSISTENCE READY: YES/NO
+EVENT PERSISTENCE READY: YES/NO
+NOTIFICATION PERSISTENCE READY: YES/NO
+
+CMS SCOPE_KEY MSSQL SAFE: YES/NO
+ANNOUNCEMENT TARGET_KEY SAFE: YES/NO
+EVENT TARGET_KEY SAFE: YES/NO
+EVENT REGISTRANT_KEY MSSQL SAFE: YES/NO
+
+EVENT VERSION READY: YES/NO
+COMMUNICATION OPERATION KEY READY: YES/NO
+APPLICATION EVENT IDENTITY READY: YES/NO
+NOTIFICATION HEADER DEDUPE CONSTRAINT READY: YES/NO
+NOTIFICATION RECIPIENT DEDUPE CONSTRAINT READY: YES/NO
+DEVICE TOKEN UNIQUENESS READY: YES/NO
+
+RBAC 11 PERMISSIONS READY: YES/NO
+APPLICATION EVENT CONTRACTS READY: YES/NO
+APPLICATION EVENT INFRASTRUCTURE READY: YES/NO
+
+MODULE BOUNDARY READY BY INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+INTEGRATION TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#003 READINESS: YES/NO
+
+==================================================
+#003 GATE
+==================================================
+
+Proceed if:
+
+- 4 modules exist
+- exactly 10 tables/entities/migration ready
+- MSSQL-safe keys ready
+- notification header/recipient dedupe ready
+- event version ready
+- 11 RBAC permissions ready
+- communication application event contracts ready
+- boundaries clean
+- tests/specs written
+- BLOCKER=0
+- HIGH=0
+
+Runtime validation is NOT required.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #003/7 —
+CMS MODULE — CONTENT CRUD + PUBLISHING LIFECYCLE + PUBLIC / SCOPED READS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #002 implementation status
+- four modules
+- 10 tables
+- key/idempotency foundations
+- RBAC
+- application event contracts
+- tests written/not run
+- BLOCKER/HIGH/MEDIUM
+- #003 readiness
+- report path
+
+Then exactly:
+
+git commit -m "feat(community): add cms announcement event notification foundation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT proceed #003 automatically.

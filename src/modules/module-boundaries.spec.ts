@@ -49,6 +49,14 @@ import { ClassOperationsService } from './class-operations/services/class-operat
 import { ApplicationEventsModule } from './application-events/application-events.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { GamificationService } from './gamification/gamification.service';
+import { CmsModule } from './cms/cms.module';
+import { CmsService } from './cms/cms.service';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { AnnouncementsService } from './announcements/announcements.service';
+import { EventsModule } from './events/events.module';
+import { EventsService } from './events/events.service';
+import { NotificationsModule } from './notifications/notifications.module';
+import { NotificationsService } from './notifications/notifications.service';
 import { LocalizationModule } from './localization/localization.module';
 import { LocalizationService } from './localization/services/localization.service';
 import { LocaleResolutionService } from './localization/services/locale-resolution.service';
@@ -409,6 +417,52 @@ describe('Auth module persistence boundaries', () => {
     expect(moduleSource).not.toMatch(/MediaModule/);
   });
 
+  it('exports only CmsService from CmsModule and avoids forwardRef or entity leakage', () => {
+    const exports = resolveModuleExports(CmsModule);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(CmsService);
+    expect(exports).not.toContain(TypeOrmModule);
+
+    const moduleSource = readFileSync(join(__dirname, 'cms/cms.module.ts'), 'utf8');
+    expect(moduleSource).not.toMatch(/forwardRef\s*\(/);
+    expect(moduleSource).not.toMatch(/FamilyPortalModule/);
+  });
+
+  it('exports only AnnouncementsService from AnnouncementsModule and avoids direct NotificationsModule import', () => {
+    const exports = resolveModuleExports(AnnouncementsModule);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(AnnouncementsService);
+    expect(exports).not.toContain(TypeOrmModule);
+
+    const moduleSource = readFileSync(join(__dirname, 'announcements/announcements.module.ts'), 'utf8');
+    expect(moduleSource).not.toMatch(/forwardRef\s*\(/);
+    expect(moduleSource).not.toMatch(/NotificationsModule/);
+    expect(moduleSource).not.toMatch(/FamilyPortalModule/);
+  });
+
+  it('exports only EventsService from EventsModule and avoids direct NotificationsModule import', () => {
+    const exports = resolveModuleExports(EventsModule);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(EventsService);
+    expect(exports).not.toContain(TypeOrmModule);
+
+    const moduleSource = readFileSync(join(__dirname, 'events/events.module.ts'), 'utf8');
+    expect(moduleSource).not.toMatch(/forwardRef\s*\(/);
+    expect(moduleSource).not.toMatch(/NotificationsModule/);
+    expect(moduleSource).not.toMatch(/FamilyPortalModule/);
+  });
+
+  it('exports only NotificationsService from NotificationsModule and avoids forwardRef', () => {
+    const exports = resolveModuleExports(NotificationsModule);
+    expect(exports).toHaveLength(1);
+    expect(exports[0]).toBe(NotificationsService);
+    expect(exports).not.toContain(TypeOrmModule);
+
+    const moduleSource = readFileSync(join(__dirname, 'notifications/notifications.module.ts'), 'utf8');
+    expect(moduleSource).not.toMatch(/forwardRef\s*\(/);
+    expect(moduleSource).not.toMatch(/FamilyPortalModule/);
+  });
+
   it('does not use forwardRef in class-domain module definitions', () => {
     const modulePaths = [
       join(__dirname, 'student/student.module.ts'),
@@ -422,6 +476,10 @@ describe('Auth module persistence boundaries', () => {
       join(__dirname, 'family-portal/family-portal.module.ts'),
       join(__dirname, 'class-operations/class-operations.module.ts'),
       join(__dirname, 'gamification/gamification.module.ts'),
+      join(__dirname, 'cms/cms.module.ts'),
+      join(__dirname, 'announcements/announcements.module.ts'),
+      join(__dirname, 'events/events.module.ts'),
+      join(__dirname, 'notifications/notifications.module.ts'),
     ];
 
     for (const modulePath of modulePaths) {

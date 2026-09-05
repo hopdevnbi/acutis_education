@@ -314,6 +314,61 @@ export const AUTH_RBAC_SEED_PERMISSIONS: readonly AuthRbacSeedPermissionDefiniti
     name: 'Award badges',
     description: 'Manually award or soft-revoke badges for students.',
   },
+  {
+    code: 'cms.read',
+    name: 'Read CMS entries',
+    description: 'Read published CMS pages, articles, and news.',
+  },
+  {
+    code: 'cms.manage',
+    name: 'Manage CMS entries',
+    description: 'Create, update, publish, and archive CMS entries within scope.',
+  },
+  {
+    code: 'announcements.read',
+    name: 'Read announcements',
+    description: 'Read visible announcements targeted to the actor.',
+  },
+  {
+    code: 'announcements.manage',
+    name: 'Manage announcements',
+    description: 'Create, update, and archive announcements within scope.',
+  },
+  {
+    code: 'announcements.publish',
+    name: 'Publish announcements',
+    description: 'Publish announcements and trigger audience notification delivery.',
+  },
+  {
+    code: 'events.read',
+    name: 'Read events',
+    description: 'Read visible community calendar events and details.',
+  },
+  {
+    code: 'events.manage',
+    name: 'Manage events',
+    description: 'Create, update, publish, cancel, complete, and archive events.',
+  },
+  {
+    code: 'events.register',
+    name: 'Register for events',
+    description: 'Register self or linked child for community events.',
+  },
+  {
+    code: 'events.checkin',
+    name: 'Check in event attendees',
+    description: 'Record attendee check-in and attendance status at events.',
+  },
+  {
+    code: 'notifications.read',
+    name: 'Read notifications',
+    description: 'Access personal in-app notification inbox and unread counts.',
+  },
+  {
+    code: 'notifications.devices',
+    name: 'Manage notification devices',
+    description: 'Register and remove personal push device tokens.',
+  },
 ] as const;
 
 export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly string[]>> = {
@@ -368,6 +423,16 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'gamification.manage',
     'points.adjust',
     'badges.award',
+    'cms.read',
+    'cms.manage',
+    'announcements.read',
+    'announcements.manage',
+    'announcements.publish',
+    'events.read',
+    'events.manage',
+    'events.checkin',
+    'notifications.read',
+    'notifications.devices',
   ],
   CATECHIST: [
     'classes.read',
@@ -396,6 +461,15 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'gamification.manage',
     'points.adjust',
     'badges.award',
+    'cms.read',
+    'announcements.read',
+    'announcements.manage',
+    'announcements.publish',
+    'events.read',
+    'events.manage',
+    'events.checkin',
+    'notifications.read',
+    'notifications.devices',
   ],
   PARENT: [
     'classes.read',
@@ -415,6 +489,12 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'class-sessions.read',
     'attendance.read',
     'gamification.read',
+    'cms.read',
+    'announcements.read',
+    'events.read',
+    'events.register',
+    'notifications.read',
+    'notifications.devices',
   ],
   STUDENT: [
     'learner.self.read',
@@ -426,6 +506,12 @@ export const AUTH_RBAC_ROLE_PERMISSION_MATRIX: Readonly<Record<string, readonly 
     'class-sessions.read',
     'attendance.read',
     'gamification.read',
+    'cms.read',
+    'announcements.read',
+    'events.read',
+    'events.register',
+    'notifications.read',
+    'notifications.devices',
   ],
 };
 

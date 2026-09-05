@@ -28,6 +28,10 @@ import { FamilyPortalModule } from './modules/family-portal/family-portal.module
 import { ApplicationEventsModule } from './modules/application-events/application-events.module';
 import { ClassOperationsModule } from './modules/class-operations/class-operations.module';
 import { GamificationModule } from './modules/gamification/gamification.module';
+import { CmsModule } from './modules/cms/cms.module';
+import { AnnouncementsModule } from './modules/announcements/announcements.module';
+import { EventsModule } from './modules/events/events.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
 
 export interface AppModuleOptions {
@@ -68,6 +72,10 @@ export class AppModule {
         FamilyPortalModule,
         ClassOperationsModule,
         GamificationModule,
+        CmsModule,
+        AnnouncementsModule,
+        EventsModule,
+        NotificationsModule,
         LocalizationModule,
         ClassDomainScopeModule,
         ...(authRbacDemoEnabled ? [DevRbacModule] : []),

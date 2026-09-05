@@ -1,0 +1,1533 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #001/7
+DOMAIN AUDIT + BOUNDED CONTEXT + OWNERSHIP + WORKFLOW + API DESIGN
+AUDIT / DESIGN ONLY — FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This prompt MUST follow Fast Implementation Mode.
+
+For this audit/design prompt:
+- DO NOT run tests
+- DO NOT run lint/typecheck/build
+- DO NOT run Docker
+- DO NOT run DB commands
+- DO NOT run migrations
+- DO NOT run seed commands
+- DO NOT run npm audit
+- DO NOT run Postman/Newman
+
+Architecture/security/privacy/modular ownership remain mandatory static-inspection gates.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+Audit/design only:
+no commit required unless unexpected tracked file changes occur.
+
+CONTEXT
+-------
+Previous backend implementation phase:
+
+GAMIFICATION + FAITH JOURNEY IMPLEMENTATION PHASE COMPLETE
+
+Runtime validation is intentionally deferred to:
+
+FE INTEGRATION / STABILIZATION / VALIDATION PHASE
+
+Next backend phase:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS
+
+Requested size:
+approximately 6–8 prompts
+
+Default recommendation:
+7 prompts unless audit proves another count is materially cleaner.
+
+Current:
+#001/7 — DOMAIN AUDIT + DESIGN ONLY
+
+Do NOT implement production business code yet.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Define the bounded contexts, ownership, persistence, workflows, RBAC/scope, targeting rules, delivery semantics, API contracts, module boundaries, and exact implementation prompt plan for:
+
+1. CMS
+2. Announcements
+3. Events
+4. Notifications
+
+Answer precisely:
+
+- one module or multiple modules?
+- what does CMS own?
+- what does Announcement own?
+- what does Event own?
+- what does Notification own?
+- which modules should be independently extractable later?
+- how do they depend on Parish/Class/Enrollment/Student/Auth?
+- should Notification be generic infrastructure or domain-specific?
+- what is persisted vs computed?
+- how do publish/schedule/archive workflows work?
+- who can create/publish/manage content?
+- who can target whom?
+- how are minors/privacy protected?
+- what are read/unread semantics?
+- what is the notification inbox model?
+- push/email/SMS/provider scope now vs later?
+- how do announcements differ from notifications?
+- how do events differ from announcements?
+- how does event registration/attendance relate to ClassOperations?
+- how does CMS content differ from Curriculum/LearningContent?
+- exact tables?
+- exact APIs?
+- exact permissions?
+- exact prompt count/order?
+
+==================================================
+MANDATORY READING
+==================================================
+
+Read completely:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Read relevant final reports if available:
+
+docs/ATTENDANCE_CLASS_OPERATIONS_005_FAST_MODE_FINALIZATION_REPORT.md
+docs/GAMIFICATION_FAITH_JOURNEY_007_FAST_MODE_FINALIZATION_REPORT.md
+docs/*FAMILY_PORTAL*
+docs/*LEARNING_PROGRESS*
+docs/*CURRICULUM*
+docs/*MEDIA*
+docs/*LOCALIZATION*
+
+Inspect relevant code only:
+
+src/modules/parish/
+src/modules/class/
+src/modules/enrollment/
+src/modules/student/
+src/modules/family-portal/
+src/modules/media/
+src/modules/localization/
+src/modules/auth/
+src/modules/access-control/
+src/modules/class-operations/
+src/modules/application-events/
+src/database/migrations/
+src/database/seeds/
+src/modules/module-boundaries.spec.ts
+src/app.module.ts
+README.md
+package.json
+test/
+
+Do NOT deep-audit unrelated modules.
+
+==================================================
+PART A — BOUNDED CONTEXT OPTIONS
+==================================================
+
+Evaluate these architecture options.
+
+OPTION A
+--------
+Four modules:
+
+cms
+announcements
+events
+notifications
+
+OPTION B
+--------
+Three modules:
+
+cms
+communications
+events
+
+where communications owns announcements + notifications.
+
+OPTION C
+--------
+Two modules:
+
+content-communications
+events
+
+OPTION D
+--------
+One large module:
+communications
+
+Strong preference:
+avoid a god module.
+
+Evaluate against:
+- ownership clarity
+- future microservice extraction
+- provider integration
+- event scheduling
+- read-model composition
+- DB ownership
+- cross-module cycles
+- FE/Mobile API clarity
+- future push/email/SMS expansion
+
+Required verdict:
+
+FINAL MODULE STRATEGY: <count/modules>
+FINAL MODULE NAMES: <names>
+
+==================================================
+PART B — CMS DOMAIN BOUNDARY
+==================================================
+
+CMS should mean general editorial/public informational content, NOT learning curriculum.
+
+Potential CMS content examples:
+- parish home-page notices
+- articles/news
+- static pages
+- pastoral/public resources
+- hero/banner content
+
+CMS must NOT own:
+- lessons
+- learning content
+- question bank
+- exam content
+
+Audit existing Curriculum/LearningContent and Media boundaries.
+
+Required:
+CMS OWNERSHIP DEFINITION
+
+Decide whether CMS MVP needs:
+- pages
+- articles/posts
+- categories/tags
+- draft/published/archive
+- scheduled publishing
+- featured/pinned
+- media references
+- audience visibility
+
+Do not overbuild SEO/headless CMS features if not needed.
+
+==================================================
+PART C — CMS CONTENT MODEL
+==================================================
+
+Propose exact MVP content model.
+
+Candidate:
+cms_entries
+
+Fields:
+- id
+- type PAGE | ARTICLE | NEWS
+- code/slug
+- title
+- summary
+- body
+- status
+- scope
+- parishId nullable
+- publishedAt
+- scheduledFor
+- expiresAt nullable
+- featured
+- createdBy
+- updatedBy
+- timestamps
+
+Evaluate whether one table is sufficient or whether separate page/post tables are cleaner.
+
+Strong preference:
+avoid generic JSON blob for core content.
+
+Need decide:
+- markdown/plain HTML/sanitized rich text?
+- storage format
+- content size
+- slug uniqueness
+- parish/global scope
+- localization strategy
+
+==================================================
+PART D — CMS PUBLISHING WORKFLOW
+==================================================
+
+Potential lifecycle:
+
+DRAFT
+SCHEDULED
+PUBLISHED
+ARCHIVED
+
+Define allowed transitions.
+
+Clarify:
+- scheduled publishing job required?
+- or read-time status evaluation?
+- future scheduler/worker abstraction?
+- immediate publish endpoint?
+- archive?
+- expiry?
+
+Strong preference:
+explicit status transitions + scheduled publishing metadata.
+
+Avoid GET-time mutation.
+
+==================================================
+PART E — CMS ACCESS / RBAC
+==================================================
+
+Potential permissions:
+
+cms.read
+cms.manage
+cms.publish
+
+Evaluate permission count.
+
+Role ideas:
+
+SUPER_ADMIN
+- global CMS
+
+PARISH_ADMIN
+- own parish CMS
+
+CATECHIST
+- possibly read only
+- likely no editorial manage by default
+
+PARENT/STUDENT
+- published read only where audience allows
+
+Need exact role matrix.
+
+==================================================
+PART F — ANNOUNCEMENT DOMAIN
+==================================================
+
+Define Announcement as:
+time-sensitive, audience-targeted communication item surfaced in app/web.
+
+Different from CMS:
+- CMS = editorial/public content
+- Announcement = targeted operational/community message
+
+Potential examples:
+- class canceled
+- parish retreat
+- registration deadline
+- exam reminder
+- meeting notice
+
+Announcement should have:
+- title
+- body
+- audience target
+- publish/start/end
+- priority
+- pinned
+- attachments/media
+- author
+- status
+
+Required:
+ANNOUNCEMENT OWNERSHIP DEFINITION
+
+==================================================
+PART G — ANNOUNCEMENT TARGETING
+==================================================
+
+Target types may include:
+
+GLOBAL
+PARISH
+CLASS
+ROLE
+STUDENT
+PARENT/GUARDIAN
+ENROLLMENT
+CATECHIST
+
+Be careful:
+avoid overly broad PARENT role targeting for child-specific info.
+
+Audit existing scope patterns.
+
+Strong preference:
+target definitions reference exact scope entities:
+- parishId
+- classId
+- explicit user IDs
+- enrollmentId
+- role within scoped parish/class
+
+Need exact MVP targeting set.
+
+==================================================
+PART H — ANNOUNCEMENT READ / RECEIPT MODEL
+==================================================
+
+Decide if MVP requires:
+- read/unread
+- dismissed
+- acknowledged
+
+Strong recommendation:
+read receipt yes
+dismissed maybe
+acknowledgement only if product needs compliance
+
+Potential table:
+announcement_user_states
+
+Fields:
+- announcementId
+- userId
+- firstSeenAt
+- readAt
+- dismissedAt
+
+Need decide whether state rows are created:
+- fan-out on publish
+or
+- lazily on interaction
+
+Strong preference:
+do NOT fan-out millions of rows on publish unless necessary.
+
+Use target query + lazy read state.
+
+==================================================
+PART I — ANNOUNCEMENT DELIVERY VS NOTIFICATION
+==================================================
+
+Clarify:
+
+Announcement = durable communication content.
+
+Notification = delivery/inbox event pointing to content/action.
+
+Publishing an announcement may generate notification deliveries.
+
+Do not duplicate full announcement body into every notification unless snapshot requirement exists.
+
+Need exact relationship:
+notification may link:
+- announcementId
+- eventId
+- generic sourceType/sourceId
+
+==================================================
+PART J — EVENTS DOMAIN
+==================================================
+
+Define Event as scheduled real-world/community occurrence.
+
+Examples:
+- parish event
+- catechist meeting
+- retreat
+- class celebration
+- Mass/community gathering
+- youth activity
+
+Event is NOT ClassOperations class session unless explicitly linked.
+
+Need decide:
+- event scope
+- venue/location
+- startsAt/endsAt
+- timezone handling
+- organizer
+- capacity
+- registration
+- cancellation
+- attendance/check-in
+- recurrence
+
+Strong MVP:
+no recurrence engine unless required.
+
+==================================================
+PART K — EVENT TIME MODEL
+==================================================
+
+Audit parish timezone support.
+
+If no IANA timezone exists:
+- UTC source of truth
+- clients display local
+- timezone metadata deferred or add explicit eventTimezone only if product needs it
+
+Do not store ambiguous local datetime only.
+
+==================================================
+PART L — EVENT LIFECYCLE
+==================================================
+
+Potential:
+
+DRAFT
+PUBLISHED
+CANCELLED
+COMPLETED
+ARCHIVED
+
+Maybe SCHEDULED = published future event, not separate status.
+
+Decide exact lifecycle.
+
+Define:
+- create
+- publish
+- update
+- cancel
+- complete
+- archive
+
+No hard delete after publish.
+
+==================================================
+PART M — EVENT REGISTRATION
+==================================================
+
+Decide MVP registration scope:
+
+NONE
+OPTIONAL
+REQUIRED
+
+Potential table:
+event_registrations
+
+Fields:
+- eventId
+- userId
+- studentId nullable
+- enrollmentId nullable
+- status REGISTERED | CANCELLED | ATTENDED | NO_SHOW
+- registeredAt
+- cancelledAt
+- checkedInAt
+
+Critical:
+Parent registering child must derive guardian-linked student server-side.
+
+Student self registration may depend age/product policy.
+
+Catechist/admin can register? decide.
+
+==================================================
+PART N — EVENT CAPACITY / WAITLIST
+==================================================
+
+Evaluate:
+- capacity
+- waitlist
+
+Strong MVP:
+capacity optional
+waitlist deferred unless specifically required.
+
+Need concurrency-safe registration if capacity exists.
+
+==================================================
+PART O — EVENT ATTENDANCE VS CLASS ATTENDANCE
+==================================================
+
+Important boundary:
+
+ClassOperations attendance owns catechism class-session attendance.
+
+Events should NOT write into ClassOperations attendance tables.
+
+If Event needs attendance/check-in:
+Events owns event registration/check-in state.
+
+No cross-domain attendance table reuse.
+
+==================================================
+PART P — EVENT TARGETING / VISIBILITY
+==================================================
+
+Potential:
+GLOBAL
+PARISH
+CLASS
+ROLE
+
+Maybe PRIVATE invite-only.
+
+Need exact MVP visibility and registration eligibility.
+
+Do not expose child-specific events broadly.
+
+==================================================
+PART Q — EVENT NOTIFICATION INTEGRATION
+==================================================
+
+Publishing/updating/canceling Event may emit neutral notification-eligible events.
+
+Examples:
+EVENT_PUBLISHED
+EVENT_UPDATED
+EVENT_CANCELLED
+EVENT_STARTING_SOON
+
+Do not hard-couple Events -> Notifications service if avoidable.
+
+Audit existing ApplicationEvents infrastructure from Gamification.
+
+Consider whether to extend neutral application event infrastructure.
+
+==================================================
+PART R — NOTIFICATION DOMAIN BOUNDARY
+==================================================
+
+Notification should own:
+- in-app notification records
+- per-user delivery state
+- read/unread
+- provider delivery attempts/preferences later
+
+It should NOT own Announcement/Event content.
+
+Need decide:
+- notification sourceType/sourceId
+- actor/recipient
+- title/body snapshot?
+- deep link/action
+- readAt
+- deliveredAt
+- channel state
+
+==================================================
+PART S — NOTIFICATION DATA MODEL
+==================================================
+
+Candidate tables:
+
+notifications
+notification_recipients
+notification_preferences
+notification_devices
+notification_deliveries
+notification_templates
+
+But MVP may not need all.
+
+Audit long-term push milestone.
+
+Strong design:
+separate durable notification content/message from recipient state.
+
+Potential MVP:
+1. notifications
+2. notification_recipients
+
+Later:
+3. notification_devices
+4. notification_preferences
+5. notification_deliveries
+6. notification_templates
+
+Need exact MVP table set.
+
+==================================================
+PART T — PUSH / EMAIL / SMS SCOPE
+==================================================
+
+Decide what is implemented NOW.
+
+Strong MVP:
+- in-app notifications fully
+- provider abstraction prepared
+- device/preferences schema possibly now if push phase immediately follows
+- actual Expo/FCM/APNs delivery maybe later
+- email/SMS later unless requirement already exists
+
+Do not pretend push is working if provider is not implemented.
+
+Required verdict:
+IN-APP NOTIFICATIONS IN MVP: YES/NO
+PUSH DELIVERY IN MVP: YES/NO
+EMAIL/SMS IN MVP: YES/NO
+
+==================================================
+PART U — NOTIFICATION TARGETING
+==================================================
+
+Need robust target expansion.
+
+Potential targets:
+- exact users
+- parish
+- class
+- enrollment
+- scoped role
+- parent guardians of exact students
+- catechists assigned to class
+
+Never:
+all PARENT globally for child-specific content.
+
+Need exact targeting service design using public APIs only.
+
+No foreign repos.
+
+==================================================
+PART V — NOTIFICATION FAN-OUT STRATEGY
+==================================================
+
+Evaluate:
+
+A. expand recipient rows at publish/send time
+B. lazy query every read
+C. hybrid
+
+Strong recommendation:
+materialize per-user recipient rows for notifications after target resolution, because:
+- read/unread
+- delivery state
+- stable historical targeting
+- push provider delivery later
+
+Need bounded/batched insertion.
+
+No synchronous huge unbounded fan-out.
+
+For MVP, scope sizes probably parish/class.
+Document batching strategy.
+
+==================================================
+PART W — NOTIFICATION READ MODEL
+==================================================
+
+Learner:
+GET /me/learner/notifications
+
+Parent:
+GET /me/parent/notifications
+
+Staff:
+GET /me/staff/notifications or generic `/me/notifications`
+
+Strong preference:
+one actor-neutral:
+GET /api/v1/me/notifications
+GET /api/v1/me/notifications/unread-count
+POST /api/v1/me/notifications/:id/read
+POST /api/v1/me/notifications/read-all
+
+Authorization by recipient userId only.
+
+Need exact contract.
+
+==================================================
+PART X — NOTIFICATION PREFERENCES
+==================================================
+
+Decide whether MVP includes:
+- inApp enabled
+- push enabled
+- email enabled
+
+Could defer preferences until provider delivery is implemented.
+
+If notification_preferences table exists early:
+avoid dead config.
+
+Required verdict:
+NOTIFICATION PREFERENCES IN MVP: YES/NO
+
+==================================================
+PART Y — NOTIFICATION DEVICES
+==================================================
+
+Long-term roadmap mentioned push device registration.
+
+Evaluate if this phase should include:
+
+POST /api/v1/me/notification-devices
+DELETE /api/v1/me/notification-devices/:id
+
+Device fields:
+- platform
+- provider
+- token
+- appVersion
+- locale
+- active
+- lastSeenAt
+
+If actual push delivery is deferred:
+device registration may still be valuable foundation.
+
+Required verdict:
+NOTIFICATION DEVICES IN MVP: YES/NO
+
+==================================================
+PART Z — ANNOUNCEMENT + NOTIFICATION FLOW
+==================================================
+
+Design exact flow:
+
+Admin creates announcement DRAFT
+-> publish
+-> target resolver
+-> create notification(s)
+-> expand recipients
+-> users see announcement + inbox notification
+-> read state tracked
+
+Need decide whether Announcement listing is separate from Notification inbox.
+
+Strong recommendation:
+yes:
+- announcements feed
+- notification inbox
+
+Notification may deep-link to announcement detail.
+
+==================================================
+PART AA — EVENT + NOTIFICATION FLOW
+==================================================
+
+Design:
+Event publish/update/cancel
+-> neutral event
+-> Notification orchestrator
+-> targeted recipient notification
+
+Avoid duplicate notifications on idempotent event update.
+
+Need eventId/idempotency key strategy.
+
+==================================================
+PART AB — CMS + ANNOUNCEMENT RELATION
+==================================================
+
+Do not make announcement a generic CMS entry unless target/read semantics would pollute CMS.
+
+Strong preference:
+separate ownership.
+
+Need report final decision.
+
+==================================================
+PART AC — MEDIA / ATTACHMENTS
+==================================================
+
+Use Media public contract or scalar media IDs.
+
+No Media entity/repository import.
+
+CMS/Announcement/Event may reference:
+- coverMediaAssetId
+- attachment IDs
+
+If multiple attachments:
+decide join table vs array JSON.
+
+Prefer relational join table if ordered/multi attachments required.
+
+Do not overbuild.
+
+==================================================
+PART AD — LOCALIZATION
+==================================================
+
+Audit existing Localization.
+
+Need decide:
+- store default language content only in MVP
+- or localization revision support from start
+
+Because user-facing CMS/announcement content may be multilingual.
+
+Strong preference:
+do not create GET-time translation.
+
+Use stable entity + translation records only if existing localization pattern is mature and worth reusing.
+
+Need explicit:
+CMS LOCALIZATION STRATEGY
+ANNOUNCEMENT LOCALIZATION STRATEGY
+EVENT LOCALIZATION STRATEGY
+NOTIFICATION LOCALIZATION STRATEGY
+
+==================================================
+PART AE — SECURITY / MINORS
+==================================================
+
+Critical:
+
+- no public child directory
+- no broad guardian targeting for child-specific info
+- no learner contact data leak
+- Parent child-targeted announcements only through active guardian relationship
+- Catechist only assigned class
+- ParishAdmin own parish
+- no private/pastoral/confessional content in general notifications
+- no sensitive notes in push payload
+- notification deep links must still re-authorize target resource
+- recipient rows cannot grant underlying resource access
+
+Notifications are hints, not authorization.
+
+==================================================
+PART AF — CMS PUBLIC READS
+==================================================
+
+Decide whether published CMS content is:
+- authenticated only
+- public anonymous
+- mixed
+
+Potential:
+GET /api/v1/content
+GET /api/v1/content/:slug
+
+If public anonymous:
+only explicitly PUBLIC/PUBLISHED content.
+
+No parish-private content leakage.
+
+Need exact MVP decision.
+
+==================================================
+PART AG — ANNOUNCEMENT READ APIs
+==================================================
+
+Potential:
+
+GET /api/v1/announcements
+GET /api/v1/announcements/:id
+
+Authenticated actor sees only targeted visible announcements.
+
+Admin management:
+GET /api/v1/admin/announcements
+POST
+PATCH
+publish
+archive
+
+Follow existing route conventions, avoid unnecessary `/admin` if project uses permissions instead.
+
+Need exact API inventory.
+
+==================================================
+PART AH — EVENT READ APIs
+==================================================
+
+Potential:
+
+GET /api/v1/events
+GET /api/v1/events/:id
+
+Filters:
+- from/to
+- parish
+- class
+- status
+- registrationOpen
+
+Actor-visible only.
+
+Admin:
+POST/PATCH/publish/cancel/complete/archive
+
+Registration:
+POST /events/:id/registrations
+DELETE or POST cancel
+GET my registrations
+staff attendee list if needed
+
+Need exact inventory.
+
+==================================================
+PART AI — NOTIFICATION WRITE APIs
+==================================================
+
+Question:
+should arbitrary admin create a raw notification?
+
+Strong preference:
+NO generic raw notification create for most actors.
+
+Notifications should be generated from:
+- announcements
+- events
+- system triggers
+
+Maybe SuperAdmin manual notification later.
+
+Required verdict:
+GENERIC MANUAL NOTIFICATION CREATE IN MVP: YES/NO
+
+Strong default:
+NO.
+
+==================================================
+PART AJ — RBAC PERMISSIONS
+==================================================
+
+Propose exact compact permission set.
+
+Candidate:
+
+cms.read
+cms.manage
+cms.publish
+
+announcements.read
+announcements.manage
+announcements.publish
+
+events.read
+events.manage
+events.publish
+events.register
+
+notifications.read
+notifications.manage
+
+Could be too many.
+
+Try compact but explicit.
+
+Need role matrix for:
+SUPER_ADMIN
+PARISH_ADMIN
+CATECHIST
+PARENT
+STUDENT
+
+Remember:
+permission != scope.
+
+==================================================
+PART AK — STATUS / ERROR CONTRACTS
+==================================================
+
+Design domain errors:
+
+CMS:
+ContentNotFound
+ContentNotEditable
+InvalidContentTransition
+
+Announcement:
+AnnouncementNotFound
+AnnouncementNotPublishable
+AnnouncementAccessDenied
+
+Event:
+EventNotFound
+EventNotRegistrable
+EventCapacityReached
+EventAlreadyRegistered
+EventRegistrationNotFound
+InvalidEventTransition
+
+Notification:
+NotificationNotFound
+NotificationRecipientNotFound
+
+Map consistently:
+400 validation
+401 auth
+403 scope
+404 resource
+409 lifecycle/duplicate/capacity
+422 domain applicability if current project convention uses it
+
+==================================================
+PART AL — TABLE DESIGN
+==================================================
+
+Propose exact tables, not just concepts.
+
+Candidate families:
+
+CMS:
+- cms_entries
+- cms_entry_media? optional
+
+Announcements:
+- announcements
+- announcement_targets
+- announcement_user_states
+
+Events:
+- events
+- event_targets
+- event_registrations
+
+Notifications:
+- notifications
+- notification_recipients
+- maybe notification_devices
+- maybe notification_preferences
+
+Evaluate minimum clean MVP.
+
+Required:
+EXACT TABLE COUNT
+EXACT TABLE NAMES
+
+For every table:
+- owner module
+- PK
+- important columns
+- uniques
+- status
+- timestamps
+- foreign scalar IDs
+- retention/delete semantics
+
+==================================================
+PART AM — CROSS-MODULE DEPENDENCY GRAPH
+==================================================
+
+Required graph.
+
+Potential:
+
+CMS
+  -> Media public API only
+
+Announcements
+  -> Parish/Class/Enrollment public APIs
+  -> ApplicationEvents/Notifications contract
+
+Events
+  -> Parish/Class/Enrollment/Student public APIs
+  -> ApplicationEvents
+
+Notifications
+  -> target resolver public APIs
+  -> owns recipient/delivery state
+
+FamilyPortal
+  should not be required by these modules in MVP.
+
+No cycles.
+No forwardRef.
+
+==================================================
+PART AN — APPLICATION EVENTS
+==================================================
+
+Audit existing ApplicationEvents created in Gamification.
+
+Decide whether to generalize it beyond RewardEligibleEvent.
+
+Potential new neutral contracts:
+- AnnouncementPublishedEvent
+- EventPublishedEvent
+- EventUpdatedEvent
+- EventCancelledEvent
+- NotificationRequestedEvent
+
+Avoid stuffing all into reward event bus.
+
+May create generic application event bus if current infra is reward-specific.
+
+Need exact recommendation for #002/#005.
+
+==================================================
+PART AO — SCHEDULING / BACKGROUND JOBS
+==================================================
+
+CMS scheduled publishing
+Announcement scheduled publishing
+Event reminders
+Notification scheduled delivery
+
+Audit whether scheduler/cron/queue infrastructure exists.
+
+If none:
+do not overbuild worker system in #001.
+
+Need MVP decision:
+- persist schedule timestamps now
+- explicit processing service/job later in phase
+- no background automation until dedicated scheduler abstraction
+
+Required:
+SCHEDULER STRATEGY
+
+==================================================
+PART AP — IDEMPOTENCY
+==================================================
+
+Need idempotency for:
+
+- announcement publish -> notification creation
+- event publish/update/cancel -> notifications
+- scheduled processing retry
+- notification recipient fan-out
+- registration retry
+
+Potential unique keys:
+(sourceType, sourceId, notificationType, recipientUserId)
+or notification operation idempotency key.
+
+Design exact strategy.
+
+==================================================
+PART AQ — RETENTION / DELETE
+==================================================
+
+CMS:
+draft may hard delete?
+published should archive
+
+Announcement:
+published history retained
+
+Events:
+published/cancelled/completed retained
+
+Notification:
+recipient read history retained for reasonable period
+hard delete policy maybe future
+
+Registrations:
+retained after event completion
+
+No cascades that destroy historical state unexpectedly.
+
+==================================================
+PART AR — PERFORMANCE / N+1
+==================================================
+
+Design:
+
+- announcement targeting set-based/batched
+- event list paginated
+- notification inbox indexed by user/read/createdAt
+- unread count aggregate
+- no per-recipient foreign calls
+- registration capacity transaction-safe
+- CMS list paginated
+
+Need likely indexes.
+
+==================================================
+PART AS — DEMO SEED / POSTMAN STRATEGY
+==================================================
+
+Final prompt should seed:
+
+CMS:
+- 1 published global article
+- 1 parish-specific published item
+- 1 draft
+
+Announcements:
+- parish announcement
+- class announcement
+- targeted child/parent-safe example
+
+Events:
+- upcoming parish event
+- class-scoped event
+- one registered student/parent scenario
+- one cancelled/completed fixture
+
+Notifications:
+- unread + read recipient examples
+- links to announcement/event
+
+Postman:
+- admin create/publish flows
+- actor feed/read flows
+- event registration
+- notification inbox/read-all
+- scope denials
+
+==================================================
+PART AT — TEST STRATEGY
+==================================================
+
+Under Fast Implementation Mode:
+write tests later, do not execute.
+
+Unit:
+- lifecycle
+- target resolution
+- visibility
+- read state
+- registration capacity
+- idempotency
+- notification recipient dedupe
+- security scopes
+- DTO privacy
+
+Integration:
+- table constraints
+- publish fan-out
+- event notification
+- registration concurrency model
+- history retention
+- unread count
+
+DB e2e:
+- SuperAdmin
+- ParishAdmin
+- Catechist
+- Parent
+- Student
+- cross-parish/class denial
+- linked child scope
+- notification inbox
+
+==================================================
+PART AU — IMPLEMENTATION PROMPT PLAN
+==================================================
+
+Default proposed 7-prompt plan:
+
+#001/7
+Domain audit + architecture + exact API/schema design
+
+#002/7
+Persistence foundation:
+module shells + tables/entities + RBAC + neutral communication event contracts
+
+#003/7
+CMS:
+content CRUD + lifecycle + publish/schedule + public/scoped reads
+
+#004/7
+Announcements:
+targeting + publish/archive + actor feeds + read state
+
+#005/7
+Events:
+lifecycle + visibility + registration/check-in + event notification triggers
+
+#006/7
+Notifications:
+recipient fan-out + inbox/read/unread + preferences/devices decision + integration hardening
+
+#007/7
+Fast-mode finalization:
+demo seed + Postman + README/OpenAPI + static audit
+
+Audit may adjust count/order if justified.
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Roadmap position
+3 Existing related modules
+4 Existing ApplicationEvents infrastructure
+5 Existing scheduling/background infrastructure
+6 Bounded-context options
+7 Final module strategy
+8 Final module names
+9 CMS ownership
+10 CMS content model
+11 CMS lifecycle
+12 CMS access/RBAC
+13 CMS public/private read strategy
+14 CMS localization
+15 Announcement ownership
+16 Announcement targeting
+17 Announcement lifecycle
+18 Announcement user-state model
+19 Announcement vs Notification
+20 Announcement localization
+21 Event ownership
+22 Event lifecycle
+23 Event time model
+24 Event visibility/targeting
+25 Event registration
+26 Event capacity/waitlist
+27 Event attendance/check-in boundary
+28 Event notification integration
+29 Event localization
+30 Notification ownership
+31 Notification persistence
+32 Notification recipient model
+33 Notification fan-out strategy
+34 Notification inbox/read model
+35 Notification targeting
+36 Notification devices decision
+37 Notification preferences decision
+38 Push/email/SMS scope
+39 Generic manual notification decision
+40 CMS/Announcement/Event media strategy
+41 Security/minors
+42 Parent child-specific safety
+43 Catechist/class scope
+44 ParishAdmin scope
+45 SuperAdmin scope
+46 Actor read models
+47 Exact permission set
+48 Role matrix
+49 Exact table set
+50 Table ownership
+51 Index/unique strategy
+52 Retention/delete policy
+53 Application event contracts
+54 Cross-module dependency graph
+55 Scheduling strategy
+56 Idempotency strategy
+57 Error contracts
+58 Exact CMS API inventory
+59 Exact Announcement API inventory
+60 Exact Event API inventory
+61 Exact Notification API inventory
+62 FE contract
+63 Mobile contract
+64 Performance/N+1
+65 Test strategy
+66 Demo seed strategy
+67 Postman strategy
+68 Risks/deferred
+69 BLOCKER/HIGH/MEDIUM/LOW
+70 Exact prompt count
+71 Prompt plan
+72 #002 readiness
+73 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+GO / NO-GO FOR IMPLEMENTATION: GO/NO-GO
+
+FINAL MODULE STRATEGY: <count/modules>
+FINAL MODULE NAMES: <names>
+
+CMS MODEL READY: YES/NO
+ANNOUNCEMENT MODEL READY: YES/NO
+EVENT MODEL READY: YES/NO
+NOTIFICATION MODEL READY: YES/NO
+
+ANNOUNCEMENT TARGETING READY: YES/NO
+EVENT REGISTRATION IN MVP: YES/NO
+EVENT WAITLIST IN MVP: YES/NO
+
+IN-APP NOTIFICATIONS IN MVP: YES/NO
+PUSH DELIVERY IN MVP: YES/NO
+EMAIL/SMS IN MVP: YES/NO
+NOTIFICATION DEVICES IN MVP: YES/NO
+NOTIFICATION PREFERENCES IN MVP: YES/NO
+GENERIC MANUAL NOTIFICATION CREATE IN MVP: YES/NO
+
+CMS LOCALIZATION STRATEGY READY: YES/NO
+ANNOUNCEMENT LOCALIZATION STRATEGY READY: YES/NO
+EVENT LOCALIZATION STRATEGY READY: YES/NO
+NOTIFICATION LOCALIZATION STRATEGY READY: YES/NO
+
+SCHEDULER STRATEGY READY: YES/NO
+IDEMPOTENCY STRATEGY READY: YES/NO
+SECURITY/MINORS MODEL READY: YES/NO
+MODULE BOUNDARY READY BY DESIGN: YES/NO
+
+NEW TABLES REQUIRED: <count>
+NEW RBAC PERMISSIONS REQUIRED: YES/NO
+
+FINAL RECOMMENDED PROMPT COUNT: <6/7/8>
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+
+#002 READINESS: YES/NO
+
+==================================================
+#002 GATE
+==================================================
+
+Proceed if:
+
+- BLOCKER=0
+- HIGH=0
+- module strategy decided
+- exact table set decided
+- CMS model ready
+- Announcement model/targeting ready
+- Event model/registration decision ready
+- Notification persistence/fan-out ready
+- scheduler/idempotency strategy ready
+- RBAC ready
+- API inventory ready
+- security/minors ready
+- dependency graph ready
+
+Runtime validation is NOT required under Fast Implementation Mode.
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #002/7 —
+PERSISTENCE FOUNDATION + MODULE SHELLS / TABLES / RBAC / APPLICATION EVENT CONTRACTS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #001 audit status
+- module strategy
+- CMS model
+- Announcement model
+- Event model
+- Notification model
+- table count
+- permissions
+- scheduler strategy
+- provider scope
+- prompt count
+- BLOCKER/HIGH
+- #002 readiness
+- report path
+
+Do NOT run validation commands.
+Do NOT print git add.
+Do NOT run git add/commit/push.

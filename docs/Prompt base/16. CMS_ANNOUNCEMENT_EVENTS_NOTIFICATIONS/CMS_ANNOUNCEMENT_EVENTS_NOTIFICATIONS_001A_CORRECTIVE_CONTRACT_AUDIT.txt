@@ -1,0 +1,613 @@
+CURSOR PROMPT — CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #001A
+CORRECTIVE DESIGN AUDIT
+EVENT LIFECYCLE/API CONSISTENCY + NOTIFICATION IDEMPOTENCY CONTRACT
+AUDIT / DESIGN ONLY — FAST IMPLEMENTATION MODE
+
+MANDATORY RULES — READ FIRST
+----------------------------
+Before doing anything, read and obey:
+
+- PROJECT_RULES.md
+- AGENTS.md
+- all `.cursor/rules/*.mdc`
+
+Especially:
+
+`.cursor/rules/04-fast-implementation-mode.mdc`
+
+This corrective prompt MUST follow Fast Implementation Mode.
+
+AUDIT / DESIGN ONLY.
+
+DO NOT:
+- implement production code
+- create entities/migrations/controllers/services
+- run tests
+- run lint/typecheck/build
+- run Docker
+- run DB commands
+- run migrations
+- run seed commands
+- run npm audit
+- run Postman/Newman
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+No commit is needed unless this corrective audit unexpectedly changes tracked non-doc files.
+
+CONTEXT
+-------
+Main phase:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS
+
+Original plan:
+7 prompts
+
+Completed:
+#001/7 — Domain Audit + Design
+
+The #001 report concluded GO and #002 readiness YES, but review found two contract inconsistencies that MUST be corrected before persistence implementation.
+
+Read completely:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+
+Do not deep-audit unrelated modules.
+
+==================================================
+CORRECTIVE ISSUE 1 — EVENT LIFECYCLE / API MISMATCH
+==================================================
+
+#001 defines Event lifecycle:
+
+DRAFT
+-> PUBLISHED
+-> CANCELLED or COMPLETED
+-> ARCHIVED
+
+It also states:
+- Event publication emits EventPublishedEvent
+- Event cancellation emits EventCancelledEvent
+- Events can later be archived
+
+However exact Event API inventory currently has only:
+
+GET /events
+GET /events/:id
+POST /events/:id/registrations
+POST /events/:id/registrations/cancel
+GET /me/event-registrations
+POST /admin/events
+PATCH /admin/events/:id
+POST /admin/events/:id/cancel
+POST /admin/events/:id/checkin
+
+Missing lifecycle APIs:
+- publish
+- complete
+- archive
+
+This is inconsistent with the frozen lifecycle and notification flow.
+
+Required corrective decision:
+
+Either:
+
+OPTION A — explicit lifecycle endpoints:
+POST /api/v1/admin/events/:id/publish
+POST /api/v1/admin/events/:id/cancel
+POST /api/v1/admin/events/:id/complete
+POST /api/v1/admin/events/:id/archive
+
+or
+
+OPTION B — PATCH status transitions
+
+Strong preference:
+OPTION A, matching CMS/Announcement explicit lifecycle-action routes and avoiding arbitrary status mutation.
+
+Required:
+- exact corrected Event API inventory
+- exact corrected total route count
+- lifecycle transition table
+- which transition emits which application event
+- whether completing emits notification (probably NO by default)
+- whether archiving emits notification (probably NO)
+- whether update of significant fields emits EVENT_UPDATED
+
+==================================================
+CORRECTIVE ISSUE 2 — NOTIFICATION IDEMPOTENCY GAP
+==================================================
+
+#001 claims notification fan-out idempotency by:
+
+(source_type, source_id, recipient_user_id)
+
+But current proposed persistence defines:
+
+notifications:
+- index(source_type, source_id)
+
+notification_recipients:
+- unique(notification_id, recipient_user_id)
+
+This does NOT alone prevent replay from:
+
+1. creating a second `notifications` header for same source operation
+2. generating a new notification_id
+3. inserting another recipient row for same user
+
+Therefore current schema and idempotency statement are inconsistent.
+
+Required corrective design.
+
+Evaluate these approaches:
+
+OPTION A — unique notification operation key
+--------------------------------------------
+notifications includes:
+- idempotency_key
+or:
+- source_type
+- source_id
+- notification_type / event_type
+- source_version / operation_key if needed
+
+Unique:
+(source_type, source_id, notification_type)
+
+Then:
+notification_recipients unique(notification_id, recipient_user_id)
+
+Examples:
+ANNOUNCEMENT_PUBLISHED + announcementId
+EVENT_PUBLISHED + eventId
+EVENT_CANCELLED + eventId
+
+Problem:
+EVENT_UPDATED may occur multiple legitimate times.
+
+For EVENT_UPDATED need:
+- update event operation id
+or
+- source version
+or
+- deterministic change version/idempotency key
+
+OPTION B — notification operation/event receipt table
+-----------------------------------------------------
+Add table:
+notification_event_receipts
+with unique application event ID.
+
+Then one receipt points to one notification header.
+
+This would increase table count to 11.
+
+OPTION C — application event carries unique eventId
+---------------------------------------------------
+Extend communication events with:
+- eventId
+- sourceType
+- sourceId
+- eventType
+- occurredAt
+
+notifications has unique:
+event_id
+
+This is likely cleanest and extraction-safe if ApplicationEvents already follows event IDs.
+
+Required:
+choose exact approach.
+
+Strong preference:
+use a stable unique `eventId` on every communication application event and persist it on `notifications` as unique `source_event_id`.
+
+Then:
+- replay of exact application event cannot create duplicate notification header
+- recipient unique(notification_id, recipient_user_id) prevents duplicate fan-out rows
+- multiple legitimate EVENT_UPDATED events each have distinct eventId
+
+Do NOT overload sourceId as eventId.
+
+==================================================
+PART A — COMMUNICATION EVENT CONTRACTS
+==================================================
+
+Correct all application event contracts.
+
+Each should contain at least:
+
+eventId
+eventType
+sourceId
+occurredAt
+target descriptor snapshot or safe target references
+
+Examples:
+
+AnnouncementPublishedEvent
+- eventId
+- eventType = ANNOUNCEMENT_PUBLISHED
+- sourceId = announcementId
+- occurredAt
+- announcementId
+- safe title/snippet
+- targets
+
+EventPublishedEvent
+- eventId
+- eventType = EVENT_PUBLISHED
+- sourceId = eventId/domain event resource ID naming must avoid ambiguity
+- occurredAt
+- event resource id
+- title
+- startsAt
+- targets
+
+EventUpdatedEvent
+- unique application eventId per significant update
+- resource eventId/sourceId
+- occurredAt
+- bounded `changeTypes`, not arbitrary full diff blob
+
+EventCancelledEvent
+- unique application eventId
+- resource eventId/sourceId
+- occurredAt
+- safe generic cancellation summary
+
+Avoid PII.
+
+Be careful naming:
+application `eventId` vs domain Event entity ID can collide semantically.
+
+Prefer:
+applicationEventId
+sourceId
+eventType
+
+if this is clearer.
+
+Required final contract naming.
+
+==================================================
+PART B — NOTIFICATION HEADER UNIQUENESS
+==================================================
+
+Correct `notifications` table design.
+
+Recommended:
+
+id
+source_event_id / application_event_id UNIQUE
+source_type
+source_id
+notification_type
+title
+snippet
+action_url
+created_at
+
+Potential indexes:
+- UNIQUE(source_event_id)
+- INDEX(source_type, source_id)
+- INDEX(notification_type, created_at)
+
+Then:
+notification_recipients unique(notification_id, recipient_user_id)
+
+Required:
+exact column names
+exact unique/index strategy
+
+==================================================
+PART C — ANNOUNCEMENT PUBLISH IDEMPOTENCY
+==================================================
+
+Publishing an already-PUBLISHED announcement:
+
+Choose:
+- idempotent return existing state
+or
+- 409 invalid lifecycle
+
+Even if caller retries after ambiguous HTTP failure:
+application event emission must not create duplicate notifications.
+
+Design exact behavior.
+
+Strong preference:
+domain transition DRAFT -> PUBLISHED happens once.
+Repeated publish after already published returns 409 OR existing state, but notification dedupe is protected independently by stable persisted publish event ID/operation key.
+
+Need explain how application event ID stays stable across retry.
+
+Possible:
+- persist `published_event_id` on announcement
+or
+- derive deterministic UUID from announcementId + publication generation
+or
+- create event ID inside transaction and retain it
+
+Do not assume random UUID regenerated on retry is idempotent.
+
+==================================================
+PART D — EVENT PUBLISH / UPDATE / CANCEL IDEMPOTENCY
+==================================================
+
+Define stable operation identity for:
+
+EVENT_PUBLISHED:
+one per event publication
+
+EVENT_CANCELLED:
+one per event cancellation
+
+EVENT_UPDATED:
+multiple legitimate updates possible
+
+Need exact strategy.
+
+Potential:
+events table stores:
+- published_event_id
+- cancelled_event_id
+or operation log/outbox style
+
+But avoid adding many awkward columns if unnecessary.
+
+Alternative:
+communication events emitted with deterministic operation keys:
+- EVENT_PUBLISHED:{eventId}
+- EVENT_CANCELLED:{eventId}
+- EVENT_UPDATED:{eventId}:{updatedAt/version}
+
+If using updatedAt:
+ensure sufficient uniqueness/stability.
+
+Better:
+add optimistic integer `version` to events and use:
+EVENT_UPDATED:{eventId}:{version}
+
+Evaluate.
+
+Do not build full outbox in MVP.
+
+==================================================
+PART E — TABLE COUNT RECONCILIATION
+==================================================
+
+After fixing idempotency, state exact table count.
+
+If no new table:
+still 10.
+
+If adding receipt/operation table:
+11.
+
+Strong preference:
+keep 10 if unique notification source event ID solves it safely.
+
+Required:
+NEW TABLES REQUIRED: <exact count>
+
+==================================================
+PART F — INDEX CORRECTION
+==================================================
+
+Review any MSSQL nullable unique traps.
+
+Especially:
+
+CMS proposed unique:
+(scope_type, parish_id, slug)
+
+Because `parish_id` nullable for GLOBAL, SQL Server uniqueness with NULL may behave differently than intended.
+
+Design exact safe uniqueness.
+
+Possible:
+- derived non-null `scope_key`:
+  GLOBAL
+  PARISH:{parishId}
+  unique(scope_key, slug)
+
+or filtered unique indexes.
+
+This was not the primary HIGH issue but should be corrected now before #002.
+
+Also review event registration unique:
+(event_id, user_id, student_id)
+
+If `student_id` nullable for self-registration, ensure SQL Server uniqueness semantics actually prevent duplicate self-registration.
+
+Prefer a non-null `registrant_key` or filtered unique indexes.
+
+Required:
+explicit MSSQL-safe uniqueness design for:
+- cms entry slug scope
+- event registration identity
+
+==================================================
+PART G — TARGET MODEL CONSISTENCY
+==================================================
+
+Review Event model:
+#001 says event has scope GLOBAL/PARISH/CLASS and also optional `event_targets`.
+
+Clarify:
+- is one primary scope plus optional targets needed?
+- or event_targets are canonical audience model?
+
+Avoid redundant conflicting audience sources.
+
+Strong recommendation:
+use Event's owning/visibility scope for administration + `event_targets` for audience eligibility only if genuinely needed.
+
+State exact rule to avoid contradictions.
+
+==================================================
+PART H — CORRECTED API TOTAL
+==================================================
+
+Recompute exact total API count after correcting Event lifecycle routes.
+
+Do not leave headings such as “9 routes” when list contains 11.
+
+Every module section must have:
+- heading count
+- enumerated route list
+- total count
+
+Counts must mathematically sum.
+
+==================================================
+PART I — SEVERITY / READINESS
+==================================================
+
+After correction classify:
+
+BLOCKER
+HIGH
+MEDIUM
+LOW
+
+#002 is READY only if:
+
+- Event lifecycle and API inventory fully consistent
+- Event publish endpoint exists in contract
+- completion/archive strategy decided
+- communication event identity is stable
+- notification header replay dedupe is actually guaranteed
+- EVENT_UPDATED supports multiple legitimate notifications without collision
+- MSSQL uniqueness traps resolved
+- route counts corrected
+- exact table count frozen
+- BLOCKER=0
+- HIGH=0
+
+==================================================
+REQUIRED REPORT
+==================================================
+
+Create:
+
+docs/CMS_ANNOUNCEMENT_EVENTS_NOTIFICATIONS_001A_CORRECTIVE_CONTRACT_AUDIT_REPORT.md
+
+Required sections:
+
+1 Objective
+2 Fast Implementation Mode
+3 Issues inherited from #001
+4 Event lifecycle inconsistency
+5 Corrected event lifecycle
+6 Corrected Event API inventory
+7 Event application-event emission matrix
+8 Notification idempotency gap
+9 Final application event identity model
+10 Corrected communication event contracts
+11 Notification header uniqueness
+12 Recipient uniqueness
+13 Announcement publish retry semantics
+14 Event publish retry semantics
+15 Event update operation identity
+16 Event cancellation retry semantics
+17 Notification replay behavior
+18 Final notifications schema correction
+19 CMS slug uniqueness MSSQL strategy
+20 Event registration uniqueness MSSQL strategy
+21 Event targeting model reconciliation
+22 Final table count
+23 Corrected route counts per module
+24 Corrected total route count
+25 Updated idempotency strategy
+26 Updated index/unique strategy
+27 Risks/deferred
+28 BLOCKER/HIGH/MEDIUM/LOW
+29 #002 readiness
+30 Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+EVENT LIFECYCLE/API CONTRACT CONSISTENT: YES/NO
+
+EVENT PUBLISH CONTRACT READY: YES/NO
+EVENT COMPLETE CONTRACT READY: YES/NO
+EVENT ARCHIVE CONTRACT READY: YES/NO
+
+COMMUNICATION APPLICATION EVENT IDENTITY READY: YES/NO
+
+ANNOUNCEMENT PUBLISH RETRY IDEMPOTENT: YES/NO
+EVENT PUBLISH RETRY IDEMPOTENT: YES/NO
+EVENT UPDATE MULTI-OPERATION SAFE: YES/NO
+EVENT CANCEL RETRY IDEMPOTENT: YES/NO
+
+NOTIFICATION HEADER REPLAY DEDUPE READY: YES/NO
+NOTIFICATION RECIPIENT DEDUPE READY: YES/NO
+
+CMS SLUG UNIQUENESS MSSQL SAFE: YES/NO
+EVENT REGISTRATION UNIQUENESS MSSQL SAFE: YES/NO
+
+EVENT TARGET MODEL CONSISTENT: YES/NO
+
+FINAL TABLE COUNT: <integer>
+
+FINAL CMS ROUTE COUNT: <integer>
+FINAL ANNOUNCEMENT ROUTE COUNT: <integer>
+FINAL EVENT ROUTE COUNT: <integer>
+FINAL NOTIFICATION ROUTE COUNT: <integer>
+FINAL TOTAL ROUTE COUNT: <integer>
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+#002 READINESS: YES/NO
+
+==================================================
+#002 GATE
+==================================================
+
+Proceed only if:
+- BLOCKER=0
+- HIGH=0
+- all required verdicts above = YES
+- final table count frozen
+- route counts consistent
+- event lifecycle/API consistent
+- idempotency contract implementable without ambiguity
+
+Then recommend exactly:
+
+CMS + ANNOUNCEMENT + EVENTS + NOTIFICATIONS #002/7 —
+PERSISTENCE FOUNDATION + MODULE SHELLS / TABLES / RBAC / APPLICATION EVENT CONTRACTS
+
+Do NOT implement automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+- corrective status
+- event lifecycle/API fix
+- notification idempotency fix
+- MSSQL uniqueness fix
+- final table count
+- final route count
+- BLOCKER/HIGH/MEDIUM
+- #002 readiness
+- report path
+
+Do NOT run validation commands.
+Do NOT print git add.
+Do NOT run git add/commit/push.
