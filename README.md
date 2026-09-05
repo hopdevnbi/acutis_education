@@ -277,52 +277,98 @@ Class lifecycle: `PLANNED` → `ACTIVE` → `COMPLETED` or `CANCELLED`. Activati
 
 ## Class Operations API (Attendance)
 
-Class session and attendance APIs owned by `class-operations` (not Family Portal; not Learning Progress). Recurring schedule templates, demo seed, and Postman are deferred to a later prompt. This phase is **not** complete yet.
+**ATTENDANCE + CLASS OPERATIONS BACKEND IMPLEMENTATION COMPLETE**
 
-**Ownership:** `class_sessions`, `class_session_roster`, `attendance_records`.
+**RUNTIME VALIDATION DEFERRED TO FE INTEGRATION / STABILIZATION PHASE** (Fast Implementation Mode). Demo seed and Postman artifacts are ready for manual/FE integration later; do not assume tests were executed in this phase.
 
-**Session lifecycle:** `SCHEDULED` → `COMPLETED` | `CANCELLED` (no hard delete; no reopen).
+### Architecture
 
-**Attendance statuses:** `PRESENT` | `ABSENT` | `LATE` | `EXCUSED`. UNMARKED = roster row with no `attendance_records` row (`attendanceStatus: null` in history responses).
+- One module: `class-operations`
+- Three owned tables: `class_sessions`, `class_session_roster`, `attendance_records`
+- Owns session occurrences, frozen roster snapshots, and attendance marks
+- Public facade export: `ClassOperationsService` only
+- Not Family Portal; not Learning Progress (no composition writes either way)
 
-**Roster:** ACTIVE enrollments are snapshotted at session create. Refresh allowed only while `SCHEDULED` and zero attendance marks. History/summary use the frozen roster ∩ `COMPLETED` sessions — historical rows remain after enrollment becomes `TRANSFERRED` / `WITHDRAWN` / `COMPLETED`. `SCHEDULED` and `CANCELLED` sessions are excluded (future scheduled sessions are not absences).
+### Lifecycle
 
-**Summary formula (all actors):** `attendanceRatePercent = round(100 * (presentCount + lateCount) / totalSessions)` when `totalSessions > 0`, else `0`. `LATE` counts as present; `EXCUSED` does not; `UNMARKED` lowers the rate via the denominator. Counts are numeric `0`, never null.
+`SCHEDULED` → `COMPLETED` | `CANCELLED` (no hard delete; no reopen; no recurring schedule templates in MVP).
 
-**Note privacy:** staff history may include `note`; Parent/Student (`/me`) history omits `note` entirely. Summaries never include notes. Audit actor IDs are never returned.
+### Attendance
 
-### Staff session routes
+Statuses: `PRESENT` | `ABSENT` | `LATE` | `EXCUSED`.  
+**UNMARKED** = roster row with no `attendance_records` row (`attendanceStatus: null` in history responses). Persistence enum does not include UNMARKED.
+
+### Roles / scope
+
+| Actor | Access |
+| ----- | ------ |
+| Assigned Catechist (ACTIVE) | Staff session + attendance + generic enrollment reads for assigned class |
+| ParishAdmin | Own parish only |
+| SuperAdmin | Generic staff routes globally |
+| Parent | `/me/parent/...` linked-child only (ACTIVE guardian); no staff writes; no generic enrollment routes |
+| Student | `/me/learner/...` self enrollment only; no staff writes; no generic enrollment routes |
+
+No `/me` admin impersonation fallback. Permission never replaces scope.
+
+### Summary formula
+
+`attendanceRatePercent = round(100 * (presentCount + lateCount) / totalSessions)` when `totalSessions > 0`, else `0`.  
+Eligible: roster ∩ `COMPLETED` only. `LATE` counts as present; `EXCUSED` does not; `UNMARKED` lowers the rate. `SCHEDULED`/`CANCELLED` excluded. Same formula for all actors.
+
+History survives enrollment `TRANSFERRED` / `WITHDRAWN` / `COMPLETED` (roster membership).
+
+### Note privacy
+
+Staff history may include `note`. Parent/Student history omits `note`. Summaries never include notes. Audit actor IDs are never returned.
+
+### Routes (15)
 
 | Method | Route | Permission | Notes |
 | ------ | ----- | ---------- | ----- |
-| `POST` | `/api/v1/classes/:classId/sessions` | `class-sessions.manage` | Create SCHEDULED + freeze roster (class must be ACTIVE) |
-| `GET` | `/api/v1/classes/:classId/sessions` | `class-sessions.read` | Paginated; `page`, `limit` (max 50), optional `from`, `to`, `status` |
-| `GET` | `/api/v1/class-sessions/:sessionId` | `class-sessions.read` | Detail + roster/marked/unmarked counts |
-| `PATCH` | `/api/v1/class-sessions/:sessionId` | `class-sessions.manage` | Title/times while SCHEDULED only |
+| `POST` | `/api/v1/classes/:classId/sessions` | `class-sessions.manage` | Create SCHEDULED + freeze roster |
+| `GET` | `/api/v1/classes/:classId/sessions` | `class-sessions.read` | Paginated; max limit 50 |
+| `GET` | `/api/v1/class-sessions/:sessionId` | `class-sessions.read` | Detail + counts |
+| `PATCH` | `/api/v1/class-sessions/:sessionId` | `class-sessions.manage` | Title/times while SCHEDULED |
 | `POST` | `/api/v1/class-sessions/:sessionId/cancel` | `class-sessions.manage` | Soft cancel |
-| `POST` | `/api/v1/class-sessions/:sessionId/complete` | `class-sessions.manage` | Completes and locks attendance |
-| `POST` | `/api/v1/class-sessions/:sessionId/roster/refresh` | `class-sessions.manage` | SCHEDULED + zero marks only |
+| `POST` | `/api/v1/class-sessions/:sessionId/complete` | `class-sessions.manage` | Locks attendance |
+| `POST` | `/api/v1/class-sessions/:sessionId/roster/refresh` | `class-sessions.manage` | SCHEDULED + zero marks |
 | `GET` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.read` | Staff roster + marks |
-| `PUT` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.manage` | Bulk upsert; omitted learners stay UNMARKED |
-
-### Enrollment attendance reads
-
-| Method | Route | Permission | Notes |
-| ------ | ----- | ---------- | ----- |
-| `GET` | `/api/v1/enrollments/:enrollmentId/attendance` | `attendance.read` | Staff history (paginated; may include `note`) |
+| `PUT` | `/api/v1/class-sessions/:sessionId/attendance` | `attendance.manage` | Bulk upsert |
+| `GET` | `/api/v1/enrollments/:enrollmentId/attendance` | `attendance.read` | Staff history |
 | `GET` | `/api/v1/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Staff summary |
-| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance` | `attendance.read` | PARENT + ACTIVE guardian only; learner-safe |
-| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Same Parent scope |
-| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance` | `attendance.read` | STUDENT self enrollment only; learner-safe |
-| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Same Student scope |
+| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance` | `attendance.read` | Parent linked-child |
+| `GET` | `/api/v1/me/parent/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Parent summary |
+| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance` | `attendance.read` | Student self |
+| `GET` | `/api/v1/me/learner/enrollments/:enrollmentId/attendance-summary` | `attendance.read` | Student summary |
 
-**History pagination:** `page` default 1, `limit` default 20, max 50. Sort: `startsAt DESC`, `sessionId DESC`. Response: `page`, `limit`, `total`, `totalPages`, `items`. Summary is not paginated.
+History pagination: `page` default 1, `limit` default 20, max 50; sort `startsAt DESC`, `sessionId DESC`.
 
-**Staff scope (generic routes):** assigned Catechist (ACTIVE assignment), ParishAdmin (own parish), SuperAdmin. Parent/Student are denied on generic staff routes — use `/me/parent` or `/me/learner`. Permission never replaces scope.
+### Demo seed
 
-**`/me` semantics:** require genuine `PARENT` or `STUDENT` roles. No SuperAdmin/ParishAdmin/Catechist impersonation fallback on actor-specific routes.
+```bash
+npm run seed:class-operations-demo
+```
 
-**Bulk PUT:** transactional all-or-nothing; unique `(sessionId, enrollmentId)`; enrollment must be on frozen roster; note max 500 (never logged).
+Composes auth/rbac + parish/academic + class/enrollment seeds, then creates Class Operations demo sessions (3 COMPLETED with mixed marks + UNMARKED, 1 SCHEDULED, 1 CANCELLED) via `ClassOperationsService`. Dev/test only (`assertSafeSeedEnvironment`). Idempotent by stable session titles.
+
+### Postman
+
+Collection: `docs/postman/Acutis-Education-Class-Operations.postman_collection.json`  
+Import into Postman; set variables after seed; no live JWTs committed.
+
+### Deferred product scope
+
+- Recurring schedule templates
+- Notifications
+- Attendance revision history
+- Session reopen / DELETE
+- FamilyPortal attendance composition
+- LearningProgress attendance integration
+- Class-wide analytics
+
+### Bulk PUT notes
+
+Transactional all-or-nothing; unique `(sessionId, enrollmentId)`; enrollment must be on frozen roster; note max 500 (never logged).
 
 ## Student API
 

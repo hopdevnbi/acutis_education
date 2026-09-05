@@ -1,0 +1,747 @@
+{
+  "info": {
+    "_postman_id": "acutis-education-class-operations-collection",
+    "name": "Acutis Education — Class Operations",
+    "description": "Manual verification for Class Operations (sessions + attendance) APIs.\n\nPrerequisites:\n1. npm run migration:run\n2. npm run seed:class-operations-demo\n3. npm run start:dev\n\nDemo actors (password {{demoPassword}}):\n- catechist@local.catechism.test\n- parent@local.catechism.test\n- student-alpha@local.catechism.test\n- admin@local.catechism.test (ParishAdmin)\n\nNever commit live JWTs or production secrets.\n\nRuntime validation of this collection is deferred to FE Integration / Stabilization Phase.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "demoPassword", "value": "LocalDev!Sample2026" },
+    { "key": "catechistEmail", "value": "catechist@local.catechism.test" },
+    { "key": "parentEmail", "value": "parent@local.catechism.test" },
+    { "key": "studentEmail", "value": "student-alpha@local.catechism.test" },
+    { "key": "adminEmail", "value": "admin@local.catechism.test" },
+    { "key": "catechistToken", "value": "" },
+    { "key": "parentToken", "value": "" },
+    { "key": "studentToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "scheduledSessionId", "value": "" },
+    { "key": "enrollmentId", "value": "" },
+    { "key": "foreignEnrollmentId", "value": "" },
+    { "key": "unknownEnrollmentId", "value": "99999999-9999-4999-8999-999999999999" }
+  ],
+  "item": [
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Catechist login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('accessToken present', () => pm.expect(body.accessToken).to.be.a('string'));",
+                  "pm.collectionVariables.set('catechistToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{catechistEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Parent login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('parentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{parentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Student login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('studentToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "ParishAdmin login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 login', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('adminToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Catechist session lifecycle",
+      "item": [
+        {
+          "name": "Resolve classId from catechist classes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 classes', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array').that.is.not.empty;",
+                  "pm.collectionVariables.set('classId', body.items[0].classId || body.items[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/me/catechist/classes?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "catechist", "classes"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List class sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 list', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array');",
+                  "pm.expect(body).to.have.property('page');",
+                  "const scheduled = body.items.find(i => i.status === 'SCHEDULED' && i.title === 'co-demo-scheduled-upcoming');",
+                  "if (scheduled) { pm.collectionVariables.set('scheduledSessionId', scheduled.id); }",
+                  "const completed = body.items.find(i => i.status === 'COMPLETED');",
+                  "if (completed) { pm.collectionVariables.set('sessionId', completed.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/classes/{{classId}}/sessions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["classes", "{{classId}}", "sessions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 create', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.have.property('id');",
+                  "pm.expect(body.status).to.eql('SCHEDULED');",
+                  "pm.collectionVariables.set('sessionId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"postman-manual-session\",\n  \"startsAt\": \"2026-12-12T02:00:00.000Z\",\n  \"endsAt\": \"2026-12-12T03:00:00.000Z\"\n}"
+            },
+            "url": "{{baseUrl}}/classes/{{classId}}/sessions"
+          }
+        },
+        {
+          "name": "Get session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 detail', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.include.keys('id', 'classId', 'status', 'rosterCount', 'markedCount', 'unmarkedCount');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "Get session attendance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 attendance', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array').that.is.not.empty;",
+                  "pm.collectionVariables.set('enrollmentId', body.items[0].enrollmentId);",
+                  "if (body.items.length > 1) { pm.collectionVariables.set('foreignEnrollmentId', body.items[1].enrollmentId); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Bulk mark attendance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 bulk put', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.markedCount).to.be.at.least(1);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"enrollmentId\": \"{{enrollmentId}}\",\n      \"status\": \"PRESENT\",\n      \"note\": \"postman mark\"\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Update session title",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 patch', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.title).to.eql('postman-manual-session-patched');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"postman-manual-session-patched\"\n}"
+            },
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "Complete session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 complete', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.status).to.eql('COMPLETED');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/complete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Roster refresh",
+      "item": [
+        {
+          "name": "Refresh roster on seed scheduled session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 refresh', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.status).to.eql('SCHEDULED');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{scheduledSessionId}}/roster/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Parent reads",
+      "item": [
+        {
+          "name": "Parent attendance history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 parent history', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array');",
+                  "if (body.items.length > 0) { pm.expect(body.items[0]).to.not.have.property('note'); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/attendance?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "parent", "enrollments", "{{enrollmentId}}", "attendance"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Parent attendance summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 parent summary', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.include.keys('totalSessions', 'presentCount', 'lateCount', 'absentCount', 'excusedCount', 'unmarkedCount', 'attendanceRatePercent');",
+                  "pm.expect(body).to.not.have.property('note');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/enrollments/{{enrollmentId}}/attendance-summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Student reads",
+      "item": [
+        {
+          "name": "Student attendance history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student history', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.items.length > 0) { pm.expect(body.items[0]).to.not.have.property('note'); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/me/learner/enrollments/{{enrollmentId}}/attendance?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "learner", "enrollments", "{{enrollmentId}}", "attendance"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Student attendance summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 student summary', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.have.property('attendanceRatePercent');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/me/learner/enrollments/{{enrollmentId}}/attendance-summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Staff generic enrollment reads",
+      "item": [
+        {
+          "name": "Staff enrollment attendance history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 staff history', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.items).to.be.an('array');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{catechistToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{enrollmentId}}/attendance?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["enrollments", "{{enrollmentId}}", "attendance"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Staff enrollment attendance summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 staff summary', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body).to.have.property('attendanceRatePercent');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/attendance-summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Negative denials",
+      "item": [
+        {
+          "name": "Parent denied staff attendance GET",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Student denied staff attendance GET",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Parent denied attendance PUT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{parentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [{ \"enrollmentId\": \"{{enrollmentId}}\", \"status\": \"PRESENT\" }]\n}"
+            },
+            "url": "{{baseUrl}}/class-sessions/{{scheduledSessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Student denied attendance PUT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [{ \"enrollmentId\": \"{{enrollmentId}}\", \"status\": \"PRESENT\" }]\n}"
+            },
+            "url": "{{baseUrl}}/class-sessions/{{scheduledSessionId}}/attendance"
+          }
+        },
+        {
+          "name": "Parent denied generic enrollment attendance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/attendance"
+          }
+        },
+        {
+          "name": "Student denied generic enrollment attendance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/enrollments/{{enrollmentId}}/attendance"
+          }
+        },
+        {
+          "name": "Parent foreign enrollment denied",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/enrollments/{{foreignEnrollmentId}}/attendance"
+          }
+        },
+        {
+          "name": "Student foreign enrollment denied",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403', () => pm.response.to.have.status(403));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/me/learner/enrollments/{{foreignEnrollmentId}}/attendance"
+          }
+        },
+        {
+          "name": "Unknown enrollment 404 for parent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('404', () => pm.response.to.have.status(404));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{parentToken}}" }],
+            "url": "{{baseUrl}}/me/parent/enrollments/{{unknownEnrollmentId}}/attendance"
+          }
+        },
+        {
+          "name": "Attendance PUT after completed => 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('409', () => pm.response.to.have.status(409));"],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{catechistToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [{ \"enrollmentId\": \"{{enrollmentId}}\", \"status\": \"ABSENT\" }]\n}"
+            },
+            "url": "{{baseUrl}}/class-sessions/{{sessionId}}/attendance"
+          }
+        }
+      ]
+    }
+  ]
+}

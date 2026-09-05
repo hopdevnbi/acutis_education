@@ -1,0 +1,790 @@
+CURSOR PROMPT — ATTENDANCE + CLASS OPERATIONS #005/5
+FAST IMPLEMENTATION MODE
+FINAL IMPLEMENTATION + DEMO SEED + POSTMAN + DOCUMENTATION + PHASE HANDOFF
+
+IMPORTANT WORKFLOW
+------------------
+Fast Implementation Mode is now ACTIVE project-wide.
+
+Read and obey:
+.cursor/rules/04-fast-implementation-mode.mdc
+
+This means:
+
+- CODE FIRST
+- WRITE tests/specs
+- DO NOT run tests by default
+- DO NOT run lint/typecheck/build/quality by default
+- DO NOT run Docker by default
+- DO NOT run DB prepare/reset/migrations by default
+- DO NOT run seed commands by default
+- DO NOT run npm audit by default
+
+Validation is intentionally deferred to the later:
+
+FE INTEGRATION / STABILIZATION / VALIDATION PHASE
+
+Do NOT mark intentionally unexecuted validation as FAIL.
+
+Use:
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+DB VALIDATION: NOT RUN — deferred
+QUALITY:FULL: NOT RUN — deferred
+DOCKER: NOT RUN — deferred
+NPM AUDIT: NOT RUN — deferred
+
+Architecture/security/code inspection remain mandatory.
+
+CONTEXT
+-------
+Completed implementation prompts:
+
+#001/5 — Domain audit + schema/API design
+#002/5 — Persistence foundation
+#003/5 — Catechist/Admin session/roster/bulk attendance APIs
+#004/5 — Parent/Student attendance reads + summary + hardening
+
+#004 current implementation state:
+- exactly 15 Class Operations endpoints
+- staff session APIs implemented
+- staff attendance read/write implemented
+- generic staff enrollment history/summary implemented
+- Parent linked-child attendance history/summary implemented
+- Student self attendance history/summary implemented
+- historical roster semantics implemented
+- note privacy implemented
+- summary formula implemented
+- pagination/sorting implemented
+- module boundaries preserved
+- tests/specs already exist for #002–#004
+
+Current:
+#005/5 — FINAL IMPLEMENTATION HANDOFF
+
+PRIMARY OBJECTIVE
+-----------------
+Complete all remaining implementation artifacts for the Attendance + Class Operations backend phase:
+
+1. final static code audit
+2. demo seed implementation
+3. demo seed test/spec files
+4. Postman collection
+5. README finalization
+6. OpenAPI static sanity review
+7. final architecture/security inspection
+8. final handoff report
+9. declare IMPLEMENTATION COMPLETE if no BLOCKER/HIGH issue is found by inspection
+
+DO NOT execute runtime validation.
+
+PERMANENT GIT RULES
+-------------------
+NEVER run:
+git add
+git commit
+git push
+
+NEVER suggest git add.
+
+If tracked changes exist, final response may print exactly:
+
+git commit -m "feat(class-operations): add demo postman and finalize implementation"
+
+Do not execute it.
+
+MANDATORY READING
+-----------------
+Read:
+
+PROJECT_RULES.md
+AGENTS.md
+all `.cursor/rules/*.mdc`
+
+Especially:
+.cursor/rules/04-fast-implementation-mode.mdc
+
+Read:
+
+docs/ATTENDANCE_CLASS_OPERATIONS_001_DOMAIN_AUDIT_AND_DESIGN_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_002_PERSISTENCE_FOUNDATION_SESSION_ATTENDANCE_SCHEMA_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_003_CATECHIST_ADMIN_SESSION_ROSTER_BULK_ATTENDANCE_APIS_REPORT.md
+docs/ATTENDANCE_CLASS_OPERATIONS_004_PARENT_STUDENT_READS_SUMMARY_SECURITY_HARDENING_REPORT.md
+
+Inspect relevant current code:
+
+src/modules/class-operations/
+src/database/seeds/
+scripts/
+docs/postman/
+README.md
+package.json
+src/modules/module-boundaries.spec.ts
+test/
+
+Do not deep-audit unrelated modules.
+
+==================================================
+PART A — FINAL STATIC CODE AUDIT
+==================================================
+
+By inspection only, confirm:
+
+- exactly 15 Class Operations endpoints
+- no accidental extra endpoints
+- no DELETE session
+- no session reopen
+- no recurring schedule templates
+- no FamilyPortal dependency
+- no LearningProgress dependency
+- no foreign repository/entity access
+- no forwardRef
+- ClassOperationsService remains public facade only
+- exactly three owned business tables
+- Parent/Student write remains denied
+- Parent/Student note privacy remains intact
+- staff scope remains assignment/parish/global
+- `/me` routes remain actor-specific
+- no admin impersonation fallback
+- no obvious N+1 loop in service composition
+- pagination deterministic
+- no entity leakage from controllers
+
+If BLOCKER/HIGH is found:
+fix it in code before finalizing.
+
+Do NOT start a runtime validation loop.
+
+==================================================
+PART B — FINAL ROUTE INVENTORY
+==================================================
+
+Verify and document the final 15 endpoint contracts.
+
+Sessions/staff:
+1. POST /api/v1/classes/:classId/sessions
+2. GET /api/v1/classes/:classId/sessions
+3. GET /api/v1/class-sessions/:sessionId
+4. PATCH /api/v1/class-sessions/:sessionId
+5. POST /api/v1/class-sessions/:sessionId/cancel
+6. POST /api/v1/class-sessions/:sessionId/complete
+7. POST /api/v1/class-sessions/:sessionId/roster/refresh
+8. GET /api/v1/class-sessions/:sessionId/attendance
+9. PUT /api/v1/class-sessions/:sessionId/attendance
+
+Generic staff:
+10. GET /api/v1/enrollments/:enrollmentId/attendance
+11. GET /api/v1/enrollments/:enrollmentId/attendance-summary
+
+Parent:
+12. GET /api/v1/me/parent/enrollments/:enrollmentId/attendance
+13. GET /api/v1/me/parent/enrollments/:enrollmentId/attendance-summary
+
+Learner:
+14. GET /api/v1/me/learner/enrollments/:enrollmentId/attendance
+15. GET /api/v1/me/learner/enrollments/:enrollmentId/attendance-summary
+
+==================================================
+PART C — DEMO SEED DESIGN
+==================================================
+
+Create an idempotent Class Operations demo seed.
+
+Preferred script:
+npm run seed:class-operations-demo
+
+The seed implementation should compose existing owning-domain seeds instead of duplicating domain ownership.
+
+Use existing seed services where possible for:
+- auth/rbac
+- parish/academic
+- class/enrollment
+- student/catechist/parent relationships
+
+Then create Class Operations-owned demo rows through ClassOperations public/domain services.
+
+Do NOT use raw cross-module repository writes.
+
+==================================================
+PART D — REQUIRED DEMO SCENARIO
+==================================================
+
+Create a stable dev/test demo scenario suitable for manual API/FE integration later.
+
+Required scenario:
+
+1. one demo ACTIVE class
+2. one assigned Catechist
+3. one linked Parent
+4. at least one Student with ACTIVE enrollment
+5. preferably 2+ Students to make roster meaningful
+
+Class Operations data:
+
+- at least 3 COMPLETED sessions
+- one SCHEDULED future/upcoming session
+- optional one CANCELLED session
+
+Completed sessions should include varied attendance:
+- PRESENT
+- LATE
+- ABSENT
+- EXCUSED
+- at least one UNMARKED historical case if practical
+
+This allows summary formula verification later.
+
+The upcoming SCHEDULED session should have frozen roster and no marks.
+
+==================================================
+PART E — DEMO DATA SAFETY
+==================================================
+
+Demo seed must:
+
+- be dev/test only
+- use existing seed environment guards
+- never use production secrets
+- use deterministic/stable demo identifiers where project convention permits
+- use safe local sample credentials already established by seed conventions
+- not duplicate rows on repeated conceptual execution
+
+Even though execution is deferred, implementation must be designed to be idempotent.
+
+==================================================
+PART F — SEED IMPLEMENTATION
+==================================================
+
+Create appropriate files following existing seed conventions, for example:
+
+src/database/seeds/class-operations-demo.seed.constants.ts
+src/database/seeds/class-operations-demo.seed.service.ts
+src/database/seeds/class-operations-demo-seed.module.ts
+scripts/seed-class-operations-demo.ts
+
+Add package.json script:
+
+seed:class-operations-demo
+
+Use actual repository naming conventions if different.
+
+==================================================
+PART G — SEED TEST FILES
+==================================================
+
+Write tests but DO NOT RUN them.
+
+Create/update integration specs covering:
+
+- first seed produces required scenario
+- second conceptual run is idempotent
+- no duplicate sessions for same stable demo fixture
+- no duplicate roster rows
+- no duplicate attendance records
+- Catechist assignment exists
+- Parent guardian link exists
+- enrollment exists
+- completed/scheduled/cancelled session statuses correct
+- mixed attendance statuses created
+- historical summary scenario can be derived
+
+Report:
+
+TESTS WRITTEN: YES
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+
+==================================================
+PART H — POSTMAN COLLECTION
+==================================================
+
+Create:
+
+docs/postman/Acutis-Education-Class-Operations.postman_collection.json
+
+Follow existing project Postman conventions.
+
+No real live JWT hardcoding.
+
+Collection variables should include:
+
+baseUrl
+demoPassword
+catechistEmail
+parentEmail
+studentEmail
+catechistToken
+parentToken
+studentToken
+adminToken if useful
+classId
+sessionId
+enrollmentId
+
+Use existing login endpoint conventions.
+
+==================================================
+PART I — POSTMAN POSITIVE FLOWS
+==================================================
+
+Include logical manual flows:
+
+CATECHIST
+---------
+1. login
+2. list class sessions
+3. create session
+4. get session
+5. get session attendance
+6. bulk mark attendance
+7. update session
+8. complete session
+
+ROSTER
+------
+9. create or locate clean SCHEDULED session
+10. refresh roster before marks
+
+PARENT
+------
+11. login
+12. own linked-child attendance history
+13. own linked-child attendance summary
+
+STUDENT
+-------
+14. login
+15. own attendance history
+16. own attendance summary
+
+STAFF GENERIC
+-------------
+17. generic enrollment attendance history
+18. generic enrollment attendance summary
+
+==================================================
+PART J — POSTMAN NEGATIVE FLOWS
+==================================================
+
+Include representative denials:
+
+- Parent -> staff attendance GET => 403
+- Student -> staff attendance GET => 403
+- unassigned Catechist -> class/session operation => 403
+- Parent -> attendance PUT => 403
+- Student -> attendance PUT => 403
+- Parent foreign enrollment => 403
+- Student foreign enrollment => 403
+- Parent generic enrollment route => 403
+- Student generic enrollment route => 403
+- unknown enrollment => 404
+- attendance PUT after completed session => 409
+
+Do not reproduce every e2e case.
+
+==================================================
+PART K — POSTMAN TEST SCRIPTS
+==================================================
+
+Add lightweight collection scripts:
+
+- expected status
+- JSON shape checks
+- capture classId/sessionId/enrollmentId when safe
+- token capture from login
+
+Do NOT run Newman/Postman in this prompt.
+
+Report:
+POSTMAN EXECUTED: NO — deferred.
+
+==================================================
+PART L — README FINALIZATION
+==================================================
+
+Finalize Class Operations README documentation.
+
+Include:
+
+Architecture:
+- one `class-operations` module
+- three owned tables
+- session occurrence ownership
+- roster snapshot
+- attendance ownership
+
+Lifecycle:
+- SCHEDULED
+- COMPLETED
+- CANCELLED
+
+Attendance:
+- PRESENT
+- LATE
+- ABSENT
+- EXCUSED
+- UNMARKED = no row / nullable response status
+
+Roles/scope:
+- assigned Catechist
+- ParishAdmin own parish
+- SuperAdmin generic staff
+- Parent linked child only
+- Student self only
+- no `/me` admin impersonation
+
+Summary formula.
+
+All 15 routes.
+
+Demo seed command.
+
+Postman collection path.
+
+Deferred features:
+- recurring schedule templates
+- notifications
+- revision history
+- session reopen
+- DELETE
+- FamilyPortal attendance composition
+- LearningProgress integration
+
+Add a clear statement:
+
+ATTENDANCE + CLASS OPERATIONS BACKEND IMPLEMENTATION COMPLETE
+
+But also explicitly state:
+
+RUNTIME VALIDATION DEFERRED TO FE INTEGRATION / STABILIZATION PHASE
+
+Do not claim tests have run under Fast Mode.
+
+==================================================
+PART M — OPENAPI STATIC SANITY
+==================================================
+
+By code inspection only:
+
+Check all 15 endpoints have:
+- bearer auth
+- correct permission
+- operation summary
+- scope semantics
+- UUID params
+- pagination where required
+- response DTO
+- documented common errors
+
+Fix obvious stale/missing Swagger metadata if found.
+
+Do not launch Swagger runtime.
+
+==================================================
+PART N — TEST COVERAGE STATIC AUDIT
+==================================================
+
+Inspect test files and make sure there are written tests/specs for:
+
+Persistence:
+- migration/schema entities
+- lifecycle
+- roster immutability
+- attendance uniqueness
+
+Staff:
+- create/list/get/update/cancel/complete
+- roster refresh
+- attendance GET/PUT
+- staff scopes
+
+Parent:
+- linked child
+- foreign child
+- no note leak
+
+Student:
+- self
+- foreign enrollment
+- no note leak
+
+Summary:
+- PRESENT
+- LATE
+- ABSENT
+- EXCUSED
+- UNMARKED
+- cancelled/scheduled excluded
+
+Module boundaries.
+
+Seed idempotency.
+
+If coverage is missing:
+write the tests.
+Do not run them.
+
+==================================================
+PART O — MODULE BOUNDARY FINAL INSPECTION
+==================================================
+
+Confirm by static inspection:
+
+ClassOperationsModule:
+- owns only three tables
+- exports only ClassOperationsService
+- no forwardRef
+- no FamilyPortalModule
+- no LearningProgressModule
+- no Practice/Exam/Curriculum/Localization/Media
+- no foreign repository/entity imports
+- no reverse domain imports
+
+Update module-boundary specs if a missing assertion is discovered.
+
+Do not run them.
+
+==================================================
+PART P — SECURITY FINAL INSPECTION
+==================================================
+
+Static review:
+
+- no PII leakage
+- Parent/Student learner-safe DTOs omit note
+- no audit actor IDs in learner responses
+- no global student attendance endpoint
+- no `/me` impersonation fallback
+- no client-controlled actor/student/guardian IDs
+- permissions are separate from scope
+- Catechist assignment check remains required
+- ParishAdmin parish check remains required
+- historical attendance retained
+- no hard delete
+
+Fix obvious code defect if found.
+
+==================================================
+PART Q — PERFORMANCE STATIC INSPECTION
+==================================================
+
+Confirm no obvious N+1:
+
+- session creation uses batch enrollment/student reads
+- roster refresh uses batches
+- session list counts grouped or bounded
+- attendance GET set-based/bounded
+- history query SQL set-based
+- summary aggregate set-based
+
+Do not benchmark.
+Do not run query plans.
+
+==================================================
+PART R — NO VALIDATION EXECUTION
+==================================================
+
+DO NOT RUN:
+
+npm test
+npm run test:*
+npm run lint
+npm run typecheck
+npm run build
+npm run format
+npm run format:check
+npm run quality
+npm run quality:full
+npm audit
+npm run test:db:*
+npm run seed:class-operations-demo
+docker build
+docker compose up/down
+Newman/Postman
+
+Do not start MSSQL or Docker.
+
+==================================================
+PART S — FINAL IMPLEMENTATION VERDICT
+==================================================
+
+Under Fast Implementation Mode, phase may be considered:
+
+IMPLEMENTATION COMPLETE
+
+if:
+- all 15 endpoints exist
+- architecture remains correct
+- security/scope logic implemented
+- demo seed code exists
+- Postman collection exists
+- README final exists
+- OpenAPI statically complete
+- tests/specs written
+- no BLOCKER/HIGH found by code inspection
+
+This is NOT the same as runtime validation complete.
+
+Use separate verdicts:
+
+ATTENDANCE + CLASS OPERATIONS IMPLEMENTATION COMPLETE: YES/NO
+
+RUNTIME VALIDATION COMPLETE: NO — deferred by Fast Implementation Mode
+
+==================================================
+REQUIRED REPORT
+===============
+
+Create:
+
+docs/ATTENDANCE_CLASS_OPERATIONS_005_FAST_MODE_FINALIZATION_REPORT.md
+
+Required sections:
+
+1. Objective
+2. Fast Implementation Mode
+3. State inherited
+4. Files created
+5. Files modified
+6. Final 15-route inventory
+7. Final architecture inspection
+8. Final RBAC/scope inspection
+9. Staff contracts
+10. Parent contracts
+11. Student contracts
+12. Summary formula
+13. Historical roster semantics
+14. Data minimization
+15. Note privacy
+16. Module boundaries
+17. Performance static inspection
+18. Demo seed design
+19. Demo seed implementation
+20. Demo actors
+21. Demo sessions/attendance scenario
+22. Demo idempotency design
+23. Demo seed tests written
+24. Postman collection
+25. Postman variables
+26. Positive flows
+27. Negative flows
+28. Postman test scripts
+29. README finalization
+30. OpenAPI static sanity
+31. Test inventory
+32. Unit tests written
+33. Integration tests written
+34. DB e2e tests written
+35. Tests executed
+36. DB validation
+37. quality:full
+38. Docker
+39. npm audit
+40. Deferred validation plan
+41. Risks/deferred product scope
+42. BLOCKER/HIGH/MEDIUM/LOW
+43. Implementation completion verdict
+44. Runtime validation verdict
+45. Next module readiness
+46. Commit recommendation
+
+REQUIRED VERDICTS
+-----------------
+
+FINAL 15 ENDPOINTS IMPLEMENTED: YES/NO
+
+CLASS OPERATIONS ARCHITECTURE READY BY INSPECTION: YES/NO
+
+RBAC/SCOPE READY BY INSPECTION: YES/NO
+
+PARENT/CHILD PRIVACY READY BY INSPECTION: YES/NO
+
+STUDENT SELF-SCOPE READY BY INSPECTION: YES/NO
+
+SUMMARY CONTRACT READY: YES/NO
+
+DEMO SEED IMPLEMENTED: YES/NO
+
+DEMO SEED IDEMPOTENCY DESIGNED: YES/NO
+
+DEMO SEED TESTS WRITTEN: YES/NO
+
+POSTMAN IMPLEMENTED: YES/NO
+
+README FINALIZED: YES/NO
+
+OPENAPI READY BY STATIC INSPECTION: YES/NO
+
+UNIT TESTS WRITTEN: YES/NO
+
+INTEGRATION TESTS WRITTEN: YES/NO
+
+DB E2E TESTS WRITTEN: YES/NO
+
+TESTS EXECUTED: NO — deferred by Fast Implementation Mode
+
+DB VALIDATION: NOT RUN — deferred
+
+QUALITY:FULL: NOT RUN — deferred
+
+DOCKER: NOT RUN — deferred
+
+NPM AUDIT: NOT RUN — deferred
+
+Unresolved BLOCKER count
+Unresolved HIGH count
+Unresolved MEDIUM count
+
+ATTENDANCE + CLASS OPERATIONS IMPLEMENTATION COMPLETE: YES/NO
+
+RUNTIME VALIDATION COMPLETE: NO — deferred by Fast Implementation Mode
+
+NEXT MODULE READY TO START: YES/NO
+
+NEXT MODULE GATE
+----------------
+NEXT MODULE READY TO START = YES if:
+
+- implementation complete
+- BLOCKER=0
+- HIGH=0
+- architecture/security clean by inspection
+- tests are written
+- demo seed exists
+- Postman exists
+- README/OpenAPI final
+
+Runtime tests are NOT required for this gate under Fast Implementation Mode.
+
+If YES, state:
+
+ATTENDANCE + CLASS OPERATIONS IMPLEMENTATION PHASE COMPLETE
+
+VALIDATION DEFERRED TO FE INTEGRATION / STABILIZATION PHASE
+
+READY TO START NEXT BACKEND MODULE: YES
+
+Do not implement the next module automatically.
+
+FINAL RESPONSE
+--------------
+Respond concisely:
+
+- #005 implementation status
+- final endpoints
+- demo seed
+- Postman
+- tests written/not executed
+- architecture/security inspection
+- BLOCKER/HIGH/MEDIUM
+- implementation complete yes/no
+- runtime validation deferred
+- next module ready yes/no
+- report path
+
+Then exactly:
+
+git commit -m "feat(class-operations): add demo postman and finalize implementation"
+
+Do NOT print git add.
+Do NOT run git add/commit/push.
+Do NOT start next module automatically.

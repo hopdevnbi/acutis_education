@@ -285,6 +285,7 @@ describe('Auth module persistence boundaries', () => {
     expect(imports).not.toContain(CurriculumModule);
     expect(imports).not.toContain(LocalizationModule);
     expect(imports).not.toContain(MediaModule);
+    expect(imports).not.toContain(ClassOperationsModule);
   });
 
   it('exports LocalizationService and LocaleResolutionService only from LocalizationModule', () => {
